@@ -3000,3 +3000,217 @@ ul.plain b {
 .row.task.done .row-t {
   color: var(--label2);
 }
+
+/* 歡迎畫面 */
+.welcome {
+  text-align: center;
+  padding: 8px 4px 4px;
+}
+.w-logo {
+  border-radius: 18px;
+  margin: 6px auto 10px;
+  display: block;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+.welcome h2 {
+  font-size: 26px;
+  margin: 0 0 2px;
+}
+.w-rows {
+  text-align: left;
+  display: grid;
+  gap: 16px;
+  margin: 18px 6px 24px;
+}
+.w-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.w-ic {
+  font-size: 30px;
+  line-height: 1;
+  width: 40px;
+  text-align: center;
+  flex: none;
+}
+.w-row b {
+  font-size: 17px;
+}
+.w-row p {
+  margin: 2px 0 0;
+  color: var(--label2);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.w-go {
+  width: 100%;
+}
+.book-btns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 紙本練習卷 */
+.paper {
+  background: #fff;
+  color: #000;
+  border-radius: var(--r-lg);
+  padding: 28px 30px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+  font-family: var(--en), 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.p-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid #000;
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+}
+.p-head b {
+  font-size: 20px;
+}
+.p-list {
+  padding-left: 1.6em;
+  margin: 0;
+}
+.p-q {
+  margin: 0 0 18px;
+  break-inside: avoid;
+}
+.p-opts {
+  margin: 4px 0 0;
+  padding-left: 1.8em;
+}
+.p-opts li {
+  margin: 1px 0;
+}
+.p-blank {
+  display: inline-block;
+  width: 5.5em;
+  border-bottom: 1.5px solid #000;
+  margin: 0 3px;
+  vertical-align: -2px;
+}
+.p-fill {
+  line-height: 2.1;
+}
+.p-task {
+  color: #444;
+  font-size: 14px;
+}
+.p-src {
+  font-size: 17px;
+}
+.p-line {
+  border-bottom: 1.5px solid #000;
+  height: 30px;
+  margin-top: 4px;
+}
+.p-line.short {
+  width: 50%;
+}
+.p-fix {
+  margin-top: 6px;
+}
+.p-fig {
+  max-width: 300px;
+}
+.p-fig .fig {
+  margin: 0 0 6px;
+}
+.p-bins {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 6px;
+}
+.p-bins th,
+.p-bins td {
+  border: 1px solid #999;
+  padding: 4px 8px;
+}
+.p-bins td {
+  height: 52px;
+}
+.p-passage {
+  border: 1.5px solid #000;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 4px 0 14px -1.6em;
+  break-inside: avoid;
+}
+.p-passage p {
+  margin: 4px 0 0;
+}
+.p-check {
+  border-top: 1px dashed #999;
+  padding-top: 12px;
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.p-key {
+  padding-left: 1.6em;
+  columns: 2;
+  column-gap: 32px;
+}
+.p-key li {
+  break-inside: avoid;
+  margin-bottom: 4px;
+}
+@media (prefers-color-scheme: dark) {
+  .paper .fig-scene {
+    background: #f7f7fa;
+  }
+}
+@media print {
+  .paper {
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+  }
+  .paper-page .lg-head {
+    display: none;
+  }
+  .p-answers {
+    break-before: page;
+  }
+  .p-q {
+    margin-bottom: 14px;
+  }
+}.paper {
+  --label: #000;
+  --label2: rgba(60, 60, 67, 0.62);
+  --label3: rgba(60, 60, 67, 0.32);
+  --fill: rgba(120, 120, 128, 0.12);
+  --fill2: rgba(120, 120, 128, 0.07);
+  --card2: #f7f7fa;
+  --sel-bg: rgba(0, 122, 255, 0.1);
+  --blue: #007aff;
+  --floor: #efe9e0;
+  --wood: #d2ac82;
+  --wood-dark: #b08660;
+  --box: #e0bb90;
+  --box-in: #b48c63;
+  --box-top: #efcfa6;
+  --box-line: rgba(0, 0, 0, 0.12);
+  --sofa: #8ab4ee;
+  --sofa-dark: #6b9be3;
+  --red-v: #ff3b30;
+  --orange: #e07a00;
+}
+.p-opts.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 30px;
+  list-style-position: inside;
+  padding-left: 0.3em;
+}

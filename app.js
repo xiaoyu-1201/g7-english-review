@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '1.2（10/3）'
+const VERSION = '1.3（10/3）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -1476,7 +1476,42 @@ function viewHome() {
     if (p) return planSheet(p.dataset.plan)
     const n = e.target.closest('[data-next]')
     if (n) return n.dataset.next.startsWith('mod:') ? startModule(n.dataset.next.slice(4)) : go(n.dataset.next)
+    if (e.target.closest('[data-warm]')) return startRun('warm', '每日暖身', warmIds())
   })
+  welcome()
+}
+function warmIds() {
+  const t0 = dayStart()
+  const last = lastByItem()
+  const book = new Set(bookIds())
+  const old = ALL_SCORED.filter((i) => last[i.id] && last[i.id].ts < t0)
+  // 優先抽：以前答對、但不在錯題本的（考考看還記不記得）；不夠再補錯題本的
+  const ids = [...shuffle(old.filter((i) => !book.has(i.id))), ...shuffle(old.filter((i) => book.has(i.id)))]
+  return ids.slice(0, 5).map((i) => i.id)
+}
+// 第一次打開：像 Apple App 的「歡迎」畫面，告訴學生怎麼用
+function welcome() {
+  if (S.seen?.intro) return
+  sheet(
+    `<div class="welcome">
+      <img class="w-logo" src="icon.svg" alt="" width="72" height="72">
+      <h2>歡迎使用英文段考複習</h2>
+      <p class="sheet-p">翰林版七上・第一次段考（Starter～Review 1）</p>
+      <div class="w-rows">
+        <div class="w-row"><span class="w-ic">💡</span><div><b>先猜，再看重點</b><p>每個單元先用觀念卡讓你猜規則。猜錯也沒關係，自己想過的記得更牢。</p></div></div>
+        <div class="w-row"><span class="w-ic">🔎</span><div><b>抓出粗心</b><p>大寫、標點、空格寫錯都會被抓出來，養成「寫完檢查」的習慣。</p></div></div>
+        <div class="w-row"><span class="w-ic">📗</span><div><b>錯題會再回來</b><p>答錯的題目收進錯題本，隔一段時間再答對兩次才會畢業。</p></div></div>
+        <div class="w-row"><span class="w-ic">📤</span><div><b>紀錄存在這台裝置</b><p>到「紀錄」可以把學習報告或備份檔傳給老師。</p></div></div>
+      </div>
+      <button class="btn primary big w-go" data-close>開始</button>
+    </div>`,
+    {
+      onClose: () => {
+        S.seen = { ...(S.seen || {}), intro: Date.now() }
+        save()
+      },
+    },
+  )
 }
 // 今天的任務：依段考日期，把還沒完成的單元平均分到剩下的天數；錯題本每天先做（間隔複習）；最後兩天做模擬段考
 function todayPlan() {
@@ -1491,6 +1526,8 @@ function todayPlan() {
   const per = Math.min(remaining.length, Math.max(2, Math.ceil(remaining.length / studyDays)))
   const tasks = []
   const book = bookIds().length
+  // 每日暖身：先從「之前的日子」學過的題目抽 5 題（提取練習＋間隔，比重讀筆記有效）
+  if (warmIds().length >= 3 || todayKeys.has('warm')) tasks.push({ t: '暖身：之前學過的 5 題', sub: '先回想，再開始新的', done: todayKeys.has('warm'), warm: true })
   if (book || todayKeys.has('book')) tasks.push({ t: '錯題本重練', sub: book ? `還有 ${book} 題` : '今天的錯題清完了', done: todayKeys.has('book') || !book, go: '#/book' })
   if (daysLeft == null || daysLeft >= 1)
     for (const m of remaining.slice(0, per)) tasks.push({ t: `${MODULES[m].icon} ${MODULES[m].title}`, sub: `${MODULES[m].unit}・約 ${MODULES[m].min} 分鐘`, done: todayKeys.has('m:' + m), mod: m })
@@ -1507,7 +1544,7 @@ function planHTML() {
   return `<section class="card plan-card">
     <div class="sec-h"><div><h2>今天的任務</h2><p>${esc(sub)}</p></div><span class="plan-count${done === tasks.length ? ' all' : ''}">${done === tasks.length ? '全部完成 🎉' : `${done}／${tasks.length}`}</span></div>
     <div class="list flat">${tasks
-      .map((t) => `<button class="row task${t.done ? ' done' : ''}" ${t.mod ? `data-mod="${t.mod}"` : `data-go="${t.go}"`}><span class="chk-box">${ICON.check}</span><span class="row-t">${esc(t.t)}<small>${esc(t.sub)}</small></span>${ICON.chev}</button>`)
+      .map((t) => `<button class="row task${t.done ? ' done' : ''}" ${t.warm ? 'data-warm' : t.mod ? `data-mod="${t.mod}"` : `data-go="${t.go}"`}><span class="chk-box">${ICON.check}</span><span class="row-t">${esc(t.t)}<small>${esc(t.sub)}</small></span>${ICON.chev}</button>`)
       .join('')}</div>
   </section>`
 }
@@ -1535,14 +1572,82 @@ function planSheet(lid) {
     <div class="group"><div class="group-h">單元順序</div><div class="list">${L.modules
       .map((mid, i) => `<button class="row" data-mod="${mid}"><span class="row-n">${i + 1}</span><span class="row-t">${MODULES[mid].icon} ${esc(MODULES[mid].title)}</span><span class="row-r">${MODULES[mid].min} 分</span>${ICON.chev}</button>`)
       .join('')}</div></div>
-    <p class="sheet-p small">每個單元都是「觀念卡（先讓學生猜）→ 練習題（提示是一層一層的引導問題）→ 結果」。學生答錯時，先按「提示」讓他自己想，再看解析。</p>`,
+    <p class="sheet-p small">每個單元都是「觀念卡（先讓學生猜）→ 練習題（提示是一層一層的引導問題）→ 結果」。學生答錯時，先按「提示」讓他自己想，再看解析。</p>
+    <div class="sheet-actions"><button class="btn ghost" data-print-lesson="${L.id}">${ICON.doc}<span>列印這一堂的紙本練習卷</span></button></div>`,
   ).addEventListener('click', (e) => {
     const m = e.target.closest('[data-mod]')
     if (m) {
       closeSheet()
       startModule(m.dataset.mod)
     }
+    const pl = e.target.closest('[data-print-lesson]')
+    if (pl) go('#/print/' + pl.dataset.printLesson)
   })
+}
+
+// ───────────────────────── 紙本練習卷（段考是寫在紙上） ─────────────────────────
+function paperItem(it) {
+  const q = (s) => esc(s).replace(/___/g, '<span class="p-blank"></span>').replace(/\n/g, '<br>')
+  const opts = (list) => `<ol class="p-opts${list.every((o) => o.length <= 14) ? ' inline' : ''}" type="A">${list.map((o) => `<li>${esc(o)}</li>`).join('')}</ol>`
+  const fig = it.fig ? `<div class="p-fig">${figure(it.fig)}</div>` : ''
+  if (it.t === 'mcq') return `${fig}<div>${q(it.q)}</div>${opts(it.opts)}`
+  if (it.t === 'multi') return `${fig}<div>${q(it.q)}${it.q.includes('全部') ? '' : '（複選）'}</div>${opts(it.opts)}`
+  if (it.t === 'fill') return `${fig}<div class="p-fill">${q(it.q)}</div>`
+  if (it.t === 'write') return `${fig}<div class="p-task">${esc(it.task)}</div><div class="p-src">${q(it.q)}</div><div class="p-line"></div>`
+  if (it.t === 'order') {
+    if (it.lines) {
+      const sh = shuffle(it.words)
+      return `<div class="p-task">${esc(it.q || '排出正確順序')}（寫代號）</div><ol class="p-opts" type="a">${sh.map((w) => `<li>${esc(w)}</li>`).join('')}</ol><div class="p-line short"></div>`
+    }
+    return `<div class="p-task">重組句子${it.extra?.length ? '（有多的字）' : ''}：</div><div class="p-src">${shuffle([...it.words, ...(it.extra || [])]).map(esc).join(' / ')}</div><div class="p-line"></div>`
+  }
+  if (it.t === 'spot') return `<div class="p-task">找出錯誤並改正：</div><div class="p-src">${esc(it.toks.join(' '))}</div><div class="p-fix">錯誤：＿＿＿＿＿＿　→ 改成：＿＿＿＿＿＿</div>`
+  if (it.t === 'sort') return `<div class="p-task">${esc(it.q.replace(/[:：].*$/, ''))}</div><div class="p-src">${shuffle(it.chips.map((c) => c[0])).map(esc).join('、')}</div><table class="p-bins"><tr>${it.bins.map((b) => `<th>${esc(b)}</th>`).join('')}</tr><tr>${it.bins.map(() => '<td></td>').join('')}</tr></table>`
+  return ''
+}
+function viewPrint(key) {
+  let ids = []
+  let title = ''
+  const L = LESSONS.find((l) => l.id === key)
+  if (key === 'book') {
+    ids = bookIds()
+    title = '錯題卷'
+  } else if (L) {
+    ids = L.modules.flatMap((m) => MODULES[m].scored.map((i) => i.id))
+    title = `${L.title}練習卷`
+  } else if (MODULES[key]) {
+    ids = MODULES[key].scored.map((i) => i.id)
+    title = `${MODULES[key].title}練習卷`
+  }
+  const order = new Map(ALL_SCORED.map((it, i) => [it.id, i]))
+  const items = ids
+    .map((id) => ITEM[id])
+    .filter((it) => it && !it.audio && it.t !== 'place' && !(it.t === 'sort' && it.say))
+    .sort((a, b) => order.get(a.id) - order.get(b.id))
+  const shown = new Set()
+  let n = 0
+  const body = items
+    .map((it) => {
+      let pre = ''
+      if (it.passage && !shown.has(it.passage)) {
+        shown.add(it.passage)
+        const p = PASSAGES[it.passage]
+        pre = `<div class="p-passage"><b>${esc(p.title)}</b><p>${esc(p.text).replace(/__\((\d)\)__/g, '<u>　($1)　</u>')}</p></div>`
+      }
+      return `${pre}<li class="p-q">${paperItem(it)}</li>`
+    })
+    .join('')
+  const key2 = items.map((it) => `<li>${rightAnswerText(it)}</li>`).join('')
+  n = items.length
+  setView(
+    `<div class="page narrow paper-page">
+      ${header(title, n ? `共 ${n} 題（聽力、放位置這類要在 App 上做的題目不印）` : '目前沒有題目可以印', n ? `<button class="btn primary" data-print>${ICON.doc}<span>列印</span></button>` : '', true)}
+      ${n ? `<div class="paper"><div class="p-head"><b>${esc(title)}</b><span>班級：＿＿＿　姓名：＿＿＿＿＿＿　得分：＿＿＿</span></div><ol class="p-list">${body}</ol>
+      <div class="p-check"><b>交卷前 30 秒檢查</b>${CHECKLIST.map((c) => `☐ ${esc(c)}`).join('<br>')}</div></div>
+      <div class="paper p-answers"><div class="p-head"><b>${esc(title)}・解答</b></div><ol class="p-key">${key2}</ol></div>` : ''}
+    </div>`,
+  )
+  $('[data-print]')?.addEventListener('click', () => window.print())
 }
 
 // ───────────────────────── 錯題本 ─────────────────────────
@@ -1558,7 +1663,7 @@ function viewBook() {
       ${
         ids.length
           ? `<div class="book-cta card"><div><div class="book-n">${ids.length}</div><div class="muted">題待複習${grads.length ? `・已畢業 ${grads.length} 題` : ''}</div></div>
-            <div class="book-btns"><button class="btn primary big" data-act="all">開始重練${ids.length > 12 ? '（先做 12 題）' : ''}</button></div></div>
+            <div class="book-btns"><button class="btn ghost big" data-go="#/print/book">${ICON.doc}<span>列印錯題卷</span></button><button class="btn primary big" data-act="all">開始重練${ids.length > 12 ? '（先做 12 題）' : ''}</button></div></div>
             <p class="muted small pad">題目會打散不同單元的順序（交錯練習），比照段考的感覺。</p>
             ${MOD_ORDER.filter((m) => byMod[m])
               .map(
@@ -2228,6 +2333,7 @@ function route() {
   if (a === 'stats') return viewStats()
   if (a === 'settings') return viewSettings()
   if (a === 'notes') return viewAllNotes()
+  if (a === 'print' && b) return viewPrint(decodeURIComponent(b))
   viewHome()
 }
 window.addEventListener('hashchange', () => {
