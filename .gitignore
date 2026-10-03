@@ -1,0 +1,5 @@
+# 課本 PDF 有版權：不要放進來
+*.pdf
+*.zip
+Thumbs.db
+.DS_Store
