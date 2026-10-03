@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '1.5（10/3）'
+const VERSION = '1.6（10/3）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -161,6 +161,7 @@ function tagCounts(list) {
 function record(it, res, extra = {}) {
   const a = { q: it.id, m: it.mid, r: res.r, t: res.tags || [], a: String(res.given ?? '').slice(0, 120), h: extra.h || 0, c: extra.c ? 1 : 0, x: extra.x || 'p', ts: Date.now(), d: S.profile.id }
   S.attempts.push(a)
+  Sync.queue('a', a)
   return a
 }
 // 錯因自評（後設認知：自己說出錯在哪，下次比較不會再錯）
@@ -185,7 +186,7 @@ function maxStreakDays() {
 const BADGES = [
   ['start', '🚀', '起步', '完成第一個單元'],
   ['ten', '🔟', '十連對', '練習時連續答對 10 題'],
-  ['careful', '🎯', '零粗心', '一個單元 10 題以上，沒有格式粗心'],
+  ['careful', '🎯', '零粗心', '一個單元 10 題以上、答對八成，而且沒有格式粗心'],
   ['days', '🔥', '三天不間斷', '連續 3 天都有練習'],
   ['grad', '🎓', '錯題畢業生', '10 題從錯題本畢業'],
   ['flash', '⚡', '閃電手', '閃電挑戰答對 20 題'],
@@ -207,7 +208,7 @@ function badgeEarned() {
   return {
     start: modSess.length > 0,
     ten: maxRun >= 10,
-    careful: modSess.some((s) => s.n >= 10 && !s.care),
+    careful: modSess.some((s) => s.n >= 10 && !s.care && s.ok >= s.n * 0.8),
     days: maxStreakDays() >= 3,
     grad: grads >= 10,
     flash: (S.flash.best || 0) >= 20,
@@ -219,6 +220,11 @@ function badgeEarned() {
 function checkBadges(silent = false) {
   S.badges ||= {}
   const e = badgeEarned()
+  // 1.6 以前「零粗心」條件太寬（全錯也會拿到）：不符合新條件就收回
+  if (S.badges.careful && !e.careful) {
+    delete S.badges.careful
+    save()
+  }
   const fresh = BADGES.filter(([id]) => e[id] && !S.badges[id])
   if (!fresh.length) return
   fresh.forEach(([id]) => (S.badges[id] = Date.now()))
@@ -1186,6 +1192,7 @@ function runShell(pr, it, at, reviewing) {
     </div>`,
     { tabs: false },
   )
+  Sync.presence({ view: 'run', title: pr.title, n: Math.min(nBefore + 1, scored.length), of: scored.length, q: it.id })
 }
 
 function viewRun(key, at) {
@@ -1250,6 +1257,7 @@ function viewRunReview(key, at, it, streak) {
         if (att) {
           att.w = w.dataset.w
           save()
+          Sync.queue('a', att)
           $$('.why-me .pick', el).forEach((x) => x.classList.toggle('on', x === w))
           buzz(6)
         }
@@ -1371,6 +1379,7 @@ function checkItem() {
       if (!b) return
       att.w = b.dataset.w
       save()
+      Sync.queue('a', att)
       $$('.why-me .pick', fb).forEach((x) => x.classList.toggle('on', x === b))
       buzz(6)
     })
@@ -1411,7 +1420,7 @@ function viewSummary(key) {
   if (!pr.done) {
     pr.done = true
     pr.t1 = Date.now()
-    S.sessions.push({ k: key, m: pr.mid || key, title: pr.title, s: Math.round(pct * 100), n: total, ok, care, bad, stars: st, ts: Date.now(), dur: pr.t1 - pr.t0, d: S.profile.id })
+    addSession({ k: key, m: pr.mid || key, title: pr.title, s: Math.round(pct * 100), n: total, ok, care, bad, stars: st, ts: Date.now(), dur: pr.t1 - pr.t0, d: S.profile.id })
     save()
     if (st === 3) setTimeout(celebrate, 350)
     checkBadges()
@@ -1449,7 +1458,15 @@ function viewSummary(key) {
   )
   $('.summary').addEventListener('click', (e) => {
     const r = e.target.closest('[data-review]')
-    if (r) return reviewSheet(r.dataset.review)
+    if (r)
+      return reviewSheet(r.dataset.review, {
+        onDone: (res) => {
+          const tag = $('.row-r', r)
+          if (!tag) return
+          tag.className = `row-r ${res}`
+          tag.textContent = res === 'ok' ? '重練對了 ✓' : res === 'care' ? '重練・粗心' : '重練・還要加油'
+        },
+      })
     const a = e.target.closest('[data-act]')?.dataset.act
     if (a === 'retry') startRun('retry:' + (pr.mid || key), `${pr.title}・重練`, missed)
     if (a === 'next') startModule(nextMid)
@@ -1460,11 +1477,62 @@ function snippet(it) {
   const s = it.q || it.toks?.join(' ') || it.words?.join(' ') || it.title || ''
   return s.replace(/\n/g, ' ').replace(/___/g, '＿＿').slice(0, 70)
 }
-// 看某一題的最後作答與解析（唯讀）
-function reviewSheet(id) {
-  const last = [...S.attempts].reverse().find((a) => a.q === id)
-  const body = sheet(`<h2 class="sheet-title">題目回顧</h2><div class="review-slot"></div>`, { wide: true })
-  $('.review-slot', body).append(reviewCard(ITEM[id], last, '上次的答案'))
+// 結果頁、錯題本點一題：先看上次的答案與解析，可以直接「再練一次」（會記錄、會影響錯題本）
+function reviewSheet(id, { onDone } = {}) {
+  const it = ITEM[id]
+  let retried = null
+  const body = sheet(`<h2 class="sheet-title">題目回顧</h2><div class="review-slot"></div><div class="hint-box review-hints" hidden></div><div class="sheet-actions review-acts"></div>`, {
+    wide: true,
+    onClose: () => retried && onDone?.(retried),
+  })
+  const slot = $('.review-slot', body)
+  const acts = $('.review-acts', body)
+  const hintBox = $('.review-hints', body)
+  const showReview = () => {
+    const last = [...S.attempts].reverse().find((a) => a.q === id)
+    slot.replaceChildren(reviewCard(it, last, '上次的答案'))
+    acts.innerHTML = `<button class="btn ghost" data-close>關閉</button><button class="btn primary" data-retry>再練一次</button>`
+  }
+  const practice = () => {
+    const C = makeItem(it, 'practice')
+    slot.replaceChildren(C.el)
+    hintBox.hidden = true
+    hintBox.innerHTML = ''
+    let hints = 0
+    acts.innerHTML = `<button class="btn ghost" data-hint>${ICON.bulb}<span>提示</span></button><button class="btn primary" data-check disabled>檢查</button>`
+    const btn = $('[data-check]', acts)
+    C.onAnswer = () => (btn.disabled = !C.answered())
+    C.onEnter = () => C.answered() && btn.click()
+    $('[data-hint]', acts).onclick = () => {
+      const hs = hintsFor(it)
+      if (hints >= hs.length) return toast('提示已經全部打開了', '💡')
+      hints++
+      hintBox.hidden = false
+      hintBox.innerHTML = hs.slice(0, hints).map((h, i) => `<div class="hint"><span>提示 ${i + 1}</span>${esc(h)}</div>`).join('')
+    }
+    btn.onclick = () => {
+      if (!C.answered()) return
+      const res = C.grade()
+      record(it, res, { h: hints })
+      save()
+      retried = res.r
+      C.reveal(res)
+      const fb = $('.q-feedback', C.el)
+      fb.innerHTML = feedbackHTML(it, res, { streak: 0 })
+      fb.hidden = false
+      revealExtras(C)
+      C.el.classList.add('done', 'r-' + res.r)
+      checkBadges()
+      buzz(res.r === 'ok' ? 15 : [10, 60, 10])
+      acts.innerHTML = `<button class="btn ghost" data-retry>再練一次</button><button class="btn primary" data-close>完成</button>`
+      requestAnimationFrame(() => fb.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' }))
+    }
+    if (matchMedia('(pointer: fine)').matches) C.focus?.()
+  }
+  acts.addEventListener('click', (e) => {
+    if (e.target.closest('[data-retry]')) practice()
+  })
+  showReview()
 }
 // 唯讀的題目卡：題目＋作答紀錄＋正確答案＋解析
 function reviewCard(it, last, label) {
@@ -1553,6 +1621,7 @@ function viewHome() {
   const hour = new Date().getHours()
   const hello = hour < 11 ? '早安' : hour < 18 ? '午安' : '晚安'
   const cd = examCountdown()
+  Sync.presence({ view: 'home' })
   setView(
     `<div class="page home">
       <header class="lg-head"><div class="eyebrow">${new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</div>
@@ -1574,6 +1643,7 @@ function viewHome() {
         </div>
         ${resume ? `<button class="resume" data-resume="${esc(resume[0])}"><span class="resume-k">繼續上次</span><span class="resume-t">${esc(resume[1].title)}・第 ${resume[1].i + 1} 張</span>${ICON.chev}</button>` : nextStepHTML(book)}
       </section>
+      ${liveBannerHTML() || '<div class="live-banner" hidden></div>'}
       ${planHTML()}
 
       <section class="quick">
@@ -1825,7 +1895,7 @@ function viewBook() {
   )
   $('.page').addEventListener('click', (e) => {
     const r = e.target.closest('[data-review]')
-    if (r) return reviewSheet(r.dataset.review)
+    if (r) return reviewSheet(r.dataset.review, { onDone: () => setTimeout(() => location.hash === '#/book' && !$('.sheet-wrap') && viewBook(), 300) })
     if (e.target.closest('[data-act=all]')) return startRun('book', '錯題重練', shuffle(ids).slice(0, 12))
     const g = e.target.closest('[data-go]')
     if (g) go(g.dataset.go)
@@ -1876,6 +1946,7 @@ function viewExam() {
     )
     $('[data-act=start]').onclick = () => {
       EXAM = { secs: buildExam(), t0: Date.now(), ctrls: [], graded: false }
+      Sync.presence({ view: 'exam' })
       viewExam()
     }
     return
@@ -1987,7 +2058,7 @@ function gradeExam() {
   const score = Math.round((ok / total) * 100)
   const ifCare = Math.round(((ok + care) / total) * 100)
   const dur = Date.now() - EXAM.t0
-  S.sessions.push({ k: 'exam', m: 'exam', title: '模擬段考', s: score, n: total, ok, care, bad: total - ok - care, ifCare, stars: score >= 90 ? 3 : score >= 70 ? 2 : 1, ts: Date.now(), dur, d: S.profile.id })
+  addSession({ k: 'exam', m: 'exam', title: '模擬段考', s: score, n: total, ok, care, bad: total - ok - care, ifCare, stars: score >= 90 ? 3 : score >= 70 ? 2 : 1, ts: Date.now(), dur, d: S.profile.id })
   save()
   checkBadges()
   EXAM.graded = true
@@ -2057,6 +2128,7 @@ function viewFlash() {
     )
     $('[data-act=go]').onclick = () => {
       FL = { t0: Date.now(), n: 0, combo: 0, maxCombo: 0, miss: [], q: flashQ(), over: false, lock: false }
+      Sync.presence({ view: 'flash' })
       viewFlash()
     }
     return
@@ -2127,7 +2199,7 @@ function endFlash() {
   FL.record = rec
   if (rec) S.flash.best = FL.n
   S.flash.runs = (S.flash.runs || 0) + 1
-  S.sessions.push({ k: 'flash', m: 'flash', title: '閃電挑戰', s: FL.n, n: FL.n + FL.miss.length, ts: Date.now(), dur: Date.now() - FL.t0, d: S.profile.id, combo: FL.maxCombo })
+  addSession({ k: 'flash', m: 'flash', title: '閃電挑戰', s: FL.n, n: FL.n + FL.miss.length, ts: Date.now(), dur: Date.now() - FL.t0, d: S.profile.id, combo: FL.maxCombo })
   save()
   viewFlash()
   if (rec && FL.n > 0) setTimeout(celebrate, 200)
@@ -2173,6 +2245,7 @@ function viewStats() {
   setView(
     `<div class="page">
       ${header('學習紀錄', S.profile.name ? `${S.profile.name}・${S.profile.device || '這台裝置'}` : '紀錄存在這台裝置；可以匯出給老師或另一台裝置。')}
+      ${Sync.ready() ? `<button class="card live-link" data-x="live"><span class="live-pulse${others().some(([, l]) => l.view !== 'away' && Date.now() - l.ts < 600000) ? '' : ' idle'}"></span><span class="row-t"><b>即時作答</b><small>${esc(others().map(([, l]) => `${l.name || l.dev}：${liveText(l)}`).join('　') || '等學生打開配對連結')}</small></span>${ICON.chev}</button>` : ''}
       ${devices.size > 1 ? `<div class="seg" role="tablist"><button role="tab" class="${!mine ? 'on' : ''}" data-f="all">全部裝置</button><button role="tab" class="${mine ? 'on' : ''}" data-f="mine">只看這台</button></div>` : ''}
       <div class="tiles">
         <div class="tile"><div class="tile-v">${list.length}</div><div class="tile-k">已作答</div></div>
@@ -2238,6 +2311,7 @@ function viewStats() {
     const m = e.target.closest('[data-mod]')
     if (m) return startModule(m.dataset.mod)
     const x = e.target.closest('[data-x]')?.dataset.x
+    if (x === 'live') return go('#/live')
     if (x === 'report') shareReport()
     if (x === 'export') exportData()
     if (x === 'import') $('.file-in').click()
@@ -2394,6 +2468,18 @@ function viewSettings() {
         <div class="row field"><span class="row-t">字體大小</span><div class="seg small" data-seg="size"><button class="${p.size !== 'lg' ? 'on' : ''}" data-v="std">標準</button><button class="${p.size === 'lg' ? 'on' : ''}" data-v="lg">大</button></div></div>
       </div><p class="group-f">「先說答案」：自己想出答案再對照，比直接看選項記得更牢（生成效應）。學生回家自己練時可以關掉。<br>有實體鍵盤時：按 1～4 選選項，Enter 檢查／下一題。</p></div>
 
+      <div class="group"><div class="group-h">即時同步（老師看學生作答）</div><div class="list">${
+        !dbBase()
+          ? '<div class="row static"><span class="row-t">雲端資料庫還沒設定好<small>設定完成後，這裡就能建立配對碼</small></span></div>'
+          : S.sync?.code
+            ? `<div class="row static"><span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span><span class="row-t">已配對（${S.sync.role === 'teacher' ? '這台是老師端' : '這台是學生端'}）<small>配對碼 ${esc(S.sync.code.slice(0, 4))}…・${{ on: '已連線', connecting: '連線中', error: '重新連線中', denied: '配對碼無效', off: '未連線' }[Sync.status] || ''}</small></span></div>
+               <button class="row" data-x="live"><span class="row-ic">📡</span><span class="row-t">即時作答<small>看學生正在做哪一題、每題答了什麼</small></span>${ICON.chev}</button>
+               <button class="row" data-x="sharepair"><span class="row-ic">${ICON.share}</span><span class="row-t">把配對連結傳給學生</span>${ICON.chev}</button>
+               <button class="row danger" data-x="unpair"><span class="row-t">解除配對</span></button>`
+            : `<button class="row" data-x="newpair"><span class="row-ic">📡</span><span class="row-t">建立配對碼（老師用）<small>建立後把連結傳給學生，學生打開就配對好了</small></span>${ICON.chev}</button>
+               <label class="row field"><span class="row-t">學生：輸入配對碼</span><input id="f-pair" placeholder="貼上老師給的連結或代碼" autocomplete="off" autocapitalize="off" spellcheck="false"></label>`
+      }</div><p class="group-f">配對後，兩台裝置的作答紀錄會互相同步（存在雲端資料庫，只有知道配對碼的人能讀寫）。學生名字建議用暱稱。</p></div>
+
       <div class="group"><div class="group-h">App</div><div class="list">
         <button class="row" data-x="update"><span class="row-t">檢查更新</span><span class="row-r">${VERSION}</span>${ICON.chev}</button>
         <button class="row" data-x="install"><span class="row-t">加到主畫面（像 App 一樣打開）</span>${ICON.chev}</button>
@@ -2410,6 +2496,11 @@ function viewSettings() {
     S.profile.exam = e.target.value
     save()
   })
+  $('#f-pair')?.addEventListener('change', (e) => {
+    const m = e.target.value.trim().match(/(?:pair\/)?([a-z0-9]{16,40})\s*$/)
+    if (!m) return toast('配對碼不對，請貼上老師給的整個連結', '⚠️')
+    go('#/pair/' + m[1])
+  })
   v.addEventListener('click', (e) => {
     const b = e.target.closest('[data-seg] button')
     if (b) {
@@ -2421,6 +2512,19 @@ function viewSettings() {
       return
     }
     const x = e.target.closest('[data-x]')?.dataset.x
+    if (x === 'newpair') {
+      Sync.pair(newCode(), 'teacher')
+      viewSettings()
+      return sharePair()
+    }
+    if (x === 'sharepair') return sharePair()
+    if (x === 'live') return go('#/live')
+    if (x === 'unpair')
+      return confirmSheet('解除配對？', '之後兩台裝置不會再同步，已經同步過來的紀錄會留著。', '解除配對', () => {
+        Sync.unpair()
+        toast('已解除配對', '👋')
+        viewSettings()
+      }, true)
     if (x === 'voice') Voice.speak([['W', 'Hi, I am Jamie. Nice to meet you.'], ['M', 'Nice to meet you, too.']])
     if (x === 'update') checkUpdate()
     if (x === 'install')
@@ -2441,6 +2545,337 @@ async function checkUpdate() {
   } catch {}
   toast('更新中，馬上重新整理', '⬇️')
   setTimeout(() => location.reload(), 600)
+}
+
+// ───────────────────────── 即時同步（Firebase Realtime Database：REST 寫入＋EventSource 串流） ─────────────────────────
+// 老師平板建立「配對碼」→ 學生打開配對連結 → 兩台的作答互相同步；老師在「即時作答」看學生正在做哪一題、答了什麼
+const SYNC_DB = ''
+const dbBase = () => {
+  let o = ''
+  try {
+    o = localStorage.getItem('g7review:db') || ''
+  } catch {}
+  return (o || SYNC_DB).replace(/\/+$/, '')
+}
+const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(20)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('')
+const Sync = {
+  status: 'off',
+  es: [],
+  keys: null,
+  timer: 0,
+  flushing: false,
+  live: {},
+  code: () => S.sync?.code || '',
+  ready: () => !!(dbBase() && S.sync?.code),
+  akey: (a) => `${a.ts}-${a.q}-${a.d}`.replace(/[.#$[\]/]/g, '_'),
+  skey: (s) => `${s.ts}-${s.k}-${s.d}`.replace(/[.#$[\]/:]/g, '_'),
+  url(path) {
+    return `${dbBase()}/classes/${this.code()}/${path}.json`
+  },
+  setStatus(s) {
+    this.status = s
+    $$('.sync-dot').forEach((d) => (d.dataset.s = s))
+  },
+  // 自己的作答＆練習紀錄：排進佇列，馬上（或有網路時）送出
+  queue(kind, obj) {
+    if (!this.ready() || !obj || obj.d !== S.profile.id) return
+    if (kind === 'a') this.keys?.add(this.akey(obj)) // 自己的作答從伺服器傳回來時不要重複加
+    ;(S.syncQ ||= []).push([kind, obj])
+    save()
+    this.flushSoon()
+  },
+  flushSoon(ms = 300) {
+    clearTimeout(this.timer)
+    this.timer = setTimeout(() => this.flush(), ms)
+  },
+  async flush() {
+    if (!this.ready() || !S.syncQ?.length || this.flushing || navigator.onLine === false) return
+    this.flushing = true
+    const batch = S.syncQ.slice(0, 300)
+    const a = {}
+    const s = {}
+    for (const [k, o] of batch) {
+      if (k === 'a') a[this.akey(o)] = o
+      else s[this.skey(o)] = o
+    }
+    try {
+      for (const [path, body] of [
+        ['a', a],
+        ['s', s],
+      ])
+        if (Object.keys(body).length) {
+          const r = await fetch(this.url(path), { method: 'PATCH', body: JSON.stringify(body) })
+          if (!r.ok) throw new Error('HTTP ' + r.status)
+        }
+      S.syncQ.splice(0, batch.length)
+      save()
+      if (this.status !== 'on' && this.es.length) this.setStatus('on')
+    } catch {
+      this.setStatus('error')
+      this.flushSoon(15000)
+    }
+    this.flushing = false
+    if (S.syncQ.length) this.flushSoon(1000)
+  },
+  // 現在在做什麼（老師的「即時作答」會顯示）
+  presence(info) {
+    if (!this.ready()) return
+    if (info.view !== 'away') this.last = info
+    const body = { ...info, dev: S.profile.device || '未命名裝置', name: S.profile.name || '', ts: Date.now() }
+    fetch(this.url('live/' + S.profile.id), { method: 'PUT', body: JSON.stringify(body), keepalive: true }).catch(() => {})
+  },
+  connect() {
+    this.disconnect()
+    if (!this.ready() || !('EventSource' in window)) return
+    this.setStatus('connecting')
+    this.keys = new Set(S.attempts.map((a) => this.akey(a)))
+    const listen = (path, fn) => {
+      const es = new EventSource(this.url(path))
+      const on = (e) => {
+        try {
+          const { path: p, data } = JSON.parse(e.data)
+          fn(p, data)
+        } catch {}
+      }
+      es.addEventListener('put', on)
+      es.addEventListener('patch', on)
+      es.addEventListener('open', () => this.setStatus('on'))
+      es.addEventListener('cancel', () => {
+        this.setStatus('denied')
+        es.close()
+      })
+      es.onerror = () => this.status !== 'denied' && this.setStatus('error')
+      this.es.push(es)
+    }
+    listen('a', (p, data) => this.mergeAttempts(p, data))
+    listen('s', (p, data) => this.mergeSessions(p, data))
+    listen('live', (p, data) => {
+      if (p === '/') this.live = data || {}
+      else {
+        const id = p.split('/')[1]
+        if (p.split('/').length === 2) this.live[id] = data
+      }
+      onSyncChange('live')
+    })
+    this.flushSoon(50)
+  },
+  disconnect() {
+    this.es.forEach((e) => e.close())
+    this.es = []
+    this.setStatus('off')
+  },
+  // 伺服器送來的資料：p＝'/'（整包或 patch 多筆）或 '/<key>'（一筆）
+  rows(p, data) {
+    if (!data) return []
+    const seg = p.split('/').filter(Boolean)
+    if (!seg.length) return Object.entries(data)
+    if (seg.length === 1) return [[seg[0], data]]
+    return []
+  },
+  mergeAttempts(p, data) {
+    let add = 0
+    let upd = 0
+    for (const [k, a] of this.rows(p, data)) {
+      if (!a || typeof a.q !== 'string' || !a.ts || !a.d) continue
+      if (this.keys.has(k)) {
+        if (a.w) {
+          const mine = S.attempts.find((x) => this.akey(x) === k)
+          if (mine && mine.w !== a.w) {
+            mine.w = a.w
+            upd++
+          }
+        }
+        continue
+      }
+      this.keys.add(k)
+      S.attempts.push({ q: a.q, m: a.m || '', r: ['ok', 'care', 'bad'].includes(a.r) ? a.r : 'bad', t: Array.isArray(a.t) ? a.t : [], a: String(a.a ?? ''), h: a.h || 0, c: a.c || 0, x: a.x || 'p', ts: +a.ts, d: String(a.d), ...(a.w ? { w: a.w } : {}) })
+      add++
+    }
+    if (add) S.attempts.sort((x, y) => x.ts - y.ts)
+    if (add || upd) {
+      save()
+      onSyncChange('a', add)
+    }
+  },
+  mergeSessions(p, data) {
+    const have = new Set(S.sessions.map((s) => this.skey(s)))
+    let add = 0
+    for (const [k, s] of this.rows(p, data)) {
+      if (!s || !s.ts || !s.d || have.has(k)) continue
+      have.add(k)
+      S.sessions.push(s)
+      add++
+    }
+    if (add) {
+      S.sessions.sort((x, y) => x.ts - y.ts)
+      save()
+      onSyncChange('s', add)
+    }
+  },
+  // 配對：把這台以前的紀錄也送上去，老師才看得到完整歷程
+  pair(code, role) {
+    S.sync = { code, role, at: Date.now() }
+    if (!S.profile.device) S.profile.device = role === 'teacher' ? '老師平板' : '學生'
+    S.syncQ = [...S.attempts.filter((a) => a.d === S.profile.id).map((a) => ['a', a]), ...S.sessions.filter((s) => s.d === S.profile.id).map((s) => ['s', s])]
+    save()
+    this.connect()
+  },
+  unpair() {
+    this.presence({ view: 'away' })
+    this.disconnect()
+    delete S.sync
+    S.syncQ = []
+    save()
+  },
+}
+function addSession(s) {
+  S.sessions.push(s)
+  Sync.queue('s', s)
+}
+// 同步收到新資料：在相關畫面上就地更新
+let syncRedraw = 0
+function onSyncChange(kind, n) {
+  clearTimeout(syncRedraw)
+  syncRedraw = setTimeout(() => {
+    const h = location.hash || '#/'
+    if (h === '#/live') return viewLive(true)
+    if (kind !== 'live' && (h === '#/stats' || h === '#/book') && !$('.sheet-wrap')) return route(true)
+    if (h === '#/' || h === '') {
+      const b = $('.live-banner')
+      const html = liveBannerHTML()
+      if (b) b.outerHTML = html || '<div class="live-banner" hidden></div>'
+    }
+  }, 250)
+}
+const agoText = (ts) => {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000))
+  return s < 60 ? '剛剛' : s < 3600 ? `${Math.floor(s / 60)} 分鐘前` : s < 86400 ? `${Math.floor(s / 3600)} 小時前` : fmtTime(ts)
+}
+function liveText(l) {
+  if (!l) return '還沒有上線'
+  const fresh = Date.now() - l.ts < 10 * 60000
+  if (l.view === 'run' && fresh) return `正在做：${l.title}・第 ${l.n}／${l.of} 題`
+  if (l.view === 'exam' && fresh) return '正在寫模擬段考'
+  if (l.view === 'flash' && fresh) return '正在玩閃電挑戰'
+  if (l.view === 'away' || !fresh) return `離開 App（${agoText(l.ts)}）`
+  return `在 App 裡（${agoText(l.ts)}）`
+}
+function others() {
+  return Object.entries(Sync.live || {}).filter(([id, l]) => id !== S.profile.id && l)
+}
+function liveBannerHTML() {
+  if (!Sync.ready()) return ''
+  const act = others().filter(([, l]) => Date.now() - l.ts < 10 * 60000 && l.view !== 'away')
+  if (!act.length) return ''
+  const [, l] = act.sort((a, b) => b[1].ts - a[1].ts)[0]
+  return `<button class="live-banner card" data-go="#/live"><span class="live-pulse"></span><span class="lb-t"><b>${esc(l.name || l.dev)}</b>　${esc(liveText(l))}</span><span class="lb-go">看即時作答 ${ICON.chev}</span></button>`
+}
+
+// 老師看：學生正在做哪一題、每一題答了什麼（即時更新）
+function viewLive(keepScroll = false) {
+  const y = window.scrollY
+  if (!Sync.ready()) {
+    setView(
+      `<div class="page narrow">${header('即時作答', '', '', true)}
+      <div class="empty card"><div class="empty-ic">📡</div><h2>還沒有配對</h2><p class="muted">到「設定 → 即時同步」建立配對碼，把連結傳給學生，就能在這裡即時看到他的作答。</p><button class="btn primary" data-go="#/settings">去設定</button></div></div>`,
+    )
+    $('.page').addEventListener('click', (e) => e.target.closest('[data-go]') && go(e.target.closest('[data-go]').dataset.go))
+    return
+  }
+  const devs = new Map()
+  for (const [id, l] of others()) devs.set(id, l)
+  for (const a of S.attempts) if (a.d !== S.profile.id && !devs.has(a.d)) devs.set(a.d, null)
+  const t0 = dayStart()
+  const cards = [...devs.entries()]
+    .map(([id, l]) => {
+      const mine = S.attempts.filter((a) => a.d === id)
+      const today = mine.filter((a) => a.ts >= t0)
+      const ok = today.filter((a) => a.r === 'ok').length
+      const care = today.filter((a) => a.r === 'care').length
+      const feed = mine.slice(-40).reverse()
+      const active = l && l.view !== 'away' && Date.now() - l.ts < 10 * 60000
+      return `<section class="card live-dev">
+        <div class="ld-head"><span class="ld-dot${active ? ' on' : ''}"></span><div class="ld-who"><b>${esc(l?.name || l?.dev || '學生裝置')}</b><span>${esc(liveText(l))}</span></div>
+          <div class="ld-today"><b>${today.length}</b> 題<span>今天・對 ${ok}${care ? `・粗心 ${care}` : ''}</span></div></div>
+        ${
+          feed.length
+            ? `<div class="list flat live-feed">${feed
+                .map((a) => {
+                  const it = ITEM[a.q]
+                  if (!it) return ''
+                  return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・有點猜' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
+                })
+                .join('')}</div>`
+            : '<p class="muted pad">還沒有作答紀錄。</p>'
+        }
+      </section>`
+    })
+    .join('')
+  setView(
+    `<div class="page narrow live-page">
+      ${header('即時作答', '學生每答一題，這裡幾秒內就會更新。點一題可以看完整題目與解析。', `<span class="sync-pill"><i class="sync-dot" data-s="${Sync.status}"></i>${{ on: '已連線', connecting: '連線中', error: '重新連線中', denied: '配對碼無效', off: '未連線' }[Sync.status] || ''}</span>`, true)}
+      ${cards || `<div class="empty card"><div class="empty-ic">⏳</div><h2>等學生上線</h2><p class="muted">學生打開配對連結之後，就會出現在這裡。</p><button class="btn primary" data-share-pair>再傳一次配對連結</button></div>`}
+    </div>`,
+  )
+  if (keepScroll) window.scrollTo(0, y)
+  $('.live-page').addEventListener('click', (e) => {
+    const r = e.target.closest('[data-att]')
+    if (r) {
+      const a = S.attempts.find((x) => Sync.akey(x) === r.dataset.att)
+      if (a) {
+        const b = sheet(`<h2 class="sheet-title">學生的作答</h2><p class="sheet-p">${esc(fmtTime(a.ts))}</p><div class="review-slot"></div>`, { wide: true })
+        $('.review-slot', b).append(reviewCard(ITEM[a.q], a, '學生的答案'))
+      }
+    }
+    if (e.target.closest('[data-share-pair]')) sharePair()
+  })
+}
+function pairLink() {
+  return `${location.origin}${location.pathname}#/pair/${Sync.code()}`
+}
+function sharePair() {
+  const link = pairLink()
+  const b = sheet(
+    `<h2 class="sheet-title">把配對連結傳給學生</h2><p class="sheet-p">學生用自己的手機或平板打開這個連結，按「配對」就完成了。連結就是密碼，不要貼到公開的地方。</p>
+    <div class="pair-link">${esc(link)}</div>
+    <div class="sheet-actions"><button class="btn ghost" data-copy>複製連結</button>${navigator.share ? '<button class="btn primary" data-share>用 LINE 等傳送</button>' : ''}</div>`,
+  )
+  $('[data-copy]', b).onclick = async () => {
+    try {
+      await Promise.race([navigator.clipboard.writeText(link), new Promise((_, r) => setTimeout(r, 1500))])
+      toast('已複製配對連結', '📋')
+    } catch {
+      toast('請長按連結自己複製', '✋')
+    }
+  }
+  $('[data-share]', b)?.addEventListener('click', () => navigator.share({ title: '英文段考複習：和老師配對', text: '打開這個連結，按「配對」：', url: link }).catch(() => {}))
+}
+// 學生打開配對連結
+function viewPair(code) {
+  if (!/^[a-z0-9]{16,40}$/.test(code)) {
+    toast('這個配對連結不完整', '⚠️')
+    return go('#/')
+  }
+  if (S.sync?.code === code) {
+    toast('已經配對好了', '✅')
+    return go('#/')
+  }
+  viewHome()
+  const b = sheet(
+    `<h2 class="sheet-title">和老師的平板配對</h2>
+    <p class="sheet-p">配對之後，你在這台裝置的作答會即時傳給老師；老師平板上的練習紀錄也會同步到這裡。</p>
+    <div class="list form"><label class="row field"><span class="row-t">你的暱稱<small>老師會看到，可以用英文名字</small></span><input id="pair-name" value="${esc(S.profile.name)}" placeholder="例如：Amy" maxlength="20" autocomplete="off"></label></div>
+    <div class="sheet-actions"><button class="btn ghost" data-close>先不要</button><button class="btn primary" data-ok>配對</button></div>`,
+  )
+  $('[data-ok]', b).onclick = () => {
+    const n = $('#pair-name', b).value.trim()
+    if (n) S.profile.name = n
+    if (!S.profile.device || S.profile.device === '老師平板') S.profile.device = '學生'
+    Sync.pair(code, 'student')
+    closeSheet()
+    toast('配對完成！作答會即時傳給老師', '📡')
+    go('#/')
+  }
 }
 
 // ───────────────────────── 路由與外框 ─────────────────────────
@@ -2481,6 +2916,8 @@ function route() {
   if (a === 'settings') return viewSettings()
   if (a === 'notes') return viewAllNotes()
   if (a === 'print' && b) return viewPrint(decodeURIComponent(b))
+  if (a === 'live') return viewLive()
+  if (a === 'pair' && b) return viewPair(decodeURIComponent(b))
   viewHome()
 }
 window.addEventListener('hashchange', () => {
@@ -2527,7 +2964,19 @@ document.addEventListener('click', (e) => {
 })
 applySize()
 checkBadges(true)
+Sync.connect()
 route()
+// 同步：有網路就把排隊的紀錄送出；離開 App 時告訴老師「離開」，回來時再更新
+window.addEventListener('online', () => Sync.flushSoon(100))
+document.addEventListener('visibilitychange', () => {
+  if (!Sync.ready()) return
+  if (document.visibilityState === 'hidden') Sync.presence({ view: 'away' })
+  else {
+    Sync.presence(Sync.last || { view: 'home' })
+    Sync.flushSoon(100)
+    if (!Sync.es.length || Sync.es.some((e) => e.readyState === 2)) Sync.connect()
+  }
+})
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker

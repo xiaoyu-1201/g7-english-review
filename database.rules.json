@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "classes": {
+      "$code": {
+        ".read": "$code.length >= 16",
+        ".write": "$code.length >= 16",
+        "a": { "$k": { ".validate": "newData.hasChildren(['q', 'r', 'ts', 'd']) && newData.child('q').isString() && newData.child('q').val().length < 24" } },
+        "s": { "$k": { ".validate": "newData.hasChildren(['k', 'ts', 'd'])" } },
+        "live": { "$d": { ".validate": "newData.hasChildren(['ts'])" } }
+      }
+    }
+  }
+}
