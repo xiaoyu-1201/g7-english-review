@@ -56,15 +56,20 @@ function table() {
     <rect class="wood-dark" x="206" y="108" width="10" height="${GROUND - 108}" rx="3" />
   </g>`
 }
+// 打開的箱子（用在 in）：看得到裡面的深色內側＋往外翻的兩片蓋子
 function boxBack(x, w = 70) {
-  return `<polygon class="box-in" points="${x},120 ${x + 10},110 ${x + w - 10},110 ${x + w},120" />`
+  return `<polygon class="box-top" points="${x + 10},110 ${x},120 ${x - 20},103 ${x - 8},93" />
+    <polygon class="box-top" points="${x + w - 10},110 ${x + w},120 ${x + w + 20},103 ${x + w + 8},93" />
+    <polygon class="box-in" points="${x},120 ${x + 10},110 ${x + w - 10},110 ${x + w},120" />`
 }
 function boxFront(x, w = 70) {
   return `<g class="obj"><rect class="box" x="${x}" y="120" width="${w}" height="${GROUND - 120}" rx="5" />
     <line class="box-line" x1="${x + 8}" y1="134" x2="${x + w - 8}" y2="134" /></g>`
 }
+// 蓋起來的箱子（其他位置）：上面是淺色的蓋子＋膠帶
 function box(x = 125, w = 70) {
-  return boxBack(x, w) + boxFront(x, w)
+  return `<g class="obj"><polygon class="box-top" points="${x},120 ${x + 10},110 ${x + w - 10},110 ${x + w},120" />
+    <line class="box-tape" x1="${x + w / 2}" y1="110.5" x2="${x + w / 2}" y2="128" />${boxFront(x, w)}</g>`
 }
 function sofa() {
   return `<g class="obj">
@@ -83,11 +88,11 @@ const REFS = {
   },
   box: {
     draw: () => box(),
-    pos: { in: [160, 116], on: [160, 102], next: [228, 154], near: [286, 154], behind: [174, 100], front: [148, 180], above: [160, 58] },
+    pos: { in: [160, 116], on: [160, 96], next: [228, 154], near: [286, 154], behind: [182, 103], front: [148, 180], above: [160, 56] },
   },
   boxes2: {
     draw: () => box(48, 64) + box(208, 64),
-    pos: { between: [160, 154], on: [80, 102], next: [296, 154] },
+    pos: { between: [160, 154], on: [80, 96], next: [296, 154] },
   },
   sofa: {
     draw: sofa,

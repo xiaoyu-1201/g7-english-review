@@ -31,6 +31,7 @@
   --wood-dark: #b08660;
   --box: #e0bb90;
   --box-in: #b48c63;
+  --box-top: #efcfa6;
   --box-line: rgba(0, 0, 0, 0.12);
   --sofa: #8ab4ee;
   --sofa-dark: #6b9be3;
@@ -79,6 +80,7 @@
     --wood-dark: #7d5f42;
     --box: #a8865f;
     --box-in: #6f5639;
+    --box-top: #bf9c72;
     --box-line: rgba(0, 0, 0, 0.3);
     --sofa: #4a72b0;
     --sofa-dark: #3b5f97;
@@ -1525,6 +1527,13 @@ button.row:active {
 }
 .box-in {
   fill: var(--box-in);
+}
+.box-top {
+  fill: var(--box-top);
+}
+.box-tape {
+  stroke: var(--box-line);
+  stroke-width: 7;
 }
 .box-line {
   stroke: var(--box-line);
