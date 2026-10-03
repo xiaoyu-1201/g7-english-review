@@ -1110,7 +1110,7 @@ export const MODULES = {
         id: 'u1d-10',
         q: '把對話排成正確的順序。',
         lines: true,
-        words: ['Hi, Yuki. This is my cousin, Max.', 'Nice to meet you, Max.', 'Nice to meet you, too.', 'Is he a student?', "No, he isn't. He's a doctor."],
+        words: ['Hi, Yuki. This is my cousin, Max.', 'Nice to meet you, Max.', 'Nice to meet you, too.', 'Are you a student, Max?', "No, I'm not. I'm a doctor."],
         tags: ['order'],
       },
       {

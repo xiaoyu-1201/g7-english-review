@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '1.0（10/3）'
+const VERSION = '1.1（10/3）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -43,7 +43,7 @@ const fmtDur = (ms) => {
 }
 // [[word]] → 可以點來聽的單字
 const rich = (html) => String(html ?? '').replace(/\[\[([^\]]+)\]\]/g, (_, w) => `<button type="button" class="say" data-say="${esc(w)}">${esc(w)}</button>`)
-const qtext = (s) => esc(s).replace(/___/g, '<span class="gap">＿＿＿</span>').replace(/\n/g, '<br>')
+const qtext = (s) => esc(s).replace(/___/g, '<span class="gap" role="img" aria-label="空格"></span>').replace(/\n/g, '<br>')
 
 // ───────────────────────── 儲存 ─────────────────────────
 const DEF = () => ({
@@ -159,7 +159,75 @@ function tagCounts(list) {
   return Object.entries(c).sort((a, b) => b[1] - a[1])
 }
 function record(it, res, extra = {}) {
-  S.attempts.push({ q: it.id, m: it.mid, r: res.r, t: res.tags || [], a: String(res.given ?? '').slice(0, 120), h: extra.h || 0, c: extra.c ? 1 : 0, x: extra.x || 'p', ts: Date.now(), d: S.profile.id })
+  const a = { q: it.id, m: it.mid, r: res.r, t: res.tags || [], a: String(res.given ?? '').slice(0, 120), h: extra.h || 0, c: extra.c ? 1 : 0, x: extra.x || 'p', ts: Date.now(), d: S.profile.id }
+  S.attempts.push(a)
+  return a
+}
+// 錯因自評（後設認知：自己說出錯在哪，下次比較不會再錯）
+const WHY_ME = [
+  ['read', '看錯題目'],
+  ['rule', '規則不熟'],
+  ['word', '單字不熟'],
+  ['rush', '太急了'],
+]
+function maxStreakDays() {
+  const days = [...new Set(S.attempts.map((a) => dayStart(a.ts)))].sort((a, b) => a - b)
+  let best = 0
+  let run = 0
+  days.forEach((d, i) => {
+    run = i && Math.round((d - days[i - 1]) / DAY) === 1 ? run + 1 : 1
+    best = Math.max(best, run)
+  })
+  return best
+}
+
+// ───────────────────────── 徽章 ─────────────────────────
+const BADGES = [
+  ['start', '🚀', '起步', '完成第一個單元'],
+  ['ten', '🔟', '十連對', '練習時連續答對 10 題'],
+  ['careful', '🎯', '零粗心', '一個單元 10 題以上，沒有格式粗心'],
+  ['days', '🔥', '三天不間斷', '連續 3 天都有練習'],
+  ['grad', '🎓', '錯題畢業生', '10 題從錯題本畢業'],
+  ['flash', '⚡', '閃電手', '閃電挑戰答對 20 題'],
+  ['lesson1', '🥈', '第 1 堂制霸', '第 1 堂 8 個單元都拿到三星'],
+  ['lesson2', '🥇', '第 2 堂制霸', '第 2 堂 8 個單元都拿到三星'],
+  ['exam', '💯', '準備好了', '模擬段考 90 分以上'],
+]
+function badgeEarned() {
+  const modSess = S.sessions.filter((s) => s.k?.startsWith('m:'))
+  const best = (m) => Math.max(0, ...modSess.filter((s) => s.m === m).map((s) => s.stars || 0))
+  const runs = {}
+  let maxRun = 0
+  for (const a of S.attempts) {
+    if (a.x === 'e') continue
+    runs[a.d] = a.r === 'ok' ? (runs[a.d] || 0) + 1 : 0
+    maxRun = Math.max(maxRun, runs[a.d])
+  }
+  const grads = Object.values(bookState()).filter((b) => !b.inBook).length
+  return {
+    start: modSess.length > 0,
+    ten: maxRun >= 10,
+    careful: modSess.some((s) => s.n >= 10 && !s.care),
+    days: maxStreakDays() >= 3,
+    grad: grads >= 10,
+    flash: (S.flash.best || 0) >= 20,
+    lesson1: LESSONS[0].modules.every((m) => best(m) === 3),
+    lesson2: LESSONS[1].modules.every((m) => best(m) === 3),
+    exam: S.sessions.some((s) => s.k === 'exam' && s.s >= 90),
+  }
+}
+function checkBadges(silent = false) {
+  S.badges ||= {}
+  const e = badgeEarned()
+  const fresh = BADGES.filter(([id]) => e[id] && !S.badges[id])
+  if (!fresh.length) return
+  fresh.forEach(([id]) => (S.badges[id] = Date.now()))
+  save()
+  if (silent) return
+  setTimeout(() => {
+    toast(fresh.length > 1 ? `獲得 ${fresh.length} 個徽章：${fresh.map((b) => b[2]).join('、')}` : `獲得徽章：${fresh[0][2]}——${fresh[0][3]}`, fresh[0][1])
+    celebrate()
+  }, 700)
 }
 
 // ───────────────────────── 文字批改 ─────────────────────────
@@ -614,12 +682,19 @@ const CTRL = {
     const fixed = it.opts.findIndex((o) => o.startsWith('（'))
     if (fixed >= 0) order = order.filter((x) => x !== fixed).concat(fixed)
     let sel = null
+    // 上課模式：先遮住選項，讓學生「先說出答案」（生成效應：自己想出來的記得比較牢）
+    const cover = mode === 'practice' && S.profile.oral === 'on' && !it.audio
     const C = {
-      html: `<div class="q-text">${qtext(it.q)}</div><div class="opts" role="radiogroup">${order
+      html: `<div class="q-text">${qtext(it.q)}</div><div class="opts-wrap${cover ? ' covered' : ''}">${cover ? '<button type="button" class="cover-btn"><span>🗣️ 先說出你的答案</span><small>想好了再點這裡看選項</small></button>' : ''}<div class="opts" role="radiogroup">${order
         .map((i, k) => `<button type="button" class="opt" role="radio" aria-checked="false" data-i="${i}"><span class="opt-key">${'ABCDEFGH'[k]}</span><span class="opt-text">${esc(it.opts[i])}</span></button>`)
-        .join('')}</div>`,
+        .join('')}</div></div>`,
       answered: () => sel !== null,
       mount(el) {
+        $('.cover-btn', el)?.addEventListener('click', (e) => {
+          const w = e.currentTarget.parentElement
+          w.classList.remove('covered')
+          e.currentTarget.remove()
+        })
         $('.opts', el).addEventListener('click', (e) => {
           const b = e.target.closest('.opt')
           if (!b || C.locked) return
@@ -1149,13 +1224,25 @@ function checkItem() {
   const pr = S.progress[RUN.key]
   pr.res[it.id] = res.r
   RUN.streak = res.r === 'ok' ? RUN.streak + 1 : 0
-  record(it, res, { h: RUN.hints, c: RUN.guess })
+  const att = record(it, res, { h: RUN.hints, c: RUN.guess })
   save()
   C.reveal(res)
   const fb = $('.q-feedback', C.el)
   fb.innerHTML = feedbackHTML(it, res, { guess: RUN.guess, streak: RUN.streak })
+  if (res.r !== 'ok') {
+    fb.insertAdjacentHTML('beforeend', `<div class="why-me"><div class="fb-k">這題我錯在…（點一個，幫自己找原因）</div><div class="chips">${WHY_ME.map(([k, t]) => `<button type="button" class="chip pick" data-w="${k}">${t}</button>`).join('')}</div></div>`)
+    $('.why-me', fb).addEventListener('click', (e) => {
+      const b = e.target.closest('[data-w]')
+      if (!b) return
+      att.w = b.dataset.w
+      save()
+      $$('.why-me .pick', fb).forEach((x) => x.classList.toggle('on', x === b))
+      buzz(6)
+    })
+  }
   fb.hidden = false
   revealExtras(C)
+  checkBadges()
   C.el.classList.add('done', 'r-' + res.r)
   $('.ra-left').innerHTML = ''
   const btn = $('[data-act=check]')
@@ -1191,6 +1278,7 @@ function viewSummary(key) {
     S.sessions.push({ k: key, m: pr.mid || key, title: pr.title, s: Math.round(pct * 100), n: total, ok, care, bad, stars: st, ts: Date.now(), dur: pr.t1 - pr.t0, d: S.profile.id })
     save()
     if (st === 3) setTimeout(celebrate, 350)
+    checkBadges()
   }
   const missed = res.filter(([, r]) => r !== 'ok').map(([id]) => id)
   const tags = tagCounts(S.attempts.filter((a) => a.ts >= pr.t0 && missed.includes(a.q)))
@@ -1311,7 +1399,6 @@ function viewHome() {
   const goal = S.profile.goal || 30
   const book = bookIds().length
   const sd = streakDays()
-  const name = S.profile.name.trim()
   const resume = Object.entries(S.progress)
     .filter(([k, p]) => !p.done && p.i > 0 && p.i < p.ids.length)
     .sort((a, b) => (b[1].t0 || 0) - (a[1].t0 || 0))[0]
@@ -1322,7 +1409,7 @@ function viewHome() {
   setView(
     `<div class="page home">
       <header class="lg-head"><div class="eyebrow">${new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</div>
-        <div class="lg-row"><h1>${hello}${name ? '，' + esc(name) : ''}</h1>${sd ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
+        <div class="lg-row"><h1>${hello}</h1>${sd ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
         <p class="lg-sub">翰林版七上｜第一次段考：Starter～Review 1${cd ? '　·　' + cd : ''}</p>
       </header>
 
@@ -1340,6 +1427,7 @@ function viewHome() {
         </div>
         ${resume ? `<button class="resume" data-resume="${esc(resume[0])}"><span class="resume-k">繼續上次</span><span class="resume-t">${esc(resume[1].title)}・第 ${resume[1].i + 1} 張</span>${ICON.chev}</button>` : nextStepHTML(book)}
       </section>
+      ${planHTML()}
 
       <section class="quick">
         <button class="qk qk-exam" data-go="#/exam"><span class="qk-ic">${ICON.doc}</span><span class="qk-t">模擬段考</span><span class="qk-s">${examBest.length ? `最高 ${Math.max(...examBest.map((s) => s.s))} 分` : '約 30 題・交卷前要檢查'}</span></button>
@@ -1390,6 +1478,40 @@ function viewHome() {
     if (n) return n.dataset.next.startsWith('mod:') ? startModule(n.dataset.next.slice(4)) : go(n.dataset.next)
   })
 }
+// 今天的任務：依段考日期，把還沒完成的單元平均分到剩下的天數；錯題本每天先做（間隔複習）；最後兩天做模擬段考
+function todayPlan() {
+  const t0 = dayStart()
+  const examT = S.profile.exam ? dayStart(new Date(S.profile.exam + 'T00:00').getTime()) : null
+  const daysLeft = examT == null || isNaN(examT) ? null : Math.round((examT - t0) / DAY)
+  const modSess = S.sessions.filter((s) => s.k?.startsWith('m:'))
+  const doneMods = new Set(modSess.filter((s) => s.ts < t0).map((s) => s.m))
+  const todayKeys = new Set(S.sessions.filter((s) => s.ts >= t0).map((s) => s.k))
+  const remaining = MOD_ORDER.filter((m) => !doneMods.has(m))
+  const studyDays = daysLeft == null ? 4 : Math.max(1, daysLeft - 1)
+  const per = Math.min(remaining.length, Math.max(2, Math.ceil(remaining.length / studyDays)))
+  const tasks = []
+  const book = bookIds().length
+  if (book || todayKeys.has('book')) tasks.push({ t: '錯題本重練', sub: book ? `還有 ${book} 題` : '今天的錯題清完了', done: todayKeys.has('book') || !book, go: '#/book' })
+  if (daysLeft == null || daysLeft >= 1)
+    for (const m of remaining.slice(0, per)) tasks.push({ t: `${MODULES[m].icon} ${MODULES[m].title}`, sub: `${MODULES[m].unit}・約 ${MODULES[m].min} 分鐘`, done: todayKeys.has('m:' + m), mod: m })
+  if (!remaining.length || (daysLeft != null && daysLeft <= 2)) tasks.push({ t: '模擬段考一回', sub: '交卷前走過檢查清單', done: todayKeys.has('exam'), go: '#/exam' })
+  if (daysLeft != null && daysLeft <= 1) tasks.push({ t: '重點總整理看一遍', sub: '考前一天', done: false, go: '#/notes' })
+  if (!tasks.length) tasks.push({ t: '閃電挑戰暖暖身', sub: '60 秒', done: todayKeys.has('flash'), go: '#/flash' })
+  return { tasks, daysLeft }
+}
+function planHTML() {
+  const { tasks, daysLeft } = todayPlan()
+  const done = tasks.filter((t) => t.done).length
+  const sub =
+    daysLeft == null ? '到「設定」填段考日期，會自動把單元分配到每一天。' : daysLeft > 0 ? `距離段考 ${daysLeft} 天：照這個進度剛剛好。錯題每天先做，隔天再做記得更牢。` : daysLeft === 0 ? '今天段考！看重點、記得檢查清單。' : '段考結束了，辛苦了！'
+  return `<section class="card plan-card">
+    <div class="sec-h"><div><h2>今天的任務</h2><p>${esc(sub)}</p></div><span class="plan-count${done === tasks.length ? ' all' : ''}">${done === tasks.length ? '全部完成 🎉' : `${done}／${tasks.length}`}</span></div>
+    <div class="list flat">${tasks
+      .map((t) => `<button class="row task${t.done ? ' done' : ''}" ${t.mod ? `data-mod="${t.mod}"` : `data-go="${t.go}"`}><span class="chk-box">${ICON.check}</span><span class="row-t">${esc(t.t)}<small>${esc(t.sub)}</small></span>${ICON.chev}</button>`)
+      .join('')}</div>
+  </section>`
+}
+
 // 下一步建議：錯題（間隔複習）優先 → 還沒做完的單元 → 模擬段考
 function nextStepHTML(book) {
   let k = ''
@@ -1615,6 +1737,7 @@ function gradeExam() {
   const dur = Date.now() - EXAM.t0
   S.sessions.push({ k: 'exam', m: 'exam', title: '模擬段考', s: score, n: total, ok, care, bad: total - ok - care, ifCare, stars: score >= 90 ? 3 : score >= 70 ? 2 : 1, ts: Date.now(), dur, d: S.profile.id })
   save()
+  checkBadges()
   EXAM.graded = true
   const tagList = Object.entries(tags).sort((a, b) => b[1] - a[1])
   const head = document.createElement('section')
@@ -1756,6 +1879,7 @@ function endFlash() {
   save()
   viewFlash()
   if (rec && FL.n > 0) setTimeout(celebrate, 200)
+  checkBadges()
 }
 function flashResultHTML() {
   const miss = FL.miss.slice(-6)
@@ -1765,6 +1889,24 @@ function flashResultHTML() {
 
 // ───────────────────────── 紀錄 ─────────────────────────
 let statsFilter = 'all'
+function whyCounts(list) {
+  const c = {}
+  for (const a of list) if (a.w) c[a.w] = (c[a.w] || 0) + 1
+  return WHY_ME.filter(([k]) => c[k]).map(([k, t]) => [t, c[k]])
+}
+function whyHTML(list) {
+  const w = whyCounts(list)
+  if (!w.length) return ''
+  return `<div class="why-sum"><div class="group-h">自己說的錯因</div><div class="chips">${w.map(([t, n]) => `<span class="chip">${t} × ${n}</span>`).join('')}</div></div>`
+}
+function badgesHTML() {
+  const have = S.badges || {}
+  const n = BADGES.filter(([id]) => have[id]).length
+  return `<section class="card"><div class="sec-h"><div><h2>徽章</h2><p>已經拿到 ${n}／${BADGES.length} 個。</p></div></div>
+    <div class="badges">${BADGES.map(
+      ([id, ic, name, desc]) => `<div class="badge-item${have[id] ? ' got' : ''}" title="${esc(desc)}"><div class="medal b-${id}"><span>${have[id] ? ic : '🔒'}</span></div><div class="badge-n">${esc(name)}</div><div class="badge-d">${esc(desc)}</div></div>`,
+    ).join('')}</div></section>`
+}
 function viewStats() {
   const mine = statsFilter === 'mine'
   const list = attemptsOf(mine)
@@ -1799,7 +1941,10 @@ function viewStats() {
                 .join('')}</div>`
             : '<p class="muted pad">還沒有錯誤紀錄。</p>'
         }
+        ${whyHTML(list)}
       </section>
+
+      ${badgesHTML()}
 
       <section class="card">
         <div class="sec-h"><div><h2>單元精熟度</h2><p>最後一次作答答對 ＝ 精熟。</p></div></div>
@@ -1877,8 +2022,11 @@ function reportText() {
     `學生：${S.profile.name || '（未填）'}　裝置：${S.profile.device || '未命名'}`,
     `日期：${new Date().toLocaleDateString('zh-TW')}　連續練習：${streakDays()} 天`,
     `已作答 ${L.length} 題，正確率 ${L.length ? Math.round((ok / L.length) * 100) : 0}%，格式粗心 ${care} 次`,
-    tc.length ? `最常錯：${tc.map(([t, n]) => `${TAGS[t] || t} ${n}`).join('、')}` : '',
+    tc.length ? `最常錯：${tc.map(([t, n]) => `${TAGS[t] || t} ${n}`).join('、')}` : null,
+    whyCounts(L).length ? `自己說的錯因：${whyCounts(L).map(([t, n]) => `${t} ${n}`).join('、')}` : null,
+    `很確定卻答錯：${L.filter((a) => a.r !== 'ok' && !a.c && a.x !== 'e').length} 題`,
     `錯題本：${bookIds().length} 題待複習`,
+    `徽章：${BADGES.filter(([id]) => S.badges?.[id]).map(([, ic, n]) => ic + n).join('、') || '還沒有'}`,
     '',
     '單元精熟（答對／題數）：',
     ...MOD_ORDER.map((mid) => {
@@ -1887,7 +2035,7 @@ function reportText() {
     }),
     '',
     bestExam ? `模擬段考最高：${bestExam.s} 分（沒粗心可拿 ${bestExam.ifCare} 分），共考 ${exams.length} 次` : '模擬段考：還沒考',
-    S.flash.best ? `閃電挑戰最高：${S.flash.best} 題` : '',
+    S.flash.best ? `閃電挑戰最高：${S.flash.best} 題` : null,
   ]
   return lines.filter((l) => l !== null && l !== undefined).join('\n').replace(/\n{3,}/g, '\n\n')
 }
@@ -1962,6 +2110,7 @@ async function importData(e) {
     if ((d.flash?.best || 0) > (S.flash.best || 0)) S.flash.best = d.flash.best
     if (!S.profile.name && d.profile?.name) S.profile.name = d.profile.name
     save()
+    checkBadges(true)
     toast(`已合併：新增 ${add.length} 筆作答、${addS.length} 次練習`, '✅')
     viewStats()
   } catch {
@@ -1977,7 +2126,7 @@ function viewSettings() {
     `<div class="page narrow">
       ${header('設定', '')}
       <div class="group"><div class="group-h">學生</div><div class="list form">
-        <label class="row field"><span class="row-t">名字</span><input id="f-name" value="${esc(p.name)}" placeholder="例如：小宇" maxlength="20" autocomplete="off"></label>
+        <label class="row field"><span class="row-t">名字</span><input id="f-name" value="${esc(p.name)}" placeholder="例如：Amy" maxlength="20" autocomplete="off"></label>
         <div class="row field"><span class="row-t">這台裝置是</span><div class="seg small" data-seg="device">${dev.map((d) => `<button class="${p.device === d ? 'on' : ''}" data-v="${d}">${d}</button>`).join('')}</div></div>
         <label class="row field"><span class="row-t">段考日期</span><input id="f-exam" type="date" value="${esc(p.exam)}"></label>
       </div><p class="group-f">裝置名稱會寫在學習報告和備份檔上，老師合併紀錄時分得出是誰的。</p></div>
@@ -1987,6 +2136,11 @@ function viewSettings() {
         <div class="row field"><span class="row-t">語音速度</span><div class="seg small" data-seg="rate"><button class="${p.rate === 'slow' ? 'on' : ''}" data-v="slow">慢</button><button class="${p.rate !== 'slow' ? 'on' : ''}" data-v="normal">標準</button></div></div>
         <button class="row" data-x="voice"><span class="row-ic">${ICON.speaker}</span><span class="row-t">試聽語音</span>${ICON.chev}</button>
       </div><p class="group-f">聽力用裝置內建的英文語音。iPad 可以到「設定 → 輔助使用 → 朗讀內容 → 聲音」下載更自然的英文語音（例如 Samantha 加強版）。</p></div>
+
+      <div class="group"><div class="group-h">上課</div><div class="list form">
+        <div class="row field"><span class="row-t">先說答案，再看選項<small>選擇題的選項先遮住，學生先口頭回答</small></span><div class="seg small" data-seg="oral"><button class="${p.oral === 'on' ? 'on' : ''}" data-v="on">開</button><button class="${p.oral !== 'on' ? 'on' : ''}" data-v="off">關</button></div></div>
+        <div class="row field"><span class="row-t">字體大小</span><div class="seg small" data-seg="size"><button class="${p.size !== 'lg' ? 'on' : ''}" data-v="std">標準</button><button class="${p.size === 'lg' ? 'on' : ''}" data-v="lg">大</button></div></div>
+      </div><p class="group-f">「先說答案」：自己想出答案再對照，比直接看選項記得更牢（生成效應）。學生回家自己練時可以關掉。<br>有實體鍵盤時：按 1～4 選選項，Enter 檢查／下一題。</p></div>
 
       <div class="group"><div class="group-h">App</div><div class="list">
         <button class="row" data-x="update"><span class="row-t">檢查更新</span><span class="row-r">${VERSION}</span>${ICON.chev}</button>
@@ -2010,6 +2164,7 @@ function viewSettings() {
       const k = b.parentElement.dataset.seg
       S.profile[k] = k === 'goal' ? +b.dataset.v : b.dataset.v
       save()
+      if (k === 'size') applySize()
       $$('button', b.parentElement).forEach((x) => x.classList.toggle('on', x === b))
       return
     }
@@ -2079,6 +2234,31 @@ window.addEventListener('hashchange', () => {
   route()
   window.scrollTo(0, 0)
 })
+function applySize() {
+  document.documentElement.classList.toggle('size-lg', S.profile.size === 'lg')
+}
+// 實體鍵盤：1～4／A～D 選選項，Enter 檢查／下一題
+document.addEventListener('keydown', (e) => {
+  if (!RUN || !$('.run') || $('.sheet-wrap') || e.metaKey || e.ctrlKey || e.altKey) return
+  if (e.target.closest?.('input, textarea')) return
+  const k = e.key.toLowerCase()
+  let idx = '1234'.indexOf(k)
+  if (idx < 0) idx = 'abcd'.indexOf(k)
+  if (k.length === 1 && idx >= 0) {
+    if ($('.run .opts-wrap.covered')) return
+    const opts = $$('.run .opts .opt')
+    if (opts[idx] && !opts[idx].disabled) {
+      opts[idx].click()
+      e.preventDefault()
+    }
+  } else if (e.key === 'Enter' && (!e.target.closest?.('button, a, [role=button]') || e.target.closest('.why-me'))) {
+    const b = $('[data-act=check]')
+    if (b && !b.disabled) {
+      b.click()
+      e.preventDefault()
+    }
+  }
+})
 document.addEventListener('click', (e) => {
   const s = e.target.closest('[data-say]')
   if (s) {
@@ -2087,6 +2267,8 @@ document.addEventListener('click', (e) => {
     Voice.speak(s.dataset.say).then(() => s.classList.remove('speaking'))
   }
 })
+applySize()
+checkBadges(true)
 route()
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

@@ -1001,9 +1001,12 @@ button.row:active {
   overflow-wrap: anywhere;
 }
 .gap {
-  color: var(--blue);
-  letter-spacing: -0.05em;
-  margin: 0 2px;
+  display: inline-block;
+  width: 3.2em;
+  height: 1em;
+  margin: 0 5px;
+  border-bottom: 2.5px solid var(--blue);
+  vertical-align: -0.12em;
 }
 .task {
   font-size: 16px;
@@ -2840,4 +2843,151 @@ ul.plain b {
     border: 0;
     color: inherit;
   }
+}
+
+/* ───────── 第二輪：先說答案、錯因自評、今天的任務、徽章、大字 ───────── */
+.opts-wrap {
+  position: relative;
+}
+.opts-wrap.covered .opts {
+  filter: blur(9px);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}
+.cover-btn {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--card) 35%, transparent);
+  color: var(--blue);
+  font-size: 20px;
+  font-weight: 700;
+}
+.cover-btn small {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--label2);
+}
+.why-me {
+  margin-top: 12px;
+  background: var(--card);
+  border-radius: var(--r-md);
+  padding: 10px 14px 12px;
+}
+.why-me .chips {
+  margin-top: 6px;
+}
+.chip.pick {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 15px;
+  background: var(--fill);
+  color: var(--label);
+}
+.chip.pick.on {
+  background: var(--blue);
+  color: #fff;
+}
+.why-sum {
+  margin-top: 14px;
+}
+.why-sum .group-h {
+  margin: 0 0 6px;
+}
+.plan-card .sec-h {
+  align-items: flex-start;
+}
+.plan-count {
+  font-family: var(--round);
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--label2);
+  white-space: nowrap;
+}
+.plan-count.all {
+  color: var(--green);
+  font-size: 17px;
+}
+.row.task .chk-box {
+  margin-top: 0;
+}
+.row.task.done .chk-box {
+  background: var(--green-v);
+  box-shadow: none;
+  color: #fff;
+}
+.row.task.done .row-t {
+  color: var(--label2);
+  text-decoration: line-through;
+  text-decoration-color: var(--label3);
+}
+.row.field .row-t small {
+  display: block;
+}
+.badges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 14px 10px;
+}
+.badge-item {
+  text-align: center;
+}
+.medal {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 6px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+  background: var(--fill);
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+.badge-item.got .medal {
+  filter: none;
+  opacity: 1;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.12), 0 6px 16px rgba(0, 0, 0, 0.12);
+  animation: spring 0.6s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.got .b-start { background: linear-gradient(145deg, #5ac8fa, #007aff); }
+.got .b-ten { background: linear-gradient(145deg, #ffd60a, #ff9f0a); }
+.got .b-careful { background: linear-gradient(145deg, #ff6b6b, #ff2d55); }
+.got .b-days { background: linear-gradient(145deg, #ffb340, #ff6a00); }
+.got .b-grad { background: linear-gradient(145deg, #a78bfa, #5856d6); }
+.got .b-flash { background: linear-gradient(145deg, #fff27a, #ffcc00); }
+.got .b-lesson1 { background: linear-gradient(145deg, #e5e5ea, #a1a1aa); }
+.got .b-lesson2 { background: linear-gradient(145deg, #ffe08a, #e0a800); }
+.got .b-exam { background: linear-gradient(145deg, #7ee8a0, #28a745); }
+.badge-n {
+  font-weight: 700;
+  font-size: 15px;
+}
+.badge-d {
+  font-size: 12px;
+  color: var(--label2);
+  line-height: 1.4;
+}
+.size-lg .page,
+.size-lg .run-stage,
+.size-lg .flash-stage {
+  zoom: 1.13;
+}
+
+.row.task .row-t {
+  color: var(--label);
+  font-weight: 600;
+}
+.row.task .row-t small {
+  font-weight: 400;
+}
+.row.task.done .row-t {
+  color: var(--label2);
 }
