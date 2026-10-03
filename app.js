@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '1.4（10/3）'
+const VERSION = '1.5（10/3）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -1138,64 +1138,88 @@ function revealExtras(C) {
 }
 
 // ───────────────────────── 練習（一題一題） ─────────────────────────
-let RUN = null // { key, C, hints, guess, checked, streak }
+let RUN = null // { key, at, C, hints, guess, checked, streak, reviewing }
+// 回上一題用：作答完的畫面（SNAPS）、還沒作答就離開時寫到一半的答案（DRAFTS）
+const SNAPS = {}
+const DRAFTS = {}
 function startModule(mid) {
   const key = 'm:' + mid
   const ids = MODULES[mid].items.map((i) => i.id)
   const pr = S.progress[key]
-  if (!pr || pr.done || pr.ids.join() !== ids.join()) S.progress[key] = { ids, i: 0, res: {}, t0: Date.now(), title: MODULES[mid].title, mid }
+  if (!pr || pr.done || pr.ids.join() !== ids.join()) {
+    S.progress[key] = { ids, i: 0, res: {}, t0: Date.now(), title: MODULES[mid].title, mid }
+    delete SNAPS[key]
+    delete DRAFTS[key]
+  }
   save()
   go('#/run/' + encodeURIComponent(key))
 }
 function startRun(key, title, ids) {
   if (!ids.length) return toast('沒有題目可以練習', '👍')
   S.progress[key] = { ids, i: 0, res: {}, t0: Date.now(), title }
+  delete SNAPS[key]
+  delete DRAFTS[key]
   save()
   go('#/run/' + encodeURIComponent(key))
 }
 
-function viewRun(key) {
-  const pr = S.progress[key]
-  if (!pr) return go('#/')
-  if (pr.i >= pr.ids.length) return viewSummary(key)
-  const it = ITEM[pr.ids[pr.i]]
-  if (!it) {
-    pr.i++
-    save()
-    return viewRun(key)
-  }
-  const scoredIdx = pr.ids.filter((id) => ITEM[id]?.t !== 'learn')
-  const doneN = Object.keys(pr.res).length
+function runShell(pr, it, at, reviewing) {
+  const scored = pr.ids.filter((id) => ITEM[id]?.t !== 'learn')
+  const nBefore = pr.ids.slice(0, at).filter((id) => ITEM[id]?.t !== 'learn').length
+  const tools = !reviewing && it.t !== 'learn'
+  const mainLabel = reviewing ? (at + 1 >= pr.ids.length && pr.i >= pr.ids.length ? '看結果' : '下一題') : it.t === 'learn' ? '我懂了' : '檢查'
   setView(
-    `<div class="run">
+    `<div class="run${reviewing ? ' reviewing' : ''}">
       <header class="run-bar">
         <button class="icon-btn" data-act="close" aria-label="離開（進度會保留）">${ICON.x}</button>
-        <div class="run-mid"><div class="run-title">${esc(pr.title)}</div><div class="run-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${pr.ids.length}" aria-valuenow="${pr.i}"><i style="width:${(pr.i / pr.ids.length) * 100}%"></i></div></div>
+        <div class="run-mid"><div class="run-title">${esc(pr.title)}</div><div class="run-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${pr.ids.length}" aria-valuenow="${at}"><i style="width:${(at / pr.ids.length) * 100}%"></i></div></div>
         <button class="icon-btn" data-act="notes" aria-label="重點">${ICON.notes}</button>
       </header>
-      <div class="run-stage"><div class="run-count">${it.t === 'learn' ? '觀念' : `第 ${doneN + 1}／${scoredIdx.length} 題`}</div><div class="run-card"></div><div class="hint-box" hidden></div></div>
+      <div class="run-stage"><div class="run-count">${reviewing ? '<span class="rev-tag">回顧・只能看</span>' : ''}${it.t === 'learn' ? '觀念' : `第 ${nBefore + 1}／${scored.length} 題`}</div><div class="run-card"></div><div class="hint-box" hidden></div></div>
       <footer class="run-actions">
         <div class="ra-left">
-          ${it.t === 'learn' ? '' : `<button class="pill" data-act="hint">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false">🤔<span>有點猜</span></button>`}
+          ${at > 0 ? `<button class="pill back" data-act="back" aria-label="上一題">${ICON.back}<span>上一題</span></button>` : ''}
+          ${tools ? `<button class="pill" data-act="hint">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false">🤔<span>有點猜</span></button>` : ''}
         </div>
-        <button class="btn primary big" data-act="check" disabled>${it.t === 'learn' ? '我懂了' : '檢查'}</button>
+        <button class="btn primary big" data-act="check" ${reviewing ? '' : 'disabled'}>${mainLabel}</button>
       </footer>
     </div>`,
     { tabs: false },
   )
+}
+
+function viewRun(key, at) {
+  const pr = S.progress[key]
+  if (!pr) return go('#/')
+  if (at == null || at > pr.i) at = pr.i
+  if (at < 0) at = 0
+  if (at >= pr.ids.length) return viewSummary(key)
+  const it = ITEM[pr.ids[at]]
+  if (!it) {
+    if (at === pr.i) {
+      pr.i++
+      save()
+    }
+    return viewRun(key, at + 1)
+  }
+  const streak = RUN?.key === key ? RUN.streak : 0
+  if (at < pr.i) return viewRunReview(key, at, it, streak)
+  runShell(pr, it, at, false)
   const C = makeItem(it, 'practice')
   $('.run-card').append(C.el)
-  RUN = { key, C, it, hints: 0, guess: false, checked: false, streak: RUN?.key === key ? RUN.streak : 0 }
+  RUN = { key, at, C, it, hints: 0, guess: false, checked: false, streak }
   const btn = $('[data-act=check]')
   C.onAnswer = () => (btn.disabled = !C.answered())
   C.onEnter = () => C.answered() && btn.click()
+  restoreDraft(key, it, C)
   if (C.focus && matchMedia('(pointer: fine)').matches) setTimeout(() => C.focus(), 60)
   $('.run').addEventListener('click', (e) => {
     const a = e.target.closest('[data-act]')
     if (!a) return
     const act = a.dataset.act
-    if (act === 'close') return go('#/')
+    if (act === 'close') return leaveRun()
     if (act === 'notes') return showNotes(pr.mid || it.mid)
+    if (act === 'back') return goBack()
     if (act === 'hint') return showHint()
     if (act === 'guess') {
       RUN.guess = !RUN.guess
@@ -1204,6 +1228,117 @@ function viewRun(key) {
     }
     if (act === 'check') return RUN.checked || it.t === 'learn' ? nextItem() : checkItem()
   })
+}
+
+// 回顧已經作答過的題目：顯示當時的畫面（答案、對錯、解析），不能重答、不會再記一次
+function viewRunReview(key, at, it, streak) {
+  const pr = S.progress[key]
+  runShell(pr, it, at, true)
+  const html = SNAPS[key]?.[it.id]
+  let el
+  if (html) {
+    const t = document.createElement('template')
+    t.innerHTML = html
+    el = t.content.firstElementChild
+    el.classList.add('snap')
+    const pb = $('[data-play]:not(.slow)', el)
+    if (pb) pb.innerHTML = `${ICON.play}<span>播放</span>`
+    el.addEventListener('click', (e) => {
+      const w = e.target.closest('[data-w]')
+      if (w) {
+        const att = [...S.attempts].reverse().find((a) => a.q === it.id && a.ts >= (pr.t0 || 0))
+        if (att) {
+          att.w = w.dataset.w
+          save()
+          $$('.why-me .pick', el).forEach((x) => x.classList.toggle('on', x === w))
+          buzz(6)
+        }
+        return
+      }
+      const p = e.target.closest('[data-play]')
+      if (p && it.audio) Voice.speak(it.audio, p.dataset.play === 'slow')
+      if (e.target.closest('[data-zh]')) {
+        const z = $('.passage .zh', el)
+        if (z) {
+          z.hidden = !z.hidden
+          z.closest('details')?.setAttribute('open', '')
+        }
+      }
+    })
+  } else {
+    // 重新整理過就沒有畫面紀錄：改用這次練習的作答紀錄顯示
+    const last = [...S.attempts].reverse().find((a) => a.q === it.id && a.ts >= (pr.t0 || 0))
+    el = reviewCard(it, last, '你的答案')
+  }
+  $('.run-card').append(el)
+  RUN = { key, at, it, reviewing: true, streak }
+  $('.run').addEventListener('click', (e) => {
+    const a = e.target.closest('[data-act]')?.dataset.act
+    if (a === 'close') return leaveRun()
+    if (a === 'notes') return showNotes(pr.mid || it.mid)
+    if (a === 'back') return goBack()
+    if (a === 'check') {
+      Voice.stop()
+      viewRun(key, at + 1)
+      window.scrollTo(0, 0)
+    }
+  })
+}
+
+// 作答完的題目存一份畫面（輸入框的值也要寫進 HTML）
+function snapCurrent() {
+  if (!RUN || RUN.reviewing || !RUN.C?.el) return false
+  const { C, it, key } = RUN
+  const done = RUN.checked || (it.t === 'learn' && C.answered())
+  if (!done) return false
+  $$('input', C.el).forEach((i) => i.setAttribute('value', i.value))
+  $$('textarea', C.el).forEach((t) => (t.textContent = t.value))
+  ;(SNAPS[key] ||= {})[it.id] = C.el.outerHTML
+  return true
+}
+// 還沒作答就往回：把寫到一半的答案先留著
+function saveDraft() {
+  if (!RUN || RUN.reviewing || RUN.checked || !RUN.C?.el) return
+  const el = RUN.C.el
+  const vals = $$('input.blank, textarea.write-in', el).map((i) => i.value)
+  const sel = $$('.opts .opt.sel', el).map((o) => o.dataset.i)
+  if (vals.some(Boolean) || sel.length) DRAFTS[RUN.key] = { id: RUN.it.id, vals, sel, guess: RUN.guess }
+}
+function restoreDraft(key, it, C) {
+  const d = DRAFTS[key]
+  if (!d || d.id !== it.id) return
+  delete DRAFTS[key]
+  $('.cover-btn', C.el)?.click()
+  $$('input.blank, textarea.write-in', C.el).forEach((inp, i) => {
+    if (d.vals[i] == null) return
+    inp.value = d.vals[i]
+    inp.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  for (const i of d.sel) $(`.opts .opt[data-i="${i}"]`, C.el)?.click()
+  if (d.guess) $('[data-act=guess]')?.click()
+}
+function goBack() {
+  const { key, at } = RUN
+  if (at <= 0) return
+  const pr = S.progress[key]
+  if (!RUN.reviewing) {
+    // 這一題已經作答完：算完成，看完前面再往前就接著下一題
+    if (snapCurrent()) {
+      pr.i = Math.max(pr.i, at + 1)
+      save()
+    } else saveDraft()
+  }
+  Voice.stop()
+  viewRun(key, at - 1)
+  window.scrollTo(0, 0)
+}
+function leaveRun() {
+  if (snapCurrent()) {
+    const pr = S.progress[RUN.key]
+    pr.i = Math.max(pr.i, RUN.at + 1)
+    save()
+  } else saveDraft()
+  go('#/')
 }
 function showHint() {
   const hs = hintsFor(RUN.it)
@@ -1244,7 +1379,7 @@ function checkItem() {
   revealExtras(C)
   checkBadges()
   C.el.classList.add('done', 'r-' + res.r)
-  $('.ra-left').innerHTML = ''
+  $$('.ra-left [data-act=hint], .ra-left [data-act=guess]').forEach((b) => b.remove())
   const btn = $('[data-act=check]')
   btn.textContent = pr.i + 1 >= pr.ids.length ? '看結果' : '繼續'
   btn.disabled = false
@@ -1255,7 +1390,8 @@ function checkItem() {
 }
 function nextItem() {
   const pr = S.progress[RUN.key]
-  pr.i++
+  snapCurrent()
+  pr.i = Math.max(pr.i, RUN.at + 1)
   save()
   Voice.stop()
   viewRun(RUN.key)
@@ -1326,20 +1462,31 @@ function snippet(it) {
 }
 // 看某一題的最後作答與解析（唯讀）
 function reviewSheet(id) {
-  const it = ITEM[id]
   const last = [...S.attempts].reverse().find((a) => a.q === id)
   const body = sheet(`<h2 class="sheet-title">題目回顧</h2><div class="review-slot"></div>`, { wide: true })
+  $('.review-slot', body).append(reviewCard(ITEM[id], last, '上次的答案'))
+}
+// 唯讀的題目卡：題目＋作答紀錄＋正確答案＋解析
+function reviewCard(it, last, label) {
   const C = makeItem(it, 'review')
-  $('.review-slot', body).append(C.el)
+  if (it.t === 'learn') {
+    $$('.opt', C.el).forEach((o) => {
+      o.disabled = true
+      o.classList.add(+o.dataset.i === it.a ? 'ok' : 'dim')
+    })
+    const r = $('.learn-rule', C.el)
+    if (r) r.hidden = false
+    return C.el
+  }
   const fb = $('.q-feedback', C.el)
-  const right = rightAnswerText(it)
   fb.hidden = false
-  fb.innerHTML = `<div class="fb ${last?.r || 'bad'}">${last ? `<div class="fb-ans you"><div class="fb-k">上次的答案</div><div class="fb-v">${esc(last.a) || '（空白）'}</div></div>` : ''}<div class="fb-ans"><div class="fb-k">正確答案</div><div class="fb-v">${right}</div></div>${it.ex ? `<div class="fb-ex">${ICON.bulb}<div>${rich(it.ex)}</div></div>` : ''}</div>`
+  fb.innerHTML = `<div class="fb ${last?.r || 'bad'}">${last ? `<div class="fb-ans you"><div class="fb-k">${label}${last.r === 'ok' ? '（答對）' : last.r === 'care' ? '（格式粗心）' : '（答錯）'}</div><div class="fb-v">${esc(last.a) || '（空白）'}</div></div>` : ''}<div class="fb-ans"><div class="fb-k">正確答案</div><div class="fb-v">${rightAnswerText(it)}</div></div>${it.ex ? `<div class="fb-ex">${ICON.bulb}<div>${rich(it.ex)}</div></div>` : ''}</div>`
   $$('button, input, textarea', C.el).forEach((b) => {
     if (!b.closest('.audio') && !b.matches('.say')) b.disabled = true
   })
   const t = $('.transcript', C.el)
   if (t) t.hidden = false
+  return C.el
 }
 function rightAnswerText(it) {
   if (it.t === 'mcq') return esc(it.opts[it.a])
@@ -2347,6 +2494,11 @@ function applySize() {
 document.addEventListener('keydown', (e) => {
   if (!RUN || !$('.run') || $('.sheet-wrap') || e.metaKey || e.ctrlKey || e.altKey) return
   if (e.target.closest?.('input, textarea')) return
+  if (e.key === 'ArrowLeft') {
+    $('[data-act=back]')?.click()
+    e.preventDefault()
+    return
+  }
   const k = e.key.toLowerCase()
   let idx = '1234'.indexOf(k)
   if (idx < 0) idx = 'abcd'.indexOf(k)

@@ -3214,3 +3214,33 @@ ul.plain b {
   list-style-position: inside;
   padding-left: 0.3em;
 }
+
+/* 上一題／回顧 */
+.pill.back svg {
+  color: var(--blue);
+  width: 18px;
+  height: 18px;
+}
+.pill.back {
+  color: var(--blue);
+}
+.rev-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--sel-bg);
+  color: var(--blue);
+  font-weight: 700;
+}
+.qcard.snap,
+.qcard.snap .fb,
+.qcard.snap .fb-icon,
+.qcard.snap .learn-rule,
+.qcard.snap .ord-chip,
+.qcard.snap .spot-fix {
+  animation: none;
+}
+.run.reviewing .qcard {
+  box-shadow: var(--shadow), 0 0 0 2px var(--sel-bg);
+}
