@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '1.8（10/3）'
+const VERSION = '1.9（10/3）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -1707,28 +1707,81 @@ function warmIds() {
   return ids.slice(0, 5).map((i) => i.id)
 }
 // 第一次打開：像 Apple App 的「歡迎」畫面，告訴學生怎麼用
+// 第一次進到網站：介紹＋「你是誰」三個大按鈕，點一下就好（不是登入；選錯可以到設定改）
 function welcome() {
   if (S.seen?.intro || (S.sync && myRole() !== 'student')) return
-  sheet(
+  const markSeen = () => {
+    S.seen = { ...(S.seen || {}), intro: Date.now() }
+    save()
+  }
+  const b = sheet(
     `<div class="welcome">
-      <img class="w-logo" src="icon.svg" alt="" width="72" height="72">
+      <img class="w-logo" src="icon.svg" alt="" width="64" height="64">
       <h2>歡迎使用英文段考複習</h2>
-      <p class="sheet-p">翰林版七上・第一次段考（Starter～Review 1）</p>
+      <p class="sheet-p">翰林版七上・第一次段考複習</p>
       <div class="w-rows">
-        <div class="w-row"><span class="w-ic">💡</span><div><b>先猜，再看重點</b><p>每個單元先用觀念卡讓你猜規則。猜錯也沒關係，自己想過的記得更牢。</p></div></div>
+        <div class="w-row"><span class="w-ic">💡</span><div><b>先猜，再看重點</b><p>每個單元先用觀念卡讓你猜規則，自己想過的記得更牢。</p></div></div>
         <div class="w-row"><span class="w-ic">🔎</span><div><b>抓出粗心</b><p>大寫、標點、空格寫錯都會被抓出來，養成「寫完檢查」的習慣。</p></div></div>
-        <div class="w-row"><span class="w-ic">📗</span><div><b>錯題會再回來</b><p>答錯的題目收進錯題本，隔一段時間再答對兩次才會畢業。</p></div></div>
-        <div class="w-row"><span class="w-ic">📤</span><div><b>紀錄存在這台裝置</b><p>到「紀錄」可以把學習報告或備份檔傳給老師。</p></div></div>
+        <div class="w-row"><span class="w-ic">📗</span><div><b>錯題會再回來</b><p>答錯的題目收進錯題本，隔一段時間再答對才會畢業。</p></div></div>
       </div>
-      <button class="btn primary big w-go" data-close>開始</button>
+      <div class="w-ask">你是誰？</div>
+      <div class="role-pick">
+        <button data-role="student"><span class="rp-ic">🎒</span><b>我是學生</b><small>開始練習</small></button>
+        <button data-role="teacher"><span class="rp-ic">📚</span><b>我是老師</b><small>看學生的練習</small></button>
+        <button data-role="parent"><span class="rp-ic">👪</span><b>我是家長</b><small>看孩子的練習</small></button>
+      </div>
+      <p class="w-note">選錯了沒關係，之後到「設定 → 這台是誰的」就能改。</p>
     </div>`,
-    {
-      onClose: () => {
-        S.seen = { ...(S.seen || {}), intro: Date.now() }
-        save()
-      },
-    },
+    { onClose: markSeen },
   )
+  b.addEventListener('click', (e) => {
+    const r = e.target.closest('[data-role]')?.dataset.role
+    if (!r) return
+    setRole(r)
+    closeSheet()
+    if (r === 'student') return toast('開始練習吧！加油 💪', '🎒')
+    if (S.sync) return go('#/live')
+    setTimeout(() => (r === 'teacher' ? teacherStart() : parentStart()), 350)
+  })
+}
+// 設定「這台是誰的」（歡迎畫面、設定頁共用）
+function setRole(r) {
+  S.profile.role = r
+  S.profile.device = r === 'teacher' && S.profile.device === '老師平板' ? '老師平板' : ROLES[r]
+  if (S.sync) S.sync.role = r
+  save()
+  Sync.presence(Sync.last || { view: 'home' })
+}
+// 老師第一次：一鍵建立配對碼
+function teacherStart() {
+  const b = sheet(
+    `<h2 class="sheet-title">要讓學生的作答即時同步嗎？</h2>
+    <p class="sheet-p">建立配對碼之後，把「給學生」「給家長」的連結用 LINE 傳出去，對方點一下就配對好。學生每答一題，你這裡幾秒內就看得到。</p>
+    <div class="sheet-actions"><button class="btn ghost" data-close>稍後再說</button><button class="btn primary" data-new>建立配對碼</button></div>`,
+  )
+  $('[data-new]', b).onclick = () => {
+    Sync.pair(newCode(), 'teacher')
+    sharePair()
+  }
+}
+// 家長第一次：請點老師傳的家長連結（或貼上）
+function parentStart() {
+  const b = sheet(
+    `<h2 class="sheet-title">看孩子的練習</h2>
+    <p class="sheet-p">請點老師用 LINE 傳給您的「家長連結」，點一下就能在這支手機即時看到孩子的練習。</p>
+    <div class="list form"><label class="row field"><span class="row-t">或把連結貼在這裡</span><input id="pp-link" placeholder="貼上老師給的連結" autocomplete="off" autocapitalize="off" spellcheck="false"></label></div>
+    <div class="sheet-actions"><button class="btn primary" data-close>知道了</button></div>`,
+  )
+  const inp = $('#pp-link', b)
+  const onPaste = () => {
+    const m = inp.value.trim().match(/pair\/([a-z0-9]{16,40})/)
+    if (!m) return toast('連結不對，請貼上老師給的整個連結', '⚠️')
+    inp.removeEventListener('change', onPaste)
+    inp.blur()
+    closeSheet()
+    go(`#/pair/${m[1]}/parent`)
+  }
+  inp.addEventListener('change', onPaste)
 }
 // 今天的任務：依段考日期，把還沒完成的單元平均分到剩下的天數；錯題本每天先做（間隔複習）；最後兩天做模擬段考
 function todayPlan() {
@@ -2509,12 +2562,7 @@ function viewSettings() {
     if (b) {
       const k = b.parentElement.dataset.seg
       if (k === 'role') {
-        const r = b.dataset.v
-        S.profile.role = r
-        S.profile.device = r === 'teacher' && S.profile.device === '老師平板' ? '老師平板' : ROLES[r]
-        if (S.sync) S.sync.role = r
-        save()
-        Sync.presence(Sync.last || { view: 'home' })
+        setRole(b.dataset.v)
         return viewSettings()
       }
       S.profile[k] = k === 'goal' ? +b.dataset.v : b.dataset.v
