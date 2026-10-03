@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '1.6（10/3）'
+const VERSION = '1.7（10/3）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -2472,7 +2472,7 @@ function viewSettings() {
         !dbBase()
           ? '<div class="row static"><span class="row-t">雲端資料庫還沒設定好<small>設定完成後，這裡就能建立配對碼</small></span></div>'
           : S.sync?.code
-            ? `<div class="row static"><span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span><span class="row-t">已配對（${S.sync.role === 'teacher' ? '這台是老師端' : '這台是學生端'}）<small>配對碼 ${esc(S.sync.code.slice(0, 4))}…・${{ on: '已連線', connecting: '連線中', error: '重新連線中', denied: '配對碼無效', off: '未連線' }[Sync.status] || ''}</small></span></div>
+            ? `<div class="row static"><span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span><span class="row-t">已配對（${S.sync.role === 'teacher' ? '這台是老師端' : '這台是學生端'}）<small>配對碼 ${esc(S.sync.code.slice(0, 4))}…・${{ on: '已連線', connecting: '連線中', error: '重新連線中', denied: '配對碼無效', off: '未連線' }[Sync.status] || ''}・${S.syncQ?.length ? `還有 ${S.syncQ.length} 筆待上傳` : '紀錄都已上傳'}</small></span></div>
                <button class="row" data-x="live"><span class="row-ic">📡</span><span class="row-t">即時作答<small>看學生正在做哪一題、每題答了什麼</small></span>${ICON.chev}</button>
                <button class="row" data-x="sharepair"><span class="row-ic">${ICON.share}</span><span class="row-t">把配對連結傳給學生</span>${ICON.chev}</button>
                <button class="row danger" data-x="unpair"><span class="row-t">解除配對</span></button>`
@@ -2549,7 +2549,7 @@ async function checkUpdate() {
 
 // ───────────────────────── 即時同步（Firebase Realtime Database：REST 寫入＋EventSource 串流） ─────────────────────────
 // 老師平板建立「配對碼」→ 學生打開配對連結 → 兩台的作答互相同步；老師在「即時作答」看學生正在做哪一題、答了什麼
-const SYNC_DB = ''
+const SYNC_DB = 'https://g7-english-review-default-rtdb.asia-southeast1.firebasedatabase.app'
 const dbBase = () => {
   let o = ''
   try {
@@ -2610,6 +2610,13 @@ const Sync = {
       S.syncQ.splice(0, batch.length)
       save()
       if (this.status !== 'on' && this.es.length) this.setStatus('on')
+      // 配對時補傳以前的紀錄：全部送完告訴使用者
+      if (!S.syncQ.length && S.sync?.backfill) {
+        const n = S.sync.backfill
+        delete S.sync.backfill
+        save()
+        toast(`已把這台以前的 ${n} 筆作答上傳給老師`, '☁️')
+      }
     } catch {
       this.setStatus('error')
       this.flushSoon(15000)
@@ -2717,6 +2724,8 @@ const Sync = {
     S.sync = { code, role, at: Date.now() }
     if (!S.profile.device) S.profile.device = role === 'teacher' ? '老師平板' : '學生'
     S.syncQ = [...S.attempts.filter((a) => a.d === S.profile.id).map((a) => ['a', a]), ...S.sessions.filter((s) => s.d === S.profile.id).map((s) => ['s', s])]
+    const n = S.syncQ.filter(([k]) => k === 'a').length
+    if (n) S.sync.backfill = n
     save()
     this.connect()
   },
