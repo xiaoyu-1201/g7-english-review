@@ -3431,3 +3431,16 @@ ul.plain b {
   height: 18px;
   color: var(--orange-v);
 }
+
+/* hidden 屬性一定要藏起來（不被 .row 的 display 蓋掉） */
+[hidden] {
+  display: none !important;
+}
+.pair-row {
+  gap: 8px;
+}
+.btn.small-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 15px;
+}

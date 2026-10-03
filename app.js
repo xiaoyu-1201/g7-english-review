@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '1.7（10/3）'
+const VERSION = '1.8（10/3）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -1708,7 +1708,7 @@ function warmIds() {
 }
 // 第一次打開：像 Apple App 的「歡迎」畫面，告訴學生怎麼用
 function welcome() {
-  if (S.seen?.intro) return
+  if (S.seen?.intro || (S.sync && myRole() !== 'student')) return
   sheet(
     `<div class="welcome">
       <img class="w-logo" src="icon.svg" alt="" width="72" height="72">
@@ -2245,7 +2245,7 @@ function viewStats() {
   setView(
     `<div class="page">
       ${header('學習紀錄', S.profile.name ? `${S.profile.name}・${S.profile.device || '這台裝置'}` : '紀錄存在這台裝置；可以匯出給老師或另一台裝置。')}
-      ${Sync.ready() ? `<button class="card live-link" data-x="live"><span class="live-pulse${others().some(([, l]) => l.view !== 'away' && Date.now() - l.ts < 600000) ? '' : ' idle'}"></span><span class="row-t"><b>即時作答</b><small>${esc(others().map(([, l]) => `${l.name || l.dev}：${liveText(l)}`).join('　') || '等學生打開配對連結')}</small></span>${ICON.chev}</button>` : ''}
+      ${Sync.ready() && myRole() !== 'student' ? `<button class="card live-link" data-x="live"><span class="live-pulse${studentsLive().some(([, l]) => l.view !== 'away' && Date.now() - l.ts < 600000) ? '' : ' idle'}"></span><span class="row-t"><b>即時作答</b><small>${esc(studentsLive().map(([, l]) => `${l.name || l.dev}：${liveText(l)}`).join('　') || '等學生打開配對連結')}</small></span>${ICON.chev}</button>` : ''}
       ${devices.size > 1 ? `<div class="seg" role="tablist"><button role="tab" class="${!mine ? 'on' : ''}" data-f="all">全部裝置</button><button role="tab" class="${mine ? 'on' : ''}" data-f="mine">只看這台</button></div>` : ''}
       <div class="tiles">
         <div class="tile"><div class="tile-v">${list.length}</div><div class="tile-k">已作答</div></div>
@@ -2447,15 +2447,17 @@ async function importData(e) {
 // ───────────────────────── 設定 ─────────────────────────
 function viewSettings() {
   const p = S.profile
-  const dev = ['老師平板', '學生']
+  const role = myRole()
   setView(
     `<div class="page narrow">
       ${header('設定', '')}
       <div class="group"><div class="group-h">學生</div><div class="list form">
         <label class="row field"><span class="row-t">名字</span><input id="f-name" value="${esc(p.name)}" placeholder="例如：Amy" maxlength="20" autocomplete="off"></label>
-        <div class="row field"><span class="row-t">這台裝置是</span><div class="seg small" data-seg="device">${dev.map((d) => `<button class="${p.device === d ? 'on' : ''}" data-v="${d}">${d}</button>`).join('')}</div></div>
+        <div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" data-seg="role">${Object.entries(ROLES)
+          .map(([k, t]) => `<button class="${role === k ? 'on' : ''}" data-v="${k}">${t}</button>`)
+          .join('')}</div></div>
         <label class="row field"><span class="row-t">段考日期</span><input id="f-exam" type="date" value="${esc(p.exam)}"></label>
-      </div><p class="group-f">裝置名稱會寫在學習報告和備份檔上，老師合併紀錄時分得出是誰的。</p></div>
+      </div><p class="group-f">「這台是誰的」會寫在學習報告和備份檔上；老師、家長的裝置是用來看學生練習的。</p></div>
 
       <div class="group"><div class="group-h">練習</div><div class="list form">
         <div class="row field"><span class="row-t">每日目標</span><div class="seg small" data-seg="goal">${[20, 30, 50].map((g) => `<button class="${+p.goal === g ? 'on' : ''}" data-v="${g}">${g} 題</button>`).join('')}</div></div>
@@ -2472,13 +2474,13 @@ function viewSettings() {
         !dbBase()
           ? '<div class="row static"><span class="row-t">雲端資料庫還沒設定好<small>設定完成後，這裡就能建立配對碼</small></span></div>'
           : S.sync?.code
-            ? `<div class="row static"><span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span><span class="row-t">已配對（${S.sync.role === 'teacher' ? '這台是老師端' : '這台是學生端'}）<small>配對碼 ${esc(S.sync.code.slice(0, 4))}…・${{ on: '已連線', connecting: '連線中', error: '重新連線中', denied: '配對碼無效', off: '未連線' }[Sync.status] || ''}・${S.syncQ?.length ? `還有 ${S.syncQ.length} 筆待上傳` : '紀錄都已上傳'}</small></span></div>
-               <button class="row" data-x="live"><span class="row-ic">📡</span><span class="row-t">即時作答<small>看學生正在做哪一題、每題答了什麼</small></span>${ICON.chev}</button>
-               <button class="row" data-x="sharepair"><span class="row-ic">${ICON.share}</span><span class="row-t">把配對連結傳給學生</span>${ICON.chev}</button>
+            ? `<div class="row static"><span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span><span class="row-t">已配對（這台是${ROLES[role]}的）<small>配對碼 ${esc(S.sync.code.slice(0, 4))}…・${{ on: '已連線', connecting: '連線中', error: '重新連線中', denied: '配對碼無效', off: '未連線' }[Sync.status] || ''}・${S.syncQ?.length ? `還有 ${S.syncQ.length} 筆待上傳` : '紀錄都已上傳'}</small></span></div>
+               ${role === 'student' ? '' : `<button class="row" data-x="live"><span class="row-ic">📡</span><span class="row-t">即時作答<small>看學生正在做哪一題、每題答了什麼</small></span>${ICON.chev}</button>
+               <button class="row" data-x="sharepair"><span class="row-ic">${ICON.share}</span><span class="row-t">傳送配對連結<small>給學生、家長，或你自己的另一台裝置</small></span>${ICON.chev}</button>`}
                <button class="row danger" data-x="unpair"><span class="row-t">解除配對</span></button>`
             : `<button class="row" data-x="newpair"><span class="row-ic">📡</span><span class="row-t">建立配對碼（老師用）<small>建立後把連結傳給學生，學生打開就配對好了</small></span>${ICON.chev}</button>
-               <label class="row field"><span class="row-t">學生：輸入配對碼</span><input id="f-pair" placeholder="貼上老師給的連結或代碼" autocomplete="off" autocapitalize="off" spellcheck="false"></label>`
-      }</div><p class="group-f">配對後，兩台裝置的作答紀錄會互相同步（存在雲端資料庫，只有知道配對碼的人能讀寫）。學生名字建議用暱稱。</p></div>
+               <label class="row field"><span class="row-t">輸入配對碼<small>學生、家長，或老師的另一台裝置</small></span><input id="f-pair" placeholder="貼上老師給的連結" autocomplete="off" autocapitalize="off" spellcheck="false"></label>`
+      }</div><p class="group-f">配對後，所有配對的裝置會同步同一份作答紀錄（存在雲端資料庫，只有知道配對連結的人能讀寫）。學生名字建議用暱稱。</p></div>
 
       <div class="group"><div class="group-h">App</div><div class="list">
         <button class="row" data-x="update"><span class="row-t">檢查更新</span><span class="row-r">${VERSION}</span>${ICON.chev}</button>
@@ -2497,14 +2499,24 @@ function viewSettings() {
     save()
   })
   $('#f-pair')?.addEventListener('change', (e) => {
-    const m = e.target.value.trim().match(/(?:pair\/)?([a-z0-9]{16,40})\s*$/)
+    const v = e.target.value.trim()
+    const m = v.match(/pair\/([a-z0-9]{16,40})(?:\/(student|parent|teacher))?/) || v.match(/^([a-z0-9]{16,40})$/)
     if (!m) return toast('配對碼不對，請貼上老師給的整個連結', '⚠️')
-    go('#/pair/' + m[1])
+    go('#/pair/' + m[1] + (m[2] ? '/' + m[2] : ''))
   })
   v.addEventListener('click', (e) => {
     const b = e.target.closest('[data-seg] button')
     if (b) {
       const k = b.parentElement.dataset.seg
+      if (k === 'role') {
+        const r = b.dataset.v
+        S.profile.role = r
+        S.profile.device = r === 'teacher' && S.profile.device === '老師平板' ? '老師平板' : ROLES[r]
+        if (S.sync) S.sync.role = r
+        save()
+        Sync.presence(Sync.last || { view: 'home' })
+        return viewSettings()
+      }
       S.profile[k] = k === 'goal' ? +b.dataset.v : b.dataset.v
       save()
       if (k === 'size') applySize()
@@ -2628,7 +2640,7 @@ const Sync = {
   presence(info) {
     if (!this.ready()) return
     if (info.view !== 'away') this.last = info
-    const body = { ...info, dev: S.profile.device || '未命名裝置', name: S.profile.name || '', ts: Date.now() }
+    const body = { ...info, dev: S.profile.device || '未命名裝置', name: S.profile.name || '', role: myRole(), ts: Date.now() }
     fetch(this.url('live/' + S.profile.id), { method: 'PUT', body: JSON.stringify(body), keepalive: true }).catch(() => {})
   },
   connect() {
@@ -2722,7 +2734,8 @@ const Sync = {
   // 配對：把這台以前的紀錄也送上去，老師才看得到完整歷程
   pair(code, role) {
     S.sync = { code, role, at: Date.now() }
-    if (!S.profile.device) S.profile.device = role === 'teacher' ? '老師平板' : '學生'
+    S.profile.role = role
+    if (!S.profile.device) S.profile.device = role === 'teacher' ? '老師平板' : ROLES[role]
     S.syncQ = [...S.attempts.filter((a) => a.d === S.profile.id).map((a) => ['a', a]), ...S.sessions.filter((s) => s.d === S.profile.id).map((s) => ['s', s])]
     const n = S.syncQ.filter(([k]) => k === 'a').length
     if (n) S.sync.backfill = n
@@ -2769,12 +2782,18 @@ function liveText(l) {
   if (l.view === 'away' || !fresh) return `離開 App（${agoText(l.ts)}）`
   return `在 App 裡（${agoText(l.ts)}）`
 }
+// 身分：學生的裝置會被「看」；老師、家長的裝置是用來看學生的
+const ROLES = { student: '學生', teacher: '老師', parent: '家長' }
+const myRole = () => S.sync?.role || S.profile.role || 'student'
 function others() {
   return Object.entries(Sync.live || {}).filter(([id, l]) => id !== S.profile.id && l)
 }
+function studentsLive() {
+  return others().filter(([, l]) => (l.role || 'student') === 'student')
+}
 function liveBannerHTML() {
-  if (!Sync.ready()) return ''
-  const act = others().filter(([, l]) => Date.now() - l.ts < 10 * 60000 && l.view !== 'away')
+  if (!Sync.ready() || myRole() === 'student') return ''
+  const act = studentsLive().filter(([, l]) => Date.now() - l.ts < 10 * 60000 && l.view !== 'away')
   if (!act.length) return ''
   const [, l] = act.sort((a, b) => b[1].ts - a[1].ts)[0]
   return `<button class="live-banner card" data-go="#/live"><span class="live-pulse"></span><span class="lb-t"><b>${esc(l.name || l.dev)}</b>　${esc(liveText(l))}</span><span class="lb-go">看即時作答 ${ICON.chev}</span></button>`
@@ -2791,20 +2810,24 @@ function viewLive(keepScroll = false) {
     $('.page').addEventListener('click', (e) => e.target.closest('[data-go]') && go(e.target.closest('[data-go]').dataset.go))
     return
   }
+  // 學生的裝置（看得到「正在做哪一題」）＋其他有作答紀錄的裝置（例如上課用的老師平板）
   const devs = new Map()
-  for (const [id, l] of others()) devs.set(id, l)
-  for (const a of S.attempts) if (a.d !== S.profile.id && !devs.has(a.d)) devs.set(a.d, null)
+  for (const [id, l] of studentsLive()) devs.set(id, l)
+  for (const a of S.attempts) if (a.d !== S.profile.id && !devs.has(a.d)) devs.set(a.d, Sync.live?.[a.d] || null)
   const t0 = dayStart()
   const cards = [...devs.entries()]
+    .sort((x, y) => ((y[1]?.role || 'student') === 'student') - ((x[1]?.role || 'student') === 'student') || (y[1]?.ts || 0) - (x[1]?.ts || 0))
     .map(([id, l]) => {
       const mine = S.attempts.filter((a) => a.d === id)
       const today = mine.filter((a) => a.ts >= t0)
       const ok = today.filter((a) => a.r === 'ok').length
       const care = today.filter((a) => a.r === 'care').length
       const feed = mine.slice(-40).reverse()
-      const active = l && l.view !== 'away' && Date.now() - l.ts < 10 * 60000
+      const isStudent = (l?.role || 'student') === 'student'
+      const active = isStudent && l && l.view !== 'away' && Date.now() - l.ts < 10 * 60000
+      const who = isStudent ? l?.name || l?.dev || '學生' : `${l?.dev || ROLES[l?.role] || '其他裝置'}・上課時的練習`
       return `<section class="card live-dev">
-        <div class="ld-head"><span class="ld-dot${active ? ' on' : ''}"></span><div class="ld-who"><b>${esc(l?.name || l?.dev || '學生裝置')}</b><span>${esc(liveText(l))}</span></div>
+        <div class="ld-head"><span class="ld-dot${active ? ' on' : ''}"></span><div class="ld-who"><b>${esc(who)}</b><span>${esc(isStudent ? liveText(l) : '在這台裝置上做的題目')}</span></div>
           <div class="ld-today"><b>${today.length}</b> 題<span>今天・對 ${ok}${care ? `・粗心 ${care}` : ''}</span></div></div>
         ${
           feed.length
@@ -2839,52 +2862,121 @@ function viewLive(keepScroll = false) {
     if (e.target.closest('[data-share-pair]')) sharePair()
   })
 }
-function pairLink() {
-  return `${location.origin}${location.pathname}#/pair/${Sync.code()}`
+// 配對連結帶著身分（學生／家長／老師）：點一下就自動配對完成
+function pairLink(role) {
+  return `${location.origin}${location.pathname}#/pair/${Sync.code()}${role ? '/' + role : ''}`
 }
+const PAIR_FOR = [
+  ['student', '給學生', '學生點一下就配對好，之前做的題目會自動傳上來'],
+  ['parent', '給家長', '家長點一下，就能在手機上即時看孩子的練習'],
+  ['teacher', '給自己的手機', '老師用手機點一下，也能看即時作答'],
+]
 function sharePair() {
-  const link = pairLink()
   const b = sheet(
-    `<h2 class="sheet-title">把配對連結傳給學生</h2><p class="sheet-p">學生用自己的手機或平板打開這個連結，按「配對」就完成了。連結就是密碼，不要貼到公開的地方。</p>
-    <div class="pair-link">${esc(link)}</div>
-    <div class="sheet-actions"><button class="btn ghost" data-copy>複製連結</button>${navigator.share ? '<button class="btn primary" data-share>用 LINE 等傳送</button>' : ''}</div>`,
+    `<h2 class="sheet-title">傳送配對連結</h2><p class="sheet-p">對方在 LINE 裡點一下連結就配對完成，不用再按別的。連結就是密碼，不要貼到公開的地方。</p>
+    <div class="list">${PAIR_FOR.map(
+      ([r, t, d]) => `<div class="row pair-row"><span class="row-t"><b>${t}</b><small>${d}</small></span><button class="btn ghost small-btn" data-copy="${r}">複製</button>${navigator.share ? `<button class="btn primary small-btn" data-share="${r}">傳送</button>` : ''}</div>`,
+    ).join('')}</div>`,
   )
-  $('[data-copy]', b).onclick = async () => {
-    try {
-      await Promise.race([navigator.clipboard.writeText(link), new Promise((_, r) => setTimeout(r, 1500))])
-      toast('已複製配對連結', '📋')
-    } catch {
-      toast('請長按連結自己複製', '✋')
+  b.addEventListener('click', async (e) => {
+    const c = e.target.closest('[data-copy]')
+    if (c) {
+      const link = pairLink(c.dataset.copy)
+      try {
+        await Promise.race([navigator.clipboard.writeText(link), new Promise((_, r) => setTimeout(r, 1500))])
+        toast('已複製配對連結', '📋')
+      } catch {
+        sheet(`<h2 class="sheet-title">請長按複製</h2><div class="pair-link">${esc(link)}</div>`)
+      }
     }
-  }
-  $('[data-share]', b)?.addEventListener('click', () => navigator.share({ title: '英文段考複習：和老師配對', text: '打開這個連結，按「配對」：', url: link }).catch(() => {}))
+    const s = e.target.closest('[data-share]')
+    if (s) navigator.share({ title: '英文段考複習：配對', text: '點這個連結就配對好了：', url: pairLink(s.dataset.share) }).catch(() => {})
+  })
 }
 // 學生打開配對連結
-function viewPair(code) {
+function viewPair(code, preset) {
   if (!/^[a-z0-9]{16,40}$/.test(code)) {
     toast('這個配對連結不完整', '⚠️')
     return go('#/')
+  }
+  // 連結帶身分：直接配對，不用再按（只有「已經和別組配對」時問一次）
+  if (ROLES[preset]) {
+    if (S.sync?.code === code) {
+      if (myRole() !== preset) {
+        S.profile.role = S.sync.role = preset
+        S.profile.device = ROLES[preset]
+        save()
+      }
+      toast('已經配對好了', '✅')
+      return go(preset === 'student' ? '#/' : '#/live')
+    }
+    if (S.sync?.code) {
+      viewHome()
+      return confirmSheet('換成新的配對？', '這台已經和另一組配對了。換成這一組之後，舊的那一組不會再同步。', '換成這一組', () => finishPair(code, preset))
+    }
+    return finishPair(code, preset)
   }
   if (S.sync?.code === code) {
     toast('已經配對好了', '✅')
     return go('#/')
   }
   viewHome()
+  let role = S.profile.role && S.profile.role !== 'teacher' ? S.profile.role : 'student'
+  const DESC = {
+    student: '你在這台裝置的作答會即時傳給老師（以前做過的題目也會一起傳上去）。',
+    teacher: '這台用來看學生的練習：「紀錄 → 即時作答」可以看到學生正在做哪一題、每題答了什麼。',
+    parent: '這台用來看孩子的練習：「紀錄 → 即時作答」可以看到孩子正在做哪一題、每題答了什麼，首頁也看得到今天的練習量。',
+  }
   const b = sheet(
-    `<h2 class="sheet-title">和老師的平板配對</h2>
-    <p class="sheet-p">配對之後，你在這台裝置的作答會即時傳給老師；老師平板上的練習紀錄也會同步到這裡。</p>
-    <div class="list form"><label class="row field"><span class="row-t">你的暱稱<small>老師會看到，可以用英文名字</small></span><input id="pair-name" value="${esc(S.profile.name)}" placeholder="例如：Amy" maxlength="20" autocomplete="off"></label></div>
+    `<h2 class="sheet-title">加入同步</h2>
+    <div class="list form"><div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" id="pair-role">${Object.entries(ROLES)
+      .map(([k, t]) => `<button class="${k === role ? 'on' : ''}" data-r="${k}">${t}</button>`)
+      .join('')}</div></div>
+    <label class="row field" id="pair-name-row"><span class="row-t">學生的暱稱<small>老師會看到，可以用英文名字</small></span><input id="pair-name" value="${esc(S.profile.name)}" placeholder="例如：Amy" maxlength="20" autocomplete="off"></label></div>
+    <p class="sheet-p pair-desc" style="margin-top:12px"></p>
     <div class="sheet-actions"><button class="btn ghost" data-close>先不要</button><button class="btn primary" data-ok>配對</button></div>`,
   )
-  $('[data-ok]', b).onclick = () => {
-    const n = $('#pair-name', b).value.trim()
-    if (n) S.profile.name = n
-    if (!S.profile.device || S.profile.device === '老師平板') S.profile.device = '學生'
-    Sync.pair(code, 'student')
-    closeSheet()
-    toast('配對完成！作答會即時傳給老師', '📡')
-    go('#/')
+  const draw = () => {
+    $$('#pair-role button', b).forEach((x) => x.classList.toggle('on', x.dataset.r === role))
+    $('#pair-name-row', b).hidden = role !== 'student'
+    $('.pair-desc', b).textContent = DESC[role]
   }
+  draw()
+  $('#pair-role', b).addEventListener('click', (e) => {
+    const r = e.target.closest('[data-r]')
+    if (!r) return
+    role = r.dataset.r
+    draw()
+  })
+  $('[data-ok]', b).onclick = () => {
+    if (role === 'student') {
+      const n = $('#pair-name', b).value.trim()
+      if (n) S.profile.name = n
+    }
+    closeSheet()
+    finishPair(code, role)
+  }
+}
+function finishPair(code, role) {
+  const mine = S.attempts.filter((a) => a.d === S.profile.id).length
+  S.profile.device = ROLES[role]
+  Sync.pair(code, role)
+  if (role !== 'student') {
+    toast('配對完成！這裡可以即時看到學生的練習', '📡')
+    return go('#/live')
+  }
+  S.seen = { ...(S.seen || {}), intro: S.seen?.intro || Date.now() }
+  save()
+  go('#/')
+  if (mine) return toast(`配對完成！正在把你之前的 ${mine} 筆作答傳給老師`, '📡')
+  // 這裡沒有以前的紀錄：可能用了跟之前不一樣的方式打開（LINE、Safari、主畫面圖示的紀錄是分開的）
+  setTimeout(
+    () =>
+      sheet(`<h2 class="sheet-title">配對完成 ✅</h2><p class="sheet-p">之後在這裡做的題目，老師都會即時看到。</p>
+      <div class="callout care"><b>這裡沒有找到你之前的練習紀錄。</b>如果你之前是用別的方式打開 App（例如 LINE 裡的連結、Safari、主畫面的圖示），請用「那個方式」再點一次配對連結，之前做的題目才會傳給老師。</div>
+      <div class="sheet-actions"><button class="btn primary" data-close>知道了</button></div>`),
+    350,
+  )
 }
 
 // ───────────────────────── 路由與外框 ─────────────────────────
@@ -2926,7 +3018,7 @@ function route() {
   if (a === 'notes') return viewAllNotes()
   if (a === 'print' && b) return viewPrint(decodeURIComponent(b))
   if (a === 'live') return viewLive()
-  if (a === 'pair' && b) return viewPair(decodeURIComponent(b))
+  if (a === 'pair' && b) return viewPair(decodeURIComponent(b), h.split('/')[3])
   viewHome()
 }
 window.addEventListener('hashchange', () => {
