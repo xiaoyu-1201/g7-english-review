@@ -7,6 +7,18 @@
         ".validate": "newData.hasChildren(['c', 's', 'exp']) && newData.child('c').isString() && newData.child('s').isString() && newData.child('exp').isNumber()"
       }
     },
+    "recs": {
+      "$code": {
+        "$sid": {
+          ".read": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid + '/admin').val() === true || root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid)",
+          ".write": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid + '/admin').val() === true)",
+          "$k": {
+            ".write": "auth != null && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid && root.child('classes/' + $code + '/members/' + auth.uid + '/role').val() === 'student'",
+            ".validate": "newData.hasChildren(['d', 'ts']) && newData.child('d').isString() && newData.child('d').val().length < 300000"
+          }
+        }
+      }
+    },
     "classes": {
       "$code": {
         ".read": "auth != null && $code.length >= 16 && (data.child('owner').val() === auth.uid || data.child('members/' + auth.uid + '/admin').val() === true)",

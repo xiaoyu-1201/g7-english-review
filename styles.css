@@ -4389,3 +4389,29 @@ ul.plain b {
 .spw.name {
   color: var(--label2);
 }
+
+/* 錄音回放 */
+.sp-mine {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.watch-sp .sp-mine {
+  margin: 10px auto 0;
+}
+.rec-play {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--pink);
+  color: #fff;
+}
+.rec-play svg {
+  width: 16px;
+  height: 16px;
+}
+.rec-row .row-t {
+  font-family: var(--en);
+}

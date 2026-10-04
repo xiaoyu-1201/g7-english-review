@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.6.1（10/4）'
+const VERSION = '2.7（10/5）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -466,6 +466,7 @@ function diffHTML(given, target) {
 const joinTokens = (ws) => ws.join(' ').replace(/\s+([.?!,])/g, '$1')
 
 // ───────────────────────── 語音 ─────────────────────────
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
 const Voice = {
   ok: 'speechSynthesis' in window,
   list: [],
@@ -492,10 +493,14 @@ const Voice = {
       return Promise.resolve()
     }
     if (!this.list.length) this.load()
-    speechSynthesis.cancel()
+    // iPhone：語音偶爾會卡在「暫停」；只有正在講的時候才取消（取消後馬上講，iPhone 有時會吞掉）
+    if (speechSynthesis.paused) speechSynthesis.resume()
+    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel()
+    this.muteHint()
     const arr = typeof lines === 'string' ? [['W', lines]] : lines
     const PITCH = { M: 0.9, W: 1.05, B: 1.12, G: 1.25, A: 1 }
     return new Promise((res) => {
+      let started = false
       arr.forEach(([sp, text], i) => {
         const u = new SpeechSynthesisUtterance(text)
         u.lang = 'en-US'
@@ -503,13 +508,27 @@ const Voice = {
         if (v) u.voice = v
         u.pitch = PITCH[sp] || 1
         u.rate = this.rate(slow)
+        u.onstart = () => (started = true)
         if (i === arr.length - 1) {
           u.onend = res
           u.onerror = res
         }
         speechSynthesis.speak(u)
       })
+      // 2.5 秒都沒開始講：多半是語音卡住了，重來一次
+      setTimeout(() => {
+        if (started) return
+        speechSynthesis.cancel()
+        toast(IS_IOS ? '沒有聲音嗎？請關掉 iPhone 的靜音模式，再把音量調大' : '沒有聲音嗎？請把音量調大再按一次', '🔈')
+        res()
+      }, 2500)
     })
+  },
+  // iPhone 開著靜音模式時，網頁朗讀會沒有聲音：第一次按播放時提醒一次
+  muteHint() {
+    if (!IS_IOS || this.hinted) return
+    this.hinted = true
+    toast('聽不到聲音？iPhone 要關掉靜音模式（側邊開關或控制中心的鈴鐺）', '🔈')
   },
   stop() {
     if (this.ok) speechSynthesis.cancel()
@@ -1255,7 +1274,7 @@ function runShell(pr, it, at, reviewing) {
       <footer class="run-actions">
         <div class="ra-left">
           ${at > 0 ? `<button class="pill back" data-act="back" aria-label="上一題">${ICON.back}<span>上一題</span></button>` : ''}
-          ${tools ? `<button class="pill" data-act="hint">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false">🤔<span>有點猜</span></button>` : ''}
+          ${tools ? `<button class="pill" data-act="hint">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false">🤔<span>不太確定</span></button>` : ''}
         </div>
         <button class="btn primary big" data-act="check" ${reviewing ? '' : 'disabled'}>${mainLabel}</button>
       </footer>
@@ -1487,7 +1506,7 @@ function retryItem() {
   box.innerHTML = ''
   Object.assign(RUN, { C, hints: 0, guess: false, checked: false, retry: true })
   $('.ra-left [data-act=retry]')?.remove()
-  $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="hint">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false">🤔<span>有點猜</span></button>`)
+  $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="hint">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false">🤔<span>不太確定</span></button>`)
   const btn = $('[data-act=check]')
   btn.textContent = '檢查'
   btn.disabled = true
@@ -2468,7 +2487,7 @@ function viewStats() {
         <div class="tile"><div class="tile-v care">${care}</div><div class="tile-k">格式粗心</div></div>
         <div class="tile"><div class="tile-v">${days}</div><div class="tile-k">練習天數</div></div>
       </div>
-      ${sure ? `<div class="callout"><b>「很確定」卻答錯：${sure} 題。</b>這類題目代表「以為會、其實不會」，是最值得弄懂的地方（作答時按「有點猜」的題目不算在內）。</div>` : ''}
+      ${sure ? `<div class="callout"><b>「很確定」卻答錯：${sure} 題。</b>這類題目代表「以為會、其實不會」，是最值得弄懂的地方（作答時按「不太確定」的題目不算在內）。</div>` : ''}
       ${selfRecHTML()}
 
       <section class="card">
@@ -2900,8 +2919,23 @@ const SPEAK_ERR = {
   'audio-capture': '找不到麥克風',
   network: '語音辨識需要網路，請檢查網路',
 }
-// 開始聽：說完會自動停；最多 12 秒
-function listen(onInterim) {
+// 開始聽：念完整句就馬上給分；停下來 1.2 秒也算說完；最多 12 秒
+// 同時錄音（念完可以聽自己的聲音）；這台錄音和語音辨識搶麥克風的話，就只辨識不錄音
+let NO_REC = null
+async function listen(onInterim, target) {
+  if (NO_REC === null) NO_REC = lsGet('g7review:norec') === '1'
+  let rec = null
+  let chunks = []
+  if (!NO_REC && window.MediaRecorder && navigator.mediaDevices?.getUserMedia) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      rec = new MediaRecorder(stream)
+      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
+      rec.start()
+    } catch {
+      rec = null
+    }
+  }
   const r = new SR()
   r.lang = 'en-US'
   r.interimResults = true
@@ -2910,6 +2944,11 @@ function listen(onInterim) {
   let alts = []
   let interim = ''
   let err = ''
+  let quiet = 0
+  const stopSoon = (ms) => {
+    clearTimeout(quiet)
+    quiet = setTimeout(() => r.stop(), ms)
+  }
   const done = new Promise((res) => {
     r.onresult = (e) => {
       const rs = [...e.results]
@@ -2922,9 +2961,36 @@ function listen(onInterim) {
       onInterim?.(list[0])
       if (last.isFinal) alts = list
       else interim = list[0]
+      // 整句都念到了 → 不用等，馬上給分；不然停下來 1.2 秒就結束
+      if (last.isFinal || (target && speakScore(target, [list[0]]).score === 100)) stopSoon(250)
+      else stopSoon(1200)
     }
+    r.onspeechend = () => stopSoon(300)
     r.onerror = (e) => (err = e.error || 'error')
-    r.onend = () => res({ alts: alts.length ? alts : interim ? [interim] : [], err })
+    r.onend = async () => {
+      clearTimeout(quiet)
+      let blob = null
+      if (rec) {
+        await new Promise((ok) => {
+          rec.onstop = ok
+          try {
+            rec.stop()
+          } catch {
+            ok()
+          }
+        })
+        rec.stream.getTracks().forEach((t) => t.stop()) // 放掉麥克風（不然 iPhone 的聲音會變小）
+        if (chunks.length) blob = new Blob(chunks, { type: rec.mimeType || chunks[0].type })
+        // 有錄音卻辨識不到（兩個搶麥克風）：這台以後只辨識、不錄音
+        if (err === 'audio-capture' || (!alts.length && !interim && err && err !== 'no-speech')) {
+          NO_REC = true
+          try {
+            localStorage.setItem('g7review:norec', '1')
+          } catch {}
+        }
+      }
+      res({ alts: alts.length ? alts : interim ? [interim] : [], err, blob })
+    }
   })
   const timer = setTimeout(() => r.stop(), 12000)
   done.then(() => clearTimeout(timer))
@@ -2996,7 +3062,7 @@ function speakRun() {
   // 不看字：說完（或按「看字」）之前，句子、中文、提醒都先藏起來
   const hide = SP.blind && !r && !SP.peek?.[SP.i]
   const tell = (extra = {}) => Sync.presence({ view: 'speak', title: SP.blind ? '口說練習（不看字）' : '口說練習', n: SP.i + 1, of: SP.list.length, text: s.en, ...extra })
-  tell(r ? { said: r.heard, sc: r.score } : {})
+  tell(r ? { said: r.heard, sc: r.score, ...(r.rk ? { rk: r.rk } : {}) } : {})
   setView(
     `<div class="run speak-run">
       <header class="run-bar">
@@ -3070,8 +3136,9 @@ function speakRun() {
       mic.classList.add('on')
       $('.sp-mic-label').textContent = '正在聽…說完會自動停'
       tell({ said: '', listening: 1 })
-      L = listen((t) => ($('.sp-live').textContent = t))
-      const { alts, err } = await L.done
+      L = { stop() {} }
+      L = await listen((t) => ($('.sp-live').textContent = t), s.en)
+      const { alts, err, blob } = await L.done
       L = null
       mic.classList.remove('on')
       if (!alts.length) {
@@ -3081,17 +3148,102 @@ function speakRun() {
       }
       const res = speakScore(s.en, alts)
       const prev = SP.res[SP.i]
-      SP.res[SP.i] = { ...res, tries: (prev?.tries || 0) + 1, best: Math.max(prev?.best || 0, res.score) }
+      if (prev?.audio && blob) URL.revokeObjectURL(prev.audio)
+      SP.res[SP.i] = { ...res, tries: (prev?.tries || 0) + 1, best: Math.max(prev?.best || 0, res.score), audio: blob ? URL.createObjectURL(blob) : prev?.audio || '', rk: prev?.rk || '' }
       buzz(res.score >= 85 ? 15 : [10, 60, 10])
       speakRun()
+      // 錄音傳上去（老師、家長聽得到）；傳好再告訴老師的課堂檢視
+      if (blob) {
+        const cur = SP.res[SP.i]
+        Rec.upload(s.en, blob, res.score, res.heard).then((rk) => {
+          if (!rk) return
+          cur.rk = rk
+          if (SP.list[SP.i] === s) tell({ said: res.heard, sc: res.score, rk })
+        })
+      }
     }
+    if (a === 'mine') return playURL(SP.res[SP.i]?.audio)
   })
 }
+// ── 錄音：學生念完可以聽自己；每一句保留最新一次，老師和家長按 ▶ 才下載（不放在班級資料裡，即時連線不會變慢） ──
+const recKey = (en) =>
+  en
+    .toLowerCase()
+    .replace(/[^a-z]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60)
+const blobToURL = (b) =>
+  new Promise((ok, no) => {
+    const f = new FileReader()
+    f.onload = () => ok(f.result)
+    f.onerror = no
+    f.readAsDataURL(b)
+  })
+function playURL(u) {
+  if (!u) return toast('沒有錄音', '🎤')
+  Voice.stop()
+  const a = new Audio(u)
+  a.play().catch(() => toast('這台裝置播不了這段錄音', '⚠️'))
+}
+const Rec = {
+  path: (sid, k = '') => `recs/${Sync.code()}/${sid}${k ? '/' + k : ''}`,
+  async upload(en, blob, sc, said) {
+    const sid = Sync.sid()
+    if (!sid || !Sync.ready() || myRole() !== 'student' || blob.size > 200000) return ''
+    try {
+      const k = recKey(en)
+      await Sync.req('PUT', this.path(sid, k), { d: await blobToURL(blob), ts: Date.now(), sc, said: String(said || '').slice(0, 120), en }, true)
+      return k
+    } catch {
+      return ''
+    }
+  },
+  async list(sid) {
+    return (await Sync.req('GET', this.path(sid), undefined, true)) || {}
+  },
+  async play(sid, k) {
+    try {
+      const r = await Sync.req('GET', this.path(sid, k), undefined, true)
+      playURL(r?.d)
+    } catch {
+      toast('錄音載入失敗，請檢查網路', '⚠️')
+    }
+  },
+}
+// 老師、家長：這個學生的口說錄音（按了才載入）
+const recSectionHTML = (sid) => `<section class="card rec-card" data-recsid="${sid}"><div class="sec-h"><div><h2>🎤 口說錄音</h2><p>每一句保留最新一次的錄音</p></div><button class="btn ghost small-btn" data-loadrec>載入</button></div><div class="rec-list"></div></section>`
+document.addEventListener('click', async (e) => {
+  const lr = e.target.closest('[data-loadrec]')
+  if (lr) {
+    const card = lr.closest('[data-recsid]')
+    const box = $('.rec-list', card)
+    lr.disabled = true
+    box.innerHTML = '<p class="muted pad">載入中…</p>'
+    try {
+      const all = Object.entries(await Rec.list(card.dataset.recsid)).sort((a, b) => b[1].ts - a[1].ts)
+      box.innerHTML = all.length
+        ? `<div class="list flat">${all
+            .map(([k, r]) => `<button class="row rec-row" data-rec="${card.dataset.recsid}|${k}"><span class="rec-play">${ICON.play}</span><span class="row-t" lang="en">${speakWordsHTML(speakScore(r.en || '', [r.said || '']).words)}<small>${fmtTime(r.ts)}</small></span><span class="row-r">${r.sc ?? ''} 分</span></button>`)
+            .join('')}</div>`
+        : '<p class="muted pad">還沒有口說錄音。</p>'
+    } catch {
+      box.innerHTML = '<p class="muted pad">載入失敗，請檢查網路。</p>'
+    }
+    lr.disabled = false
+    lr.textContent = '重新載入'
+  }
+  const rp = e.target.closest('[data-rec]')
+  if (rp) {
+    const [sid, k] = rp.dataset.rec.split('|')
+    Rec.play(sid, k)
+  }
+})
 function speakResultHTML(r) {
   const msg = r.score >= 100 ? '完美！每個字都很清楚' : r.score >= 85 ? '很棒！只差一點點' : r.score >= 65 ? '不錯！紅色的字再念一次' : '先按「聽」，跟著節奏再念一次'
   const miss = r.words.filter((w) => !w.ok).map((w) => w.t.replace(/[^A-Za-z' -]/g, ''))
   return `<div class="sp-score ${r.score >= 85 ? 'ok' : r.score >= 65 ? 'care' : 'bad'}"><b>${r.score}</b><span>分</span></div>
     <div class="sp-res-t"><div class="sp-msg">${msg}</div><div class="sp-heard">我聽到：<span lang="en">${esc(r.heard)}</span></div>
+    ${r.audio ? `<button class="pill sp-mine" data-act="mine">${ICON.play}<span>聽我念的</span></button>` : ''}
     ${miss.length ? `<div class="chips">${miss.map((w) => `<button class="chip say" data-say="${esc(w)}">${esc(w)} ${ICON.speaker}</button>`).join('')}</div>` : ''}</div>`
 }
 function speakSummary() {
@@ -3728,6 +3880,7 @@ const Sync = {
     for (const [uid, m] of Object.entries(this.members)) if (m?.sid === sid) await this.req('DELETE', 'members/' + uid)
     if (st.code) await this.req('DELETE', 'codes/' + st.code, undefined, true).catch(() => {})
     for (const k of ['a', 's', 'live']) await this.req('DELETE', `${k}/${sid}`)
+    await this.req('DELETE', `recs/${this.code()}/${sid}`, undefined, true).catch(() => {})
     await this.req('DELETE', 'students/' + sid)
   },
   // 6 碼代碼（學生、家長共用）：7 天有效，過期或按「重新產生」就換一組
@@ -3971,7 +4124,7 @@ function feedHTML(list) {
         .map((a) => {
           const it = ITEM[a.q]
           if (!it) return ''
-          return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・有點猜' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
+          return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・不太確定' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
         })
         .join('')}</div>`
     : '<p class="muted pad">還沒有作答紀錄。</p>'
@@ -4020,6 +4173,7 @@ function viewLive(keepScroll = false) {
         ${feedHTML(list)}
       </section>
       ${selfRecHTML(list, S.sessions)}
+      ${Sync.sid() ? recSectionHTML(Sync.sid()) : ''}
     </div>`,
   )
   if (keepScroll) window.scrollTo(0, y)
@@ -4106,6 +4260,7 @@ function viewStudent(sid, keepScroll = false) {
         <button class="btn ghost" data-share="parent">傳給家長</button>
       </div>
       ${hwTeacherHTML(sid)}
+      ${recSectionHTML(sid)}
       <section class="card live-dev">
         <div class="ld-head"><span class="ld-dot${isActive(l) ? ' on' : ''}"></span><div class="ld-who"><b>即時作答</b><span>${esc(liveText(l))}</span></div>
           <div class="ld-today"><b>${today.length}</b> 題<span>今天${today.length ? `・對 ${Math.round((ok / today.length) * 100)}%` : ''}</span></div></div>
@@ -4218,12 +4373,12 @@ function viewWatch(sid, keepScroll = false) {
           ? `<section class="card watch-q watch-sp${spCls ? ' answered ' + spCls : ''}${spKey && spKey !== watchFresh ? ' fresh' : ''}">
               <div class="wq-h"><span class="ld-dot on"></span>${l.listening ? '正在說…' : l.said ? `${l.sc} 分` : '準備跟著說'}<small>口說練習</small></div>
               <div class="sp-en" lang="en">${l.said ? speakWordsHTML(speakScore(l.text, [l.said]).words) : esc(l.text)}</div>
-              ${l.said ? `<div class="sp-heard">聽到：<span lang="en">${esc(l.said)}</span></div>` : ''}
+              ${l.said ? `<div class="sp-heard">聽到：<span lang="en">${esc(l.said)}</span></div>` : ''}${l.rk && l.said ? `<button class="pill sp-mine" data-rec="${sid}|${l.rk}">${ICON.play}<span>聽學生念的</span></button>` : ''}
             </section>`
           : it
           ? `<div class="watch-run">${run.map((a) => `<i class="wr ${a.r}" title="${esc(snippet(ITEM[a.q] || {}))}"></i>`).join('')}<span>今天 ${today.length} 題・對 ${today.length ? Math.round((ok / today.length) * 100) : 0}%</span></div>
             <section class="card watch-q${ans ? ' answered ' + ans.r : ''}${ans && Sync.akey(ans) !== watchFresh ? ' fresh' : ''}">
-              <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '有點猜・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : '正在作答…'}</div>
+              <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '不太確定・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : '正在作答…'}</div>
               <div class="watch-slot"></div>
             </section>`
           : `<div class="empty card"><div class="empty-ic">${isActive(l) ? '📱' : '💤'}</div><h2>${esc(statusTxt)}</h2><p class="muted">${name} 開始做題目時，這裡會自動顯示那一題。</p></div>`
