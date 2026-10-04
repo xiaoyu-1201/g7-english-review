@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.7.1（10/5）'
+const VERSION = '2.8（10/5）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -467,6 +467,51 @@ const joinTokens = (ws) => ws.join(' ').replace(/\s+([.?!,])/g, '$1')
 
 // ───────────────────────── 語音 ─────────────────────────
 const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+// 自然語音音檔（Kokoro 事先產生，audio/index.json：「說話的人|文字」或「w|單字」→ 檔名）
+const AudioLib = {
+  idx: null,
+  el: null,
+  token: 0,
+  load() {
+    return (this.loading ||= fetch('audio/index.json')
+      .then((r) => (r.ok ? r.json() : {}))
+      .catch(() => ({}))
+      .then((j) => (this.idx = j)))
+  },
+  find(lines) {
+    if (!this.idx) return null
+    const files = lines.map(([sp, t]) => {
+      const s = String(t).trim()
+      return this.idx[`${sp || 'W'}|${s}`] || (lines.length === 1 ? this.idx[`w|${s.toLowerCase()}`] || this.idx[`W|${s}`] : '')
+    })
+    return files.every(Boolean) ? files : null
+  },
+  // 一句一句接著播；慢速＝0.75 倍（音高不變）
+  play(files, slow) {
+    const my = ++this.token
+    this.el ||= new Audio()
+    const a = this.el
+    a.setAttribute('playsinline', '')
+    return new Promise((res) => {
+      let i = 0
+      const next = () => {
+        if (my !== this.token || i >= files.length) return res()
+        a.src = `audio/${files[i++]}.mp3`
+        a.playbackRate = slow ? 0.75 : S.profile.rate === 'slow' ? 0.85 : 1
+        a.preservesPitch = true
+        a.onended = () => setTimeout(next, 350)
+        a.onerror = () => res()
+        a.play().catch(() => res())
+      }
+      next()
+    })
+  },
+  stop() {
+    this.token++
+    this.el?.pause()
+  },
+}
+AudioLib.load()
 const Voice = {
   ok: 'speechSynthesis' in window,
   list: [],
@@ -488,6 +533,12 @@ const Voice = {
     return slow ? 0.62 : S.profile.rate === 'slow' ? 0.75 : 0.92
   },
   speak(lines, slow = false) {
+    // 有事先做好的自然語音音檔就播音檔（聲音自然，iPhone 靜音模式也聽得到）
+    const files = AudioLib.find(typeof lines === 'string' ? [['W', lines]] : lines)
+    if (files) {
+      if (this.ok) speechSynthesis.cancel()
+      return AudioLib.play(files, slow)
+    }
     if (!this.ok) {
       toast('這個瀏覽器不支援語音，請用 Safari 或 Chrome 開啟', '🔇')
       return Promise.resolve()
@@ -554,6 +605,7 @@ const Voice = {
   stop() {
     if (this.ok) speechSynthesis.cancel()
     this.keepAlive(false)
+    AudioLib.stop()
   },
 }
 if (Voice.ok) {
@@ -5156,4 +5208,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore }
+window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, AudioLib }
