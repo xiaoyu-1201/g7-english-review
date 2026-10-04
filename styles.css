@@ -3857,3 +3857,269 @@ ul.plain b {
     display: none;
   }
 }
+
+/* ── 口說練習 ── */
+.qk-speak {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+}
+.qk-speak .qk-ic {
+  background: var(--pink);
+  margin: 0;
+  flex: none;
+}
+.qk-speak .qk-tt {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.qk-speak > svg {
+  width: 20px;
+  height: 20px;
+  color: var(--label3);
+  flex: none;
+}
+.qk-ic svg {
+  width: 22px;
+  height: 22px;
+}
+.sp-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  padding: 26px 18px;
+}
+.sp-intro .seg {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+.sp-intro .muted {
+  margin: 0;
+  max-width: 34em;
+}
+.sp-big-ic {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  background: var(--pink);
+  color: #fff;
+}
+.sp-big-ic svg {
+  width: 38px;
+  height: 38px;
+}
+.sp-how {
+  margin: 16px 6px;
+  padding-left: 1.2em;
+  color: var(--label2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.sp-card {
+  text-align: center;
+  padding: 26px 18px 18px;
+}
+.sp-en {
+  font: 600 clamp(24px, 5.4vw, 34px) / 1.35 var(--en);
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+.sp-hidden {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+.sp-hidden i {
+  display: block;
+  height: 0.9em;
+  border-radius: 6px;
+  background: var(--fill);
+}
+.sp-zh {
+  margin-top: 8px;
+  font-size: 17px;
+  color: var(--label2);
+}
+.sp-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--care-bg);
+  color: var(--orange);
+  font-size: 14px;
+  font-weight: 600;
+}
+.sp-tip svg {
+  width: 16px;
+  height: 16px;
+}
+.sp-listen {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.spw.ok {
+  color: var(--green);
+}
+.spw.miss {
+  color: var(--red);
+  text-decoration: underline wavy color-mix(in srgb, var(--red) 55%, transparent);
+  text-underline-offset: 6px;
+  cursor: pointer;
+}
+.sp-mic-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 22px 0 10px;
+}
+.sp-mic {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--pink);
+  color: #fff;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--pink) 35%, transparent);
+  transition: transform 0.15s ease;
+}
+.sp-mic svg {
+  width: 40px;
+  height: 40px;
+}
+.sp-mic:active {
+  transform: scale(0.94);
+}
+.sp-mic.on {
+  background: var(--red-v);
+  animation: sp-pulse 1.2s ease-out infinite;
+}
+@keyframes sp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--red-v) 50%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 22px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sp-mic.on {
+    animation: none;
+  }
+}
+.sp-mic-label {
+  font-weight: 600;
+  color: var(--label2);
+}
+.sp-live {
+  min-height: 1.4em;
+  font: 500 16px var(--en);
+  color: var(--label3);
+  text-align: center;
+}
+.sp-result,
+.sp-sum-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.sp-score {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: var(--fill2);
+}
+.sp-score b {
+  font: 800 30px/1 var(--round);
+}
+.sp-score span {
+  font-size: 12px;
+  color: var(--label2);
+}
+.sp-score.ok {
+  background: var(--ok-bg);
+  color: var(--green);
+}
+.sp-score.care {
+  background: var(--care-bg);
+  color: var(--orange);
+}
+.sp-score.bad {
+  background: var(--bad-bg);
+  color: var(--red);
+}
+.sp-res-t {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sp-msg {
+  font-weight: 700;
+  font-size: 17px;
+}
+.sp-heard {
+  font-size: 14px;
+  color: var(--label2);
+}
+.sp-sum-list .row-t {
+  font-family: var(--en);
+}
+.speak-sum .sheet-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 18px 0;
+}
+.watch-sp {
+  text-align: center;
+}
+.watch-sp .wq-h {
+  text-align: left;
+}
+.sp-mic svg,
+.sp-big-ic svg,
+.chip.say svg,
+.qk-speak > svg,
+.sp-tip svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chip.say svg {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+}
+.sp-listen .pill span {
+  display: inline;
+}
+.sp-ph {
+  visibility: hidden;
+}
+.watch-sp .sp-heard {
+  margin-top: 10px;
+}

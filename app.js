@@ -1,9 +1,9 @@
 // 國一英文段考複習 App（翰林版七上 Starter～Review 1）
 // 純前端：紀錄存在這台裝置（localStorage），可以匯出／匯入合併。
-import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
+import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.3（10/4）'
+const VERSION = '2.4（10/4）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -584,6 +584,7 @@ const ICON = {
   stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="fill" x="7" y="7" width="10" height="10" rx="2" /></svg>',
   check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>',
   notes: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="3" /><path d="M9 8.5h6M9 12h6M9 15.5h4" /></svg>',
+  mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21M8.5 21h7" /></svg>',
   eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></svg>',
   share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4" /><path d="M6 11v8.5h12V11" /></svg>',
   people: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.3" /><path d="M3 19.5c.6-3.4 3-5.3 6-5.3s5.4 1.9 6 5.3" /><path d="M15.5 5.6a3.1 3.1 0 010 5.8M17.6 14.6c1.8.7 3 2.4 3.4 4.9" /></svg>',
@@ -1702,6 +1703,10 @@ function viewHome() {
       ${planHTML()}
 
       <section class="quick">
+        <button class="qk qk-speak" data-go="#/speak"><span class="qk-ic">${ICON.mic}</span><span class="qk-tt"><span class="qk-t">口說練習</span><span class="qk-s">${(() => {
+          const sp = S.sessions.filter((s) => s.k === 'speak')
+          return sp.length ? `最高 ${Math.max(...sp.map((s) => s.s))} 分・練口說也練聽力` : '跟著念，App 聽你說・練口說也練聽力'
+        })()}</span></span>${ICON.chev}</button>
         <button class="qk qk-exam" data-go="#/exam"><span class="qk-ic">${ICON.doc}</span><span class="qk-t">模擬段考</span><span class="qk-s">${examBest.length ? `最高 ${Math.max(...examBest.map((s) => s.s))} 分` : '約 30 題・交卷前要檢查'}</span></button>
         <button class="qk qk-flash" data-go="#/flash"><span class="qk-ic">${ICON.bolt}</span><span class="qk-t">閃電挑戰</span><span class="qk-s">${S.flash.best ? `最高 ${S.flash.best} 題` : '60 秒反應力'}</span></button>
         <button class="qk qk-book" data-go="#/book"><span class="qk-ic">${ICON.book}</span><span class="qk-t">錯題本</span><span class="qk-s">${book ? `${book} 題待複習` : '目前沒有錯題'}</span></button>
@@ -2731,6 +2736,291 @@ async function checkUpdate() {
   setTimeout(() => location.reload(), 600)
 }
 
+// ───────────────────────── 口說練習 ─────────────────────────
+// 跟讀：先聽、再說。用瀏覽器內建的語音辨識（Chrome、Safari）聽學生念，逐字比對，標出要再練的字
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+const NUM = 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(' ')
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+const numWord = (n) => (n < 20 ? NUM[n] : n < 100 ? TENS[Math.floor(n / 10)] + (n % 10 ? ' ' + NUM[n % 10] : '') : String(n))
+const SP_CONTR = { "what's": 'what is', "who's": 'who is', "where's": 'where is', "it's": 'it is', "he's": 'he is', "she's": 'she is', "that's": 'that is', "i'm": 'i am', "you're": 'you are', "we're": 'we are', "they're": 'they are', "isn't": 'is not', "aren't": 'are not', "don't": 'do not', "doesn't": 'does not', "can't": 'cannot', "let's": 'let us' }
+// 比對用的字：小寫、去標點、數字轉英文、縮寫展開（He's＝He is，辨識結果寫哪一種都算對）
+function speakWords(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/\d+/g, (m) => ` ${numWord(+m)} `)
+    .replace(/-/g, ' ')
+    .replace(/[^a-z' ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((w) => (SP_CONTR[w] || w.replace(/'/g, '')).split(' '))
+}
+// 逐字比對（最長共同子序列）：回傳每個字有沒有念到、分數、聽到的句子
+function speakScore(target, heards) {
+  const toks = target.split(/\s+/)
+  const parts = toks.map((t) => speakWords(t))
+  const T = parts.flat()
+  let best = null
+  for (const h of heards || []) {
+    const H = speakWords(h)
+    const dp = Array.from({ length: T.length + 1 }, () => new Array(H.length + 1).fill(0))
+    for (let i = T.length - 1; i >= 0; i--) for (let j = H.length - 1; j >= 0; j--) dp[i][j] = T[i] === H[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+    const hit = new Array(T.length).fill(false)
+    for (let i = 0, j = 0; i < T.length && j < H.length; ) {
+      if (T[i] === H[j]) {
+        hit[i++] = true
+        j++
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) i++
+      else j++
+    }
+    const n = hit.filter(Boolean).length
+    if (!best || n > best.n) best = { n, hit, heard: h }
+  }
+  if (!best) return { score: 0, words: toks.map((t) => ({ t, ok: false })), heard: '' }
+  let k = 0
+  const words = toks.map((t, i) => {
+    const m = parts[i].length
+    const ok = !m || best.hit.slice(k, k + m).every(Boolean)
+    k += m
+    return { t, ok }
+  })
+  return { score: Math.round((best.n / Math.max(1, T.length)) * 100), words, heard: best.heard }
+}
+const speakWordsHTML = (words) => words.map(({ t, ok }) => `<span class="spw ${ok ? 'ok' : 'miss'}">${esc(t)}</span>`).join(' ')
+const SPEAK_ERR = {
+  'not-allowed': '沒有麥克風權限：請允許這個網站使用麥克風（iPhone、iPad：設定 → Safari → 麥克風；也要打開「設定 → 一般 → 鍵盤 → 聽寫」）',
+  'service-not-allowed': '語音辨識沒有開：iPhone、iPad 請打開「設定 → 一般 → 鍵盤 → 聽寫」',
+  'no-speech': '沒有聽到聲音，請靠近一點再說一次',
+  'audio-capture': '找不到麥克風',
+  network: '語音辨識需要網路，請檢查網路',
+}
+// 開始聽：說完會自動停；最多 12 秒
+function listen(onInterim) {
+  const r = new SR()
+  r.lang = 'en-US'
+  r.interimResults = true
+  r.maxAlternatives = 3
+  r.continuous = false
+  let alts = []
+  let interim = ''
+  let err = ''
+  const done = new Promise((res) => {
+    r.onresult = (e) => {
+      const rs = [...e.results]
+      const head = rs
+        .slice(0, -1)
+        .map((x) => x[0].transcript)
+        .join(' ')
+      const last = rs[rs.length - 1]
+      const list = [...last].map((a) => `${head} ${a.transcript}`.trim())
+      onInterim?.(list[0])
+      if (last.isFinal) alts = list
+      else interim = list[0]
+    }
+    r.onerror = (e) => (err = e.error || 'error')
+    r.onend = () => res({ alts: alts.length ? alts : interim ? [interim] : [], err })
+  })
+  const timer = setTimeout(() => r.stop(), 12000)
+  done.then(() => clearTimeout(timer))
+  r.start()
+  return { stop: () => r.stop(), done }
+}
+
+let SP = null // { list, i, res: [{best, tries}], unit, over }
+const speakUnits = () => Object.keys(SPEAK)
+function speakPool(unit) {
+  return (unit === 'all' ? speakUnits() : [unit]).flatMap((u) => SPEAK[u].map(([en, zh, tip]) => ({ en, zh, tip, u })))
+}
+function viewSpeak() {
+  RUN = null
+  if (SP && !SP.over) return speakRun()
+  const sess = S.sessions.filter((s) => s.k === 'speak')
+  const best = sess.length ? Math.max(...sess.map((s) => s.s)) : 0
+  let unit = S.profile.speakUnit || 'all'
+  let mode = S.profile.speakMode || 'read'
+  const MODE_DESC = { read: '看著句子，先聽再跟著說。', blind: '句子先藏起來，只聽聲音再跟著說，說完才看到句子。最能練段考聽力（例如 thirteen／thirty、this／these 聽得出來）。' }
+  Sync.presence({ view: 'home' })
+  setView(
+    `<div class="page narrow speak-intro">
+      ${header('口說練習', '先聽，再跟著說。練口說，也練段考聽力。', '', true)}
+      ${SR ? '' : '<div class="callout care"><b>這個瀏覽器不能用語音辨識。</b>iPhone、iPad 請用 Safari 打開；電腦和 Android 請用 Chrome。</div>'}
+      <div class="card sp-intro">
+        <div class="sp-big-ic">${ICON.mic}</div>
+        <div class="seg" id="sp-mode"><button data-m="read" class="${mode === 'read' ? 'on' : ''}">看字跟讀</button><button data-m="blind" class="${mode === 'blind' ? 'on' : ''}">不看字（練聽力）</button></div>
+        <p class="muted sp-mode-desc">${MODE_DESC[mode]}</p>
+        <div class="seg" id="sp-unit">${[...speakUnits(), 'all'].map((u) => `<button data-u="${u}" class="${u === unit ? 'on' : ''}">${u === 'all' ? '全部' : u}</button>`).join('')}</div>
+        <p class="muted">每回 8 句。${best ? `目前最高 ${best} 分。` : ''}</p>
+        <button class="btn primary big" data-act="go" ${SR ? '' : 'disabled'}>開始</button>
+      </div>
+      <ul class="sp-how">
+        <li>第一次會問能不能用麥克風，請按「允許」。</li>
+        <li>環境安靜一點，手機或平板離嘴巴近一點。</li>
+        <li>念錯的字會標成紅色，點一下可以聽那個字。</li>
+      </ul>
+    </div>`,
+  )
+  $('.speak-intro').addEventListener('click', (e) => {
+    const u = e.target.closest('[data-u]')
+    if (u) {
+      unit = u.dataset.u
+      S.profile.speakUnit = unit
+      save()
+      $$('#sp-unit button').forEach((b) => b.classList.toggle('on', b === u))
+    }
+    const m = e.target.closest('[data-m]')
+    if (m) {
+      mode = m.dataset.m
+      S.profile.speakMode = mode
+      save()
+      $$('#sp-mode button').forEach((b) => b.classList.toggle('on', b === m))
+      $('.sp-mode-desc').textContent = MODE_DESC[mode]
+    }
+    if (e.target.closest('[data-act=go]') && SR) {
+      SP = { list: shuffle(speakPool(unit)).slice(0, 8), i: 0, res: [], unit, blind: mode === 'blind', peek: [], played: [] }
+      speakRun()
+    }
+    const g = e.target.closest('[data-go]')
+    if (g) go(g.dataset.go)
+  })
+}
+function speakRun() {
+  const s = SP.list[SP.i]
+  const r = SP.res[SP.i]
+  // 不看字：說完（或按「看字」）之前，句子、中文、提醒都先藏起來
+  const hide = SP.blind && !r && !SP.peek?.[SP.i]
+  const tell = (extra = {}) => Sync.presence({ view: 'speak', title: SP.blind ? '口說練習（不看字）' : '口說練習', n: SP.i + 1, of: SP.list.length, text: s.en, ...extra })
+  tell(r ? { said: r.heard, sc: r.score } : {})
+  setView(
+    `<div class="run speak-run">
+      <header class="run-bar">
+        <button class="icon-btn" data-act="close" aria-label="離開">${ICON.x}</button>
+        <div class="run-mid"><div class="run-title">口說練習</div><div class="run-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${SP.list.length}" aria-valuenow="${SP.i}"><i style="width:${(SP.i / SP.list.length) * 100}%"></i></div></div>
+        <span class="icon-btn sp-ph" aria-hidden="true"></span>
+      </header>
+      <div class="run-stage">
+        <div class="run-count">第 ${SP.i + 1}／${SP.list.length} 句・${esc(s.u)}</div>
+        <section class="card sp-card">
+          ${
+            hide
+              ? `<div class="sp-en sp-hidden" aria-label="句子先藏起來">${s.en
+                  .split(/\s+/)
+                  .map((w) => `<i style="width:${Math.max(2, w.length) * 0.62}em"></i>`)
+                  .join('')}</div><div class="sp-zh muted">先聽，聽懂了就跟著說</div>`
+              : `<div class="sp-en" lang="en">${r ? speakWordsHTML(r.words) : esc(s.en)}</div>
+          <div class="sp-zh">${esc(s.zh)}</div>
+          ${s.tip ? `<div class="sp-tip">${ICON.bulb}<span>${esc(s.tip)}</span></div>` : ''}`
+          }
+          <div class="sp-listen"><button class="pill" data-act="play">${ICON.speaker}<span>聽</span></button><button class="pill" data-act="slow">🐢<span>慢速</span></button>${hide ? '<button class="pill" data-act="peek">👀<span>看字</span></button>' : ''}</div>
+        </section>
+        <div class="sp-mic-wrap">
+          <button class="sp-mic" data-act="mic" aria-label="${r ? '再說一次' : '開始說'}">${ICON.mic}</button>
+          <div class="sp-mic-label">${r ? '再說一次' : hide ? '聽完就跟著說' : '點一下，跟著說'}</div>
+          <div class="sp-live" aria-live="polite"></div>
+        </div>
+        <section class="sp-result card" ${r ? '' : 'hidden'}>${r ? speakResultHTML(r) : ''}</section>
+      </div>
+      <footer class="run-actions">
+        <div class="ra-left">${r ? '' : '<button class="pill" data-act="skip">跳過</button>'}</div>
+        <button class="btn primary big" data-act="next" ${r ? '' : 'disabled'}>${SP.i + 1 >= SP.list.length ? '看結果' : '下一句'}</button>
+      </footer>
+    </div>`,
+    { tabs: false },
+  )
+  // 不看字：每一句第一次出現時自動念一次（在按鈕的點擊裡呼叫，iPhone 才會出聲）
+  if (hide && !SP.played[SP.i]) {
+    SP.played[SP.i] = true
+    Voice.speak(s.en)
+  }
+  let L = null
+  $('.speak-run').addEventListener('click', async (e) => {
+    const a = e.target.closest('[data-act]')?.dataset.act
+    if (!a) {
+      const w = e.target.closest('.spw')
+      if (w) Voice.speak(w.textContent.replace(/[^A-Za-z' -]/g, ''))
+      return
+    }
+    if (a === 'close') {
+      L?.stop()
+      SP.over = true
+      return go('#/')
+    }
+    if (a === 'play' || a === 'slow') return Voice.speak(s.en, a === 'slow')
+    if (a === 'peek') {
+      SP.peek[SP.i] = true
+      return speakRun()
+    }
+    if (a === 'skip' || a === 'next') {
+      L?.stop()
+      Voice.stop()
+      if (a === 'skip' && !SP.res[SP.i]) SP.res[SP.i] = null
+      SP.i++
+      return SP.i >= SP.list.length ? speakSummary() : speakRun()
+    }
+    if (a === 'mic') {
+      const mic = $('.sp-mic')
+      if (L) return L.stop() // 再按一次＝說完了
+      Voice.stop()
+      mic.classList.add('on')
+      $('.sp-mic-label').textContent = '正在聽…說完會自動停'
+      tell({ said: '', listening: 1 })
+      L = listen((t) => ($('.sp-live').textContent = t))
+      const { alts, err } = await L.done
+      L = null
+      mic.classList.remove('on')
+      if (!alts.length) {
+        $('.sp-mic-label').textContent = SP.res[SP.i] ? '再說一次' : '點一下，跟著說'
+        $('.sp-live').textContent = ''
+        return toast(SPEAK_ERR[err] || '沒聽清楚，請再說一次', '🎤')
+      }
+      const res = speakScore(s.en, alts)
+      const prev = SP.res[SP.i]
+      SP.res[SP.i] = { ...res, tries: (prev?.tries || 0) + 1, best: Math.max(prev?.best || 0, res.score) }
+      buzz(res.score >= 90 ? 15 : [10, 60, 10])
+      speakRun()
+    }
+  })
+}
+function speakResultHTML(r) {
+  const msg = r.score >= 90 ? '很棒！每個字都很清楚' : r.score >= 70 ? '不錯！紅色的字再念一次' : '先按「聽」，跟著節奏再念一次'
+  const miss = r.words.filter((w) => !w.ok).map((w) => w.t.replace(/[^A-Za-z' -]/g, ''))
+  return `<div class="sp-score ${r.score >= 90 ? 'ok' : r.score >= 70 ? 'care' : 'bad'}"><b>${r.score}</b><span>分</span></div>
+    <div class="sp-res-t"><div class="sp-msg">${msg}</div><div class="sp-heard">我聽到：<span lang="en">${esc(r.heard)}</span></div>
+    ${miss.length ? `<div class="chips">${miss.map((w) => `<button class="chip say" data-say="${esc(w)}">${esc(w)} ${ICON.speaker}</button>`).join('')}</div>` : ''}</div>`
+}
+function speakSummary() {
+  const done = SP.list.map((s, i) => ({ s, r: SP.res[i] })).filter((x) => x.r)
+  const avg = done.length ? Math.round(done.reduce((n, x) => n + x.r.best, 0) / done.length) : 0
+  const weak = uniq(done.flatMap((x) => (x.r.best < 100 ? x.r.words.filter((w) => !w.ok).map((w) => w.t.replace(/[^A-Za-z' -]/g, '').toLowerCase()) : []))).slice(0, 12)
+  SP.over = true
+  if (done.length) {
+    addSession({ k: 'speak', m: 'speak', title: SP.blind ? '口說練習（不看字）' : '口說練習', s: avg, n: done.length, weak, ts: Date.now(), d: S.profile.id })
+    save()
+    checkBadges()
+  }
+  const low = done.filter((x) => x.r.best < 80).map((x) => x.s)
+  Sync.presence({ view: 'home' })
+  setView(
+    `<div class="page narrow speak-sum">
+      ${header('口說練習', done.length ? `念了 ${done.length} 句` : '這一回沒有念任何一句', '', false)}
+      <section class="card sp-sum-head"><div class="sp-score ${avg >= 90 ? 'ok' : avg >= 70 ? 'care' : 'bad'}"><b>${avg}</b><span>分</span></div><div class="sp-res-t"><div class="sp-msg">${avg >= 90 ? '發音很清楚！' : avg >= 70 ? '很不錯，再練幾個字就更好' : '多聽幾次，跟著節奏念'}</div>${weak.length ? `<div class="sp-heard">要再練的字（點一下聽）</div><div class="chips">${weak.map((w) => `<button class="chip say" data-say="${esc(w)}">${esc(w)} ${ICON.speaker}</button>`).join('')}</div>` : ''}</div></section>
+      <div class="list sp-sum-list">${done.map((x) => `<div class="row static"><span class="row-t" lang="en">${speakWordsHTML(x.r.words)}</span><span class="row-r">${x.r.best} 分</span></div>`).join('')}</div>
+      <div class="sheet-actions">${low.length ? `<button class="btn ghost" data-act="low">再練分數低的 ${low.length} 句</button>` : ''}<button class="btn ghost" data-act="again">再練一回</button><button class="btn primary" data-act="home">回首頁</button></div>
+    </div>`,
+  )
+  $('.speak-sum').addEventListener('click', (e) => {
+    const a = e.target.closest('[data-act]')?.dataset.act
+    if (a === 'home') go('#/')
+    if (a === 'again') {
+      SP = { list: shuffle(speakPool(SP.unit)).slice(0, 8), i: 0, res: [], unit: SP.unit, blind: SP.blind, peek: [], played: [] }
+      speakRun()
+    }
+    if (a === 'low') {
+      SP = { list: low, i: 0, res: [], unit: SP.unit, blind: SP.blind, peek: [], played: [] }
+      speakRun()
+    }
+  })
+}
+
 // ───────────────────────── 即時同步（Firebase Realtime Database：REST 寫入＋EventSource 串流） ─────────────────────────
 // 老師後台：一個隱藏的「班級」，裡面每個學生各自獨立（a/<學生>、s/<學生>、live/<學生>）
 // 學生、家長用 QR Code、連結或 6 碼代碼加入；家長只看得到自己的孩子；老師的裝置（管理裝置）看得到全部
@@ -3444,6 +3734,7 @@ function liveText(l) {
   if (l.view === 'run' && fresh) return `正在做：${l.title}・第 ${l.n}／${l.of} 題${where}`
   if (l.view === 'exam' && fresh) return `正在寫模擬段考${where}`
   if (l.view === 'flash' && fresh) return `正在玩閃電挑戰${where}`
+  if (l.view === 'speak' && fresh) return `正在練口說・第 ${l.n}／${l.of} 句${where}`
   if (l.view === 'away' || !fresh) return `離開 App（${agoText(l.ts)}）`
   return `在 App 裡${where}（${agoText(l.ts)}）`
 }
@@ -3763,11 +4054,21 @@ function viewWatch(sid, keepScroll = false) {
   const ok = today.filter((a) => a.r === 'ok').length
   const name = st.name || '學生'
   const statusTxt = !l ? `${name} 還沒有上線` : !isActive(l) ? `${name} 現在沒有在練習（${agoText(l.ts)}）` : l.view === 'run' ? '' : l.view === 'exam' ? `${name} 正在寫模擬段考（交卷後看得到作答）` : l.view === 'flash' ? `${name} 正在玩閃電挑戰` : `${name} 在 App 的首頁`
+  // 口說：正在念哪一句、念完的分數與漏掉的字
+  const sp = isActive(l) && l.view === 'speak' && l.text
+  const spKey = sp && l.said ? `sp${l.ts}` : ''
+  const spCls = sp && l.said ? (l.sc >= 90 ? 'ok' : l.sc >= 70 ? 'care' : 'bad') : ''
   setView(
     `<div class="page narrow watch-page">
-      ${header(name, it ? `${l.title}・第 ${l.n}／${l.of} 題` : '課堂檢視', syncPill(), true)}
+      ${header(name, it ? `${l.title}・第 ${l.n}／${l.of} 題` : sp ? `${l.title}・第 ${l.n}／${l.of} 句` : '課堂檢視', syncPill(), true)}
       ${
-        it
+        sp
+          ? `<section class="card watch-q watch-sp${spCls ? ' answered ' + spCls : ''}${spKey && spKey !== watchFresh ? ' fresh' : ''}">
+              <div class="wq-h"><span class="ld-dot on"></span>${l.listening ? '正在說…' : l.said ? `${l.sc} 分` : '準備跟著說'}<small>口說練習</small></div>
+              <div class="sp-en" lang="en">${l.said ? speakWordsHTML(speakScore(l.text, [l.said]).words) : esc(l.text)}</div>
+              ${l.said ? `<div class="sp-heard">聽到：<span lang="en">${esc(l.said)}</span></div>` : ''}
+            </section>`
+          : it
           ? `<div class="watch-run">${run.map((a) => `<i class="wr ${a.r}" title="${esc(snippet(ITEM[a.q] || {}))}"></i>`).join('')}<span>今天 ${today.length} 題・對 ${today.length ? Math.round((ok / today.length) * 100) : 0}%</span></div>
             <section class="card watch-q${ans ? ' answered ' + ans.r : ''}${ans && Sync.akey(ans) !== watchFresh ? ' fresh' : ''}">
               <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '有點猜・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : '正在作答…'}</div>
@@ -3790,6 +4091,7 @@ function viewWatch(sid, keepScroll = false) {
     $('.watch-slot').append(card)
   }
   if (ans) watchFresh = Sync.akey(ans)
+  if (spKey) watchFresh = spKey
   if (keepScroll) window.scrollTo(0, y)
   $('.watch-page').addEventListener('click', (e) => feedClick(e, list))
 }
@@ -3800,7 +4102,7 @@ const weekStart = (t = Date.now()) => {
   return d - ((new Date(d).getDay() + 6) % 7) * DAY
 }
 function selfRecHTML(list = S.attempts, sess = S.sessions) {
-  if (!list.length) return ''
+  if (!list.length && !sess.length) return ''
   const w0 = weekStart()
   const thisW = list.filter((a) => a.ts >= w0).length
   const lastW = list.filter((a) => a.ts >= w0 - 7 * DAY && a.ts < w0).length
@@ -3816,6 +4118,10 @@ function selfRecHTML(list = S.attempts, sess = S.sessions) {
       ${cell(`${sd}<small> 天</small>`, '連續練習', `最長 ${best} 天${sd > 1 && sd >= best ? '・<b class="up">追平紀錄</b>' : ''}`)}
       ${cell(ex.length ? `${Math.max(...ex.map((s) => s.s))}<small> 分</small>` : '—', '模擬段考最高', ex.length ? `最近一次 ${ex[ex.length - 1].s} 分` : '還沒寫過')}
       ${cell(fl.length ? `${Math.max(...fl.map((s) => s.s))}<small> 題</small>` : '—', '閃電挑戰最高', fl.length ? `玩了 ${fl.length} 次` : '還沒玩過')}
+      ${(() => {
+        const sp = sess.filter((s) => s.k === 'speak')
+        return sp.length ? cell(`${Math.max(...sp.map((s) => s.s))}<small> 分</small>`, '口說最高', `最近一次 ${sp[sp.length - 1].s} 分`) : ''
+      })()}
     </div></section>`
 }
 // 破紀錄提醒（只跟自己比）
@@ -4223,6 +4529,7 @@ function route() {
   if (a === 'book') return viewBook()
   if (a === 'exam') return viewExam()
   if (a === 'flash') return viewFlash()
+  if (a === 'speak') return viewSpeak()
   if (a === 'stats') return viewStats()
   if (a === 'settings') return viewSettings()
   if (a === 'notes') return viewAllNotes()
@@ -4309,4 +4616,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth }
+window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore }
