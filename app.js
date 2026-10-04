@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.1.1（10/4）'
+const VERSION = '2.1.2（10/4）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3167,7 +3167,8 @@ const Sync = {
       const oldT = Object.entries(D.members || {}).filter(([, m]) => m && m.role === 'teacher' && m.admin === undefined)
       if (!flatA.length && !flatS.length && !flatL.length && !noSid.length && !oldT.length) return
       let sid = D.legacy
-      if (!sid && (flatA.length || flatS.length || noSid.length)) {
+      // 舊班級（有平放的紀錄、舊成員，或只有舊版的上線狀態）：建立一個學生，舊連結（沒有學生代號）就歸到他
+      if (!sid && (flatA.length || flatS.length || noSid.length || flatL.length)) {
         const name = noSid.find(([, m]) => m.role === 'student' && m.name)?.[1].name || flatL.map(([, l]) => l).find((l) => (l.role || 'student') === 'student' && l.name)?.name || '學生'
         sid = newSid()
         await this.req('PUT', 'students/' + sid, { name: name.slice(0, 20), at: Date.now() })
