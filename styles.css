@@ -4123,3 +4123,161 @@ ul.plain b {
 .watch-sp .sp-heard {
   margin-top: 10px;
 }
+
+/* ── 會考導向：圖表、公告、訊息；考點與選項解析 ── */
+.pv-card {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 10px 0 4px;
+  font-family: var(--en);
+  font-size: 16px;
+  border: 1px solid var(--sep);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.pv-card th,
+.pv-card td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--sep);
+}
+.pv-card tr:last-child th,
+.pv-card tr:last-child td {
+  border-bottom: 0;
+}
+.pv-card th {
+  width: 28%;
+  background: var(--fill2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pv-notice {
+  margin: 10px 0 4px;
+  padding: 14px 16px;
+  border: 2px dashed var(--label3);
+  border-radius: var(--r-sm);
+  font-family: var(--en);
+  font-size: 16px;
+  line-height: 1.6;
+}
+.pv-notice p {
+  margin: 0 0 6px;
+}
+.pv-notice p:last-child {
+  margin: 0;
+  font-weight: 700;
+}
+.pv-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 4px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--fill2);
+  font-family: var(--en);
+  font-size: 16px;
+}
+.pv-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 82%;
+}
+.pv-msg.me {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.pv-who {
+  font-size: 12px;
+  color: var(--label2);
+  padding: 0 6px;
+}
+.pv-bubble {
+  padding: 8px 12px;
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--sep);
+  line-height: 1.4;
+}
+.pv-msg.me .pv-bubble {
+  background: var(--green-v);
+  color: #fff;
+  box-shadow: none;
+}
+.fb-kp {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.kp-k {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--indigo);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.fb-why {
+  margin-top: 10px;
+}
+.fb-why ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fb-why li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--fill2);
+  font-size: 14px;
+}
+.fb-why li b {
+  font-family: var(--en);
+  font-size: 15px;
+}
+.fb-why li em {
+  grid-column: 2;
+  justify-self: start;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--red-v);
+  border-radius: 5px;
+  padding: 0 6px;
+}
+.fb-why li span {
+  grid-column: 1 / -1;
+  color: var(--label2);
+}
+.fb-why li.ok {
+  background: var(--ok-bg);
+}
+.fb-why li.ok span {
+  color: var(--green);
+  font-weight: 700;
+}
+.fb-why li.mine {
+  background: var(--bad-bg);
+}
+.exam-pts {
+  margin-left: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--label2);
+}

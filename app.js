@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.4（10/4）'
+const VERSION = '2.5（10/4）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -613,11 +613,32 @@ function hintsFor(it) {
   const h = uniq((it.tags || []).map((t) => TAG_HINTS[t]))
   return h.length ? h : ['先把題目唸一遍，圈出關鍵字。']
 }
+// 文章／圖表的內容：一般文章、表格卡片（card）、公告（notice）、訊息（chat）
+function passageBody(p, print = false) {
+  if (p.kind === 'card') return `<table class="pv-card">${p.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>`
+  if (p.kind === 'notice')
+    return `<div class="pv-notice">${esc(p.text)
+      .split('\n')
+      .map((l) => `<p>${l}</p>`)
+      .join('')}</div>`
+  if (p.kind === 'chat') return `<div class="pv-chat">${p.msgs.map(([who, t]) => `<div class="pv-msg${who === p.me ? ' me' : ''}"><span class="pv-who">${esc(who)}</span><span class="pv-bubble">${esc(t)}</span></div>`).join('')}</div>`
+  return `<p class="en">${esc(p.text).replace(/__\((\d)\)__/g, print ? '<u>　($1)　</u>' : '<span class="cloze">($1)</span>')}</p>`
+}
 function passageHTML(pid, mode) {
   const p = PASSAGES[pid]
   if (!p) return ''
-  const text = esc(p.text).replace(/__\((\d)\)__/g, '<span class="cloze">($1)</span>')
-  return `<details class="passage" ${mode === 'exam' ? '' : 'open'}><summary>${ICON.doc}<span>${esc(p.title)}</span></summary><p class="en">${text}</p><p class="zh" hidden>${esc(p.zh)}</p></details>`
+  return `<details class="passage${p.kind ? ' pv' : ''}" ${mode === 'exam' ? '' : 'open'}><summary>${ICON.doc}<span>${esc(p.title)}</span></summary>${passageBody(p)}<p class="zh" hidden>${esc(p.zh)}</p></details>`
+}
+// 段考／會考題型（題目上的標籤、模擬段考分大題用）
+function secOf(it) {
+  if (it.sec) return it.sec
+  if (it.audio) {
+    if (/回應/.test(it.q)) return '基本問答'
+    if (/意思一樣/.test(it.q)) return '辨識句意'
+    return Array.isArray(it.audio) ? '言談理解' : '字音辨識'
+  }
+  if (it.passage) return PASSAGES[it.passage]?.kind ? '圖表題組' : it.passage === 'nina' ? '克漏字' : '閱讀題組'
+  return { fill: '字彙', write: '句型改寫', order: '重組', spot: '挑錯', mcq: '單題' }[it.t] || ''
 }
 function audioHTML(it) {
   if (!it.audio) return ''
@@ -633,8 +654,10 @@ function audioHTML(it) {
 function metaHTML(it) {
   const m = MODULES[it.mid]
   const lv = it.lv === 3 ? '<span class="chip lv3">挑戰</span>' : it.lv === 2 ? '<span class="chip lv2">進階</span>' : ''
-  const kind = it.audio ? '<span class="chip blue">聽力</span>' : it.passage ? '<span class="chip blue">閱讀</span>' : ''
-  return `<div class="q-meta"><span class="chip">${TYPE_LABEL[it.t]}</span>${kind}${lv}<span class="q-unit">${esc(m.unit)} · ${esc(m.title)}</span></div>`
+  // 標段考／會考題型（聽力、閱讀用藍色），讓學生熟悉考卷長相
+  const sec = it.t === 'learn' ? '' : secOf(it)
+  const chip = sec ? `<span class="chip${it.audio || it.passage ? ' blue' : ''}">${sec}</span>` : `<span class="chip">${TYPE_LABEL[it.t]}</span>`
+  return `<div class="q-meta">${chip}${lv}<span class="q-unit">${esc(m.unit)} · ${esc(m.title)}</span></div>`
 }
 
 function makeItem(it, mode = 'practice') {
@@ -1132,6 +1155,24 @@ const CTRL = {
   },
 }
 
+// 考點＋選項解析（答題回饋、題目回顧、課堂檢視共用）
+function explainParts(it, given) {
+  // 考點：有寫 kp 用 kp，沒有就用標籤（聽力、閱讀這種大類不算考點）
+  const kp = it.kp || uniq((it.tags || []).filter((t) => t !== 'listen' && t !== 'read').map((t) => TAGS[t])).join('、')
+  const kpH = kp ? `<div class="fb-kp"><span class="kp-k">考點</span><span>${esc(kp)}</span></div>` : ''
+  // 選項解析：每個選項為什麼對、為什麼錯（有寫 why 的選擇題）
+  const whyOn = !!(it.t === 'mcq' && it.why && Object.keys(it.why).length)
+  const why = whyOn
+    ? `<div class="fb-why"><div class="fb-k">選項解析</div><ul>${it.opts
+        .map((o, i) => {
+          const mine = given === o && i !== it.a
+          const r = i === it.a ? '正確答案' : it.why[i]
+          return r ? `<li class="${i === it.a ? 'ok' : mine ? 'mine' : ''}"><b>${esc(o)}</b>${mine ? '<em>選了這個</em>' : ''}<span>${esc(r)}</span></li>` : ''
+        })
+        .join('')}</ul></div>`
+    : ''
+  return { kpH, why, whyOn }
+}
 function feedbackHTML(it, res, ctx = {}) {
   const head =
     res.r === 'ok'
@@ -1139,14 +1180,15 @@ function feedbackHTML(it, res, ctx = {}) {
       : res.r === 'care'
         ? ['care', '內容對了，但格式粗心', '段考會被扣分！養成「寫完檢查」的習慣。']
         : ['bad', '再想想', ctx.exam ? '' : ctx.guess ? '這題本來就沒把握，看完解析就學會了。' : '很確定卻答錯？這種題目最值得弄懂。已放進錯題本。']
-  const msgs = (res.msgs || []).map((m) => `<li>${esc(m)}</li>`).join('')
+  const { kpH, why, whyOn } = explainParts(it, res.given)
+  const msgs = whyOn ? '' : (res.msgs || []).map((m) => `<li>${esc(m)}</li>`).join('')
   const right = res.r !== 'ok' && res.right ? `<div class="fb-ans"><div class="fb-k">正確答案</div><div class="fb-v">${res.right}</div></div>` : ''
   const yours = res.r !== 'ok' && res.yours ? `<div class="fb-ans you"><div class="fb-k">你的答案</div><div class="fb-v">${res.yours}</div></div>` : ''
-  const ex = it.ex ? `<div class="fb-ex">${ICON.bulb}<div>${rich(it.ex)}</div></div>` : ''
+  const ex = (it.ex ? `<div class="fb-ex">${ICON.bulb}<div>${rich(it.ex)}</div></div>` : '') + why
   const follow = it.follow ? `<details class="follow"><summary>延伸想一想：${esc(it.follow[0])}</summary><p>${esc(it.follow[1])}</p></details>` : ''
   const tr = it.passage && PASSAGES[it.passage] ? `<button type="button" class="link" data-zh>看文章中文翻譯</button>` : ''
   return `<div class="fb ${head[0]}"><div class="fb-head"><span class="fb-icon">${res.r === 'ok' ? ICON.check : res.r === 'care' ? '!' : ICON.x}</span><div><div class="fb-title">${head[1]}</div>${head[2] ? `<div class="fb-sub">${head[2]}</div>` : ''}</div></div>
-    ${msgs ? `<ul class="fb-msgs">${msgs}</ul>` : ''}${yours}${right}${ex}${follow}${tr}</div>`
+    ${kpH}${msgs ? `<ul class="fb-msgs">${msgs}</ul>` : ''}${yours}${right}${ex}${follow}${tr}</div>`
 }
 const pick = (a) => a[Math.floor(Math.random() * a.length)]
 function revealExtras(C) {
@@ -1603,7 +1645,8 @@ function reviewCard(it, last, label) {
   }
   const fb = $('.q-feedback', C.el)
   fb.hidden = false
-  fb.innerHTML = `<div class="fb ${last?.r || 'bad'}">${last ? `<div class="fb-ans you"><div class="fb-k">${label}${last.r === 'ok' ? '（答對）' : last.r === 'care' ? '（格式粗心）' : '（答錯）'}</div><div class="fb-v">${esc(last.a) || '（空白）'}</div></div>` : ''}<div class="fb-ans"><div class="fb-k">正確答案</div><div class="fb-v">${rightAnswerText(it)}</div></div>${it.ex ? `<div class="fb-ex">${ICON.bulb}<div>${rich(it.ex)}</div></div>` : ''}</div>`
+  const { kpH, why } = explainParts(it, last?.a)
+  fb.innerHTML = `<div class="fb ${last?.r || 'bad'}">${kpH}${last ? `<div class="fb-ans you"><div class="fb-k">${label}${last.r === 'ok' ? '（答對）' : last.r === 'care' ? '（格式粗心）' : '（答錯）'}</div><div class="fb-v">${esc(last.a) || '（空白）'}</div></div>` : ''}<div class="fb-ans"><div class="fb-k">正確答案</div><div class="fb-v">${rightAnswerText(it)}</div></div>${it.ex ? `<div class="fb-ex">${ICON.bulb}<div>${rich(it.ex)}</div></div>` : ''}${why}</div>`
   $$('button, input, textarea', C.el).forEach((b) => {
     if (!b.closest('.audio') && !b.matches('.say')) b.disabled = true
   })
@@ -1978,7 +2021,7 @@ function viewPrint(key) {
       if (it.passage && !shown.has(it.passage)) {
         shown.add(it.passage)
         const p = PASSAGES[it.passage]
-        pre = `<div class="p-passage"><b>${esc(p.title)}</b><p>${esc(p.text).replace(/__\((\d)\)__/g, '<u>　($1)　</u>')}</p></div>`
+        pre = `<div class="p-passage"><b>${esc(p.title)}</b>${passageBody(p, true)}</div>`
       }
       return `${pre}<li class="p-q">${paperItem(it)}</li>`
     })
@@ -2038,20 +2081,27 @@ function buildExam() {
   const weak = (list) => shuffle(list).sort((a, b) => (last[a.id]?.r === 'ok') - (last[b.id]?.r === 'ok'))
   const pool = ALL_SCORED
   const take = (list, n) => weak(list).slice(0, n)
-  const listen = take(pool.filter((i) => i.audio && i.t === 'mcq'), 5)
-  const vocab = take(pool.filter((i) => i.t === 'fill' && !i.audio && !i.passage && !i.fig), 5)
-  const grammar = take(pool.filter((i) => i.t === 'mcq' && !i.audio && !i.passage && !i.fig), 8)
-  const fix = take(pool.filter((i) => i.t === 'spot' || (i.t === 'order' && !i.lines)), 4)
-  const write = take(pool.filter((i) => i.t === 'write' && !i.fig), 4)
-  const pid = pick(['leo', 'rita', 'nina'])
-  const read = pool.filter((i) => i.passage === pid)
+  // 同一篇文章挑幾題，但照原本的順序排
+  const inOrder = (list, n) => take(list, n).sort((a, b) => list.indexOf(a) - list.indexOf(b))
+  // 會考聽力三部分：辨識句意、基本問答、言談理解（不夠就用字音辨識補）
+  const L = pool.filter((i) => i.audio && i.t === 'mcq')
+  let listen = ['辨識句意', '基本問答', '言談理解'].flatMap((s) => take(L.filter((i) => secOf(i) === s), 3))
+  if (listen.length < 9) listen = listen.concat(take(L.filter((i) => !listen.includes(i)), 9 - listen.length))
+  const vocab = take(pool.filter((i) => i.t === 'fill' && !i.audio && !i.passage && !i.fig), 4)
+  const single = [...take(pool.filter((i) => i.sec === '情境單題'), 3), ...take(pool.filter((i) => i.t === 'mcq' && !i.audio && !i.passage && !i.fig && !i.sec), 5)]
+  const cloze = pool.filter((i) => i.passage === 'nina')
+  const textId = pick(['leo', 'rita'])
+  const chartId = pick(['ruby', 'lost', 'chat'])
+  const write = [...take(pool.filter((i) => i.t === 'write' && !i.fig), 3), ...take(pool.filter((i) => i.t === 'spot' || (i.t === 'order' && !i.lines)), 2)]
+  // 配分合計 100（會考聽力＋閱讀的結構，加上段考的非選擇題）
   return [
-    { h: '一、聽力測驗', sub: '每題可以重聽', items: listen },
-    { h: '二、字彙與拼字', sub: '注意大小寫和拼字', items: vocab },
-    { h: '三、文法選擇', sub: '', items: grammar },
-    { h: '四、找錯與重組', sub: '', items: fix },
-    { h: '五、句型改寫', sub: '整句要寫完整：大寫、標點都算分', items: write },
-    { h: '六、閱讀測驗', sub: PASSAGES[pid].title, items: read, passage: pid },
+    { h: '一、聽力測驗', sub: '辨識句意・基本問答・言談理解（每題可以重聽）', pts: 27, items: listen },
+    { h: '二、字彙', sub: '注意大小寫和拼字', pts: 8, items: vocab },
+    { h: '三、單題', sub: '情境對話與文法', pts: 16, items: single },
+    { h: '四、克漏字', sub: PASSAGES.nina.title, pts: 10, items: cloze, passage: 'nina' },
+    { h: '五、閱讀題組', sub: PASSAGES[textId].title, pts: 12, items: inOrder(pool.filter((i) => i.passage === textId), 4), passage: textId },
+    { h: '六、圖表題組', sub: PASSAGES[chartId].title, pts: 12, items: pool.filter((i) => i.passage === chartId), passage: chartId },
+    { h: '七、非選擇題', sub: '句型改寫・挑錯・重組：大寫、標點都算分', pts: 15, items: write },
   ]
 }
 function viewExam() {
@@ -2061,9 +2111,9 @@ function viewExam() {
         ${header('模擬段考', '', '', true)}
         <div class="card exam-intro">
           <div class="exam-ic">${ICON.doc}</div>
-          <h2>約 30 題，比照段考題型</h2>
+          <h2>約 40 題，滿分 100，比照段考＋會考題型</h2>
           <ul class="plain">
-            <li>聽力、字彙、文法、找錯重組、句型改寫、閱讀，六大題混在一起考。</li>
+            <li>聽力（辨識句意、基本問答、言談理解）、字彙、單題、克漏字、閱讀題組、圖表題組、非選擇題，每大題都有配分。</li>
             <li>寫的時候<b>不會</b>馬上告訴你對錯，交卷後才一起批改。</li>
             <li>交卷前會出現「30 秒檢查清單」，養成檢查習慣。</li>
             <li>題目會優先挑你還沒精熟的。</li>
@@ -2099,7 +2149,7 @@ function viewExam() {
     if (!sec.items.length) continue
     const g = document.createElement('section')
     g.className = 'exam-group'
-    g.innerHTML = `<div class="exam-h"><h2>${esc(sec.h)}</h2>${sec.sub ? `<span>${esc(sec.sub)}</span>` : ''}</div>${sec.passage ? passageHTML(sec.passage, 'practice') : ''}`
+    g.innerHTML = `<div class="exam-h"><h2>${esc(sec.h)}${sec.pts ? `<small class="exam-pts">（${sec.pts} 分）</small>` : ''}</h2>${sec.sub ? `<span>${esc(sec.sub)}</span>` : ''}</div>${sec.passage ? passageHTML(sec.passage, 'practice') : ''}`
     for (const it of sec.items) {
       const C = makeItem(it, 'exam')
       C.n = ++n
@@ -2184,8 +2234,22 @@ function gradeExam() {
     C.el.classList.add('done', 'r-' + res.r)
   }
   const total = EXAM.ctrls.length
-  const score = Math.round((ok / total) * 100)
-  const ifCare = Math.round(((ok + care) / total) * 100)
+  // 依大題配分算分數（每大題的分數平均分給該大題的題目）
+  let got = 0
+  let gotCare = 0
+  let full = 0
+  for (const sec of EXAM.secs) {
+    if (!sec.items.length) continue
+    const w = (sec.pts || sec.items.length) / sec.items.length
+    full += w * sec.items.length
+    for (const it of sec.items) {
+      const r = EXAM.ctrls.find((c) => c.it === it)?.res?.r
+      if (r === 'ok') got += w
+      if (r === 'ok' || r === 'care') gotCare += w
+    }
+  }
+  const score = Math.round((got / full) * 100)
+  const ifCare = Math.round((gotCare / full) * 100)
   const dur = Date.now() - EXAM.t0
   addSession({ k: 'exam', m: 'exam', title: '模擬段考', s: score, n: total, ok, care, bad: total - ok - care, ifCare, stars: score >= 90 ? 3 : score >= 70 ? 2 : 1, ts: Date.now(), dur, d: S.profile.id })
   save()
