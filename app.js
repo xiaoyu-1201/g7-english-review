@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.1（10/4）'
+const VERSION = '2.1.1（10/4）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -2989,7 +2989,11 @@ const Sync = {
         try {
           S.sync.sid = (await this.req('GET', 'legacy')) || '' // 2.1 以前的連結沒有學生代號
         } catch {}
-      if (!S.sync.sid) return this.fail('invalid')
+      if (!S.sync.sid) {
+        // 舊連結、老師的平板還沒更新到 2.1（還沒把紀錄搬到學生）：等一下自動再試，這段時間的作答先存在這台
+        this.fail('wait')
+        return this.retry(60000)
+      }
       body.sid = S.sync.sid
     }
     try {
