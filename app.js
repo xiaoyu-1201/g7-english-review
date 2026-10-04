@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.0（10/4）'
+const VERSION = '2.1（10/4）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -53,22 +53,39 @@ const DEF = () => ({
   progress: {},
   flash: { best: 0, runs: 0 },
 })
+// 上課模式：老師平板暫時給某個學生用（紀錄存在另一份，同步到那個學生）；同步設定（S.sync、S.syncQ）存在共用的 SYNC_KEY
+const ACTIVE = (() => {
+  try {
+    return localStorage.getItem('g7review:active') || ''
+  } catch {
+    return ''
+  }
+})()
+const STORE = ACTIVE ? `${KEY}@${ACTIVE}` : KEY
+const SYNC_KEY = 'g7review:sync'
 let S = load()
 function load() {
+  let s = DEF()
+  let main = {}
   try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const d = JSON.parse(raw)
-      const base = DEF()
-      return { ...base, ...d, profile: { ...base.profile, ...(d.profile || {}) }, flash: { ...base.flash, ...(d.flash || {}) } }
-    }
+    main = JSON.parse(localStorage.getItem(KEY) || '{}') || {}
+    const d = ACTIVE ? JSON.parse(localStorage.getItem(STORE) || '{}') || {} : main
+    s = { ...s, ...d, profile: { ...s.profile, ...(d.profile || {}) }, flash: { ...s.flash, ...(d.flash || {}) } }
   } catch {}
-  return DEF()
+  try {
+    const sy = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null')
+    s.sync = sy ? sy.sync : main.sync // 2.1 以前：同步設定存在主紀錄裡
+    s.syncQ = sy ? sy.syncQ || [] : main.syncQ || []
+  } catch {}
+  if (!s.sync) delete s.sync
+  return s
 }
 let saveWarned = false
 function save() {
   try {
-    localStorage.setItem(KEY, JSON.stringify(S))
+    const { sync, syncQ, ...rest } = S
+    localStorage.setItem(STORE, JSON.stringify(rest))
+    localStorage.setItem(SYNC_KEY, JSON.stringify({ sync: sync || null, syncQ: syncQ || [] }))
   } catch {
     if (!saveWarned) {
       saveWarned = true
@@ -142,8 +159,8 @@ function todayStats() {
   const care = list.filter((a) => a.r === 'care').length
   return { n: list.length, ok, care, acc: list.length ? ok / list.length : 0, careFree: ok + care ? ok / (ok + care) : 0 }
 }
-function streakDays() {
-  const days = new Set(S.attempts.map((a) => dayStart(a.ts)))
+function streakDays(list = S.attempts) {
+  const days = new Set(list.map((a) => dayStart(a.ts)))
   let n = 0
   let d = dayStart()
   if (!days.has(d)) d -= DAY
@@ -171,8 +188,8 @@ const WHY_ME = [
   ['word', '單字不熟'],
   ['rush', '太急了'],
 ]
-function maxStreakDays() {
-  const days = [...new Set(S.attempts.map((a) => dayStart(a.ts)))].sort((a, b) => a - b)
+function maxStreakDays(list = S.attempts) {
+  const days = [...new Set(list.map((a) => dayStart(a.ts)))].sort((a, b) => a - b)
   let best = 0
   let run = 0
   days.forEach((d, i) => {
@@ -218,6 +235,7 @@ function badgeEarned() {
   }
 }
 function checkBadges(silent = false) {
+  checkRecords(silent)
   S.badges ||= {}
   const e = badgeEarned()
   // 1.6 以前「零粗心」條件太寬（全錯也會拿到）：不符合新條件就收回
@@ -567,6 +585,7 @@ const ICON = {
   check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>',
   notes: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="3" /><path d="M9 8.5h6M9 12h6M9 15.5h4" /></svg>',
   share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4" /><path d="M6 11v8.5h12V11" /></svg>',
+  people: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.3" /><path d="M3 19.5c.6-3.4 3-5.3 6-5.3s5.4 1.9 6 5.3" /><path d="M15.5 5.6a3.1 3.1 0 010 5.8M17.6 14.6c1.8.7 3 2.4 3.4 4.9" /></svg>',
   star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z" /></svg>',
   flame: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M12 2.5c.6 3.2 4.8 5.6 4.8 10.3A4.8 4.8 0 0112 17.6a4.8 4.8 0 01-4.8-4.8c0-1.9.9-3.4 1.9-4.6.2 1.6 1 2.6 2.1 2.9-.4-3.1.1-6 0-8.6z" /><path class="fill" d="M12 21.5a5.5 5.5 0 01-5.5-5.5c0-.6.1-1.1.2-1.6A5.5 5.5 0 0012 18.4a5.5 5.5 0 005.3-4c.1.5.2 1 .2 1.6a5.5 5.5 0 01-5.5 5.5z" /></svg>',
   bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M13.5 2.5L5 13.5h6l-1 8 8.5-11h-6z" /></svg>',
@@ -1628,6 +1647,7 @@ function viewHome() {
         <div class="lg-row"><h1>${hello}</h1>${sd ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
         <p class="lg-sub">翰林版七上｜第一次段考：Starter～Review 1${cd ? '　·　' + cd : ''}</p>
       </header>
+      ${studentsCardHTML()}
 
       <section class="today card">
         <div class="rings" aria-hidden="true">
@@ -1729,11 +1749,16 @@ function welcome() {
         <button data-role="student"><span class="rp-ic">🎒</span><b>我是學生</b><small>開始練習</small></button>
         <button data-role="parent"><span class="rp-ic">👪</span><b>我是家長</b><small>看孩子的練習</small></button>
       </div>
+      <button class="link w-code" data-code>有老師給的代碼？點這裡輸入</button>
       <p class="w-note">選錯了沒關係，之後到「設定 → 這台是誰的」就能改。</p>
     </div>`,
     { onClose: markSeen },
   )
   b.addEventListener('click', (e) => {
+    if (e.target.closest('[data-code]')) {
+      closeSheet()
+      return setTimeout(() => codeSheet(), 350)
+    }
     const r = e.target.closest('[data-role]')?.dataset.role
     if (!r) return
     setRole(r)
@@ -1751,34 +1776,46 @@ function setRole(r) {
   save()
   Sync.presence(Sync.last || { view: 'home' })
 }
-// 老師第一次：一鍵建立班級
+// 老師：開始使用老師後台（建立後就能新增學生）
 function teacherStart() {
   const b = sheet(
-    `<h2 class="sheet-title">要讓學生的作答即時同步嗎？</h2>
-    <p class="sheet-p">建立班級之後，把「學生用」「家長用」的加入連結用 LINE 傳出去，對方點一下就加入。學生每答一題，這裡幾秒內就看得到。</p>
-    <div class="sheet-actions"><button class="btn ghost" data-close>稍後再說</button><button class="btn primary" data-new>建立班級</button></div>`,
+    `<h2 class="sheet-title">開始使用老師後台？</h2>
+    <p class="sheet-p">開始之後可以新增學生，再把 QR Code、連結或代碼給學生和家長。學生每答一題，這裡幾秒內就看得到；每個學生、每個家庭都只看得到自己的紀錄。</p>
+    <div class="sheet-actions"><button class="btn ghost" data-close>稍後再說</button><button class="btn primary" data-new>開始使用</button></div>`,
   )
-  $('[data-new]', b).onclick = () => {
-    Sync.pair(newCode(), 'teacher', { owner: true })
-    sharePair()
-  }
+  $('[data-new]', b).onclick = () => startTeacher()
 }
-// 家長第一次：請點老師傳的家長連結（或貼上）
+function startTeacher() {
+  closeSheet()
+  Sync.pair(newCode(), 'teacher', { owner: true })
+  go('#/students')
+}
+// 從貼上的文字找出加入連結：#/pair/<班級>/<身分>/<學生代號或鑰匙>
+const parsePairLink = (v) => {
+  const m = String(v || '').match(/pair\/([a-z0-9]{16,40})(?:\/(student|parent|teacher)(?:\/([a-z0-9]{4,40}))?)?/)
+  return m ? `#/pair/${m[1]}${m[2] ? '/' + m[2] + (m[3] ? '/' + m[3] : '') : ''}` : ''
+}
+// 家長第一次：掃 QR Code、點連結，或輸入代碼
 function parentStart() {
   const b = sheet(
     `<h2 class="sheet-title">看孩子的練習</h2>
-    <p class="sheet-p">請點老師用 LINE 傳給您的「家長連結」，點一下就能在這支手機即時看到孩子的練習。</p>
-    <div class="list form"><label class="row field"><span class="row-t">或把連結貼在這裡</span><input id="pp-link" placeholder="貼上老師給的連結" autocomplete="off" autocapitalize="off" spellcheck="false"></label></div>
+    <p class="sheet-p">用手機相機掃老師給的 QR Code，或點老師用 LINE 傳的「家長用」連結，就能在這支手機即時看到孩子的練習。</p>
+    <div class="list"><button class="row" data-code><span class="row-ic">🔢</span><span class="row-t">輸入代碼<small>老師給的 6 碼代碼</small></span>${ICON.chev}</button>
+    <label class="row field"><span class="row-t">或把連結貼在這裡</span><input id="pp-link" placeholder="貼上老師給的連結" autocomplete="off" autocapitalize="off" spellcheck="false"></label></div>
     <div class="sheet-actions"><button class="btn primary" data-close>知道了</button></div>`,
   )
+  $('[data-code]', b).onclick = () => {
+    closeSheet()
+    setTimeout(() => codeSheet('parent'), 350)
+  }
   const inp = $('#pp-link', b)
   const onPaste = () => {
-    const m = inp.value.trim().match(/pair\/([a-z0-9]{16,40})/)
-    if (!m) return toast('連結不對，請貼上老師給的整個連結', '⚠️')
+    const h = parsePairLink(inp.value.trim())
+    if (!h) return toast('連結不對，請貼上老師給的整個連結', '⚠️')
     inp.removeEventListener('change', onPaste)
     inp.blur()
     closeSheet()
-    go(`#/pair/${m[1]}/parent`)
+    go(h.includes('/student') || h.includes('/parent') ? h : h + '/parent')
   }
   inp.addEventListener('change', onPaste)
 }
@@ -2297,7 +2334,13 @@ function viewStats() {
   setView(
     `<div class="page">
       ${header('學習紀錄', S.profile.name ? `${S.profile.name}・${S.profile.device || '這台裝置'}` : '紀錄存在這台裝置；可以匯出給老師或另一台裝置。')}
-      ${Sync.ready() && myRole() !== 'student' ? `<button class="card live-link" data-x="live"><span class="live-pulse${studentsLive().some(([, l]) => l.view !== 'away' && Date.now() - l.ts < 600000) ? '' : ' idle'}"></span><span class="row-t"><b>即時作答</b><small>${esc(studentsLive().map(([, l]) => `${l.name || l.dev}：${liveText(l)}`).join('　') || '等學生點加入連結')}</small></span>${ICON.chev}</button>` : ''}
+      ${
+        teacherMode()
+          ? `<button class="card live-link" data-x="students"><span class="live-pulse${studentIds().some((sid) => isActive(latestLive(sid))) ? '' : ' idle'}"></span><span class="row-t"><b>學生的紀錄</b><small>這一頁是這台自己的練習；學生的紀錄在「學生」分頁</small></span>${ICON.chev}</button>`
+          : Sync.ready() && myRole() === 'parent'
+            ? `<button class="card live-link" data-x="live"><span class="live-pulse${studentsLive().some(([, l]) => isActive(l)) ? '' : ' idle'}"></span><span class="row-t"><b>即時作答</b><small>${esc(studentsLive().map(([, l]) => `${Sync.stu?.name || l.name || l.dev}：${liveText(l)}`)[0] || '等孩子開始練習')}</small></span>${ICON.chev}</button>`
+            : ''
+      }
       ${devices.size > 1 ? `<div class="seg" role="tablist"><button role="tab" class="${!mine ? 'on' : ''}" data-f="all">全部裝置</button><button role="tab" class="${mine ? 'on' : ''}" data-f="mine">只看這台</button></div>` : ''}
       <div class="tiles">
         <div class="tile"><div class="tile-v">${list.length}</div><div class="tile-k">已作答</div></div>
@@ -2306,6 +2349,7 @@ function viewStats() {
         <div class="tile"><div class="tile-v">${days}</div><div class="tile-k">練習天數</div></div>
       </div>
       ${sure ? `<div class="callout"><b>「很確定」卻答錯：${sure} 題。</b>這類題目代表「以為會、其實不會」，是最值得弄懂的地方（作答時按「有點猜」的題目不算在內）。</div>` : ''}
+      ${selfRecHTML()}
 
       <section class="card">
         <div class="sec-h"><div><h2>粗心雷達</h2><p>答錯或粗心時，錯在哪一類。點一列開始專屬特訓。</p></div></div>
@@ -2364,6 +2408,7 @@ function viewStats() {
     if (m) return startModule(m.dataset.mod)
     const x = e.target.closest('[data-x]')?.dataset.x
     if (x === 'live') return go('#/live')
+    if (x === 'students') return go('#/students')
     if (x === 'report') shareReport()
     if (x === 'export') exportData()
     if (x === 'import') $('.file-in').click()
@@ -2505,9 +2550,13 @@ function viewSettings() {
       ${header('設定', '')}
       <div class="group"><div class="group-h">學生</div><div class="list form">
         <label class="row field"><span class="row-t">名字</span><input id="f-name" value="${esc(p.name)}" placeholder="例如：Amy" maxlength="20" autocomplete="off"></label>
-        <div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" data-seg="role">${Object.entries(ROLES)
-          .map(([k, t]) => `<button class="${role === k ? 'on' : ''}" data-v="${k}">${t}</button>`)
-          .join('')}</div></div>
+        ${
+          ACTIVE
+            ? ''
+            : `<div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" data-seg="role">${Object.entries(ROLES)
+                .map(([k, t]) => `<button class="${role === k ? 'on' : ''}" data-v="${k}">${t}</button>`)
+                .join('')}</div></div>`
+        }
         <label class="row field"><span class="row-t">段考日期</span><input id="f-exam" type="date" value="${esc(p.exam)}"></label>
       </div><p class="group-f">「這台是誰的」會寫在學習報告和備份檔上；老師、家長的裝置是用來看學生練習的。</p></div>
 
@@ -2540,12 +2589,18 @@ function viewSettings() {
     S.profile.exam = e.target.value
     save()
   })
-  $('#f-pair')?.addEventListener('change', (e) => {
+  const onPair = (e) => {
     const v = e.target.value.trim()
-    const m = v.match(/pair\/([a-z0-9]{16,40})(?:\/(student|parent|teacher))?/) || v.match(/^([a-z0-9]{16,40})$/)
-    if (!m) return toast('連結不對，請貼上老師給的整個連結', '⚠️')
-    go('#/pair/' + m[1] + (m[2] ? '/' + m[2] : ''))
-  })
+    const h = parsePairLink(v)
+    const code6 = /^[a-z0-9]{3}[\s-]?[a-z0-9]{3}$/i.test(v)
+    if (!h && !code6) return toast('連結不對，請貼上老師給的整個連結', '⚠️')
+    // 只處理一次（失焦時會再觸發一次 change）
+    e.target.removeEventListener('change', onPair)
+    e.target.blur()
+    if (h) return go(h)
+    codeSheet('', v) // 貼到代碼
+  }
+  $('#f-pair')?.addEventListener('change', onPair)
   v.addEventListener('click', (e) => {
     const b = e.target.closest('[data-seg] button')
     if (b) {
@@ -2561,18 +2616,15 @@ function viewSettings() {
       return
     }
     const x = e.target.closest('[data-x]')?.dataset.x
-    if (x === 'newpair') {
-      Sync.pair(newCode(), 'teacher', { owner: true })
-      viewSettings()
-      return sharePair()
-    }
-    if (x === 'sharepair') return sharePair()
+    if (x === 'newpair') return startTeacher()
+    if (x === 'code') return codeSheet()
+    if (x === 'students') return go('#/students')
     if (x === 'live') return go('#/live')
     if (x === 'manage') return go('#/manage')
     if (x === 'unpair')
       return confirmSheet(
         Sync.state === 'owner' ? '解除這台的管理？' : '退出同步？',
-        Sync.state === 'owner' ? '解除之後，這台不再是班級的管理裝置，也看不到這個班級的資料（資料還在雲端）。之後要管理，得重新建立班級。' : '之後這台不會再同步，已經同步過來的紀錄會留著。',
+        Sync.state === 'owner' ? '解除之後，這台不再是老師後台的管理裝置，也看不到學生的資料（資料還在雲端）。之後要管理，得重新開始使用老師後台。' : '之後這台不會再同步，已經同步過來的紀錄會留著。',
         Sync.state === 'owner' ? '確定解除' : '退出',
         () => {
           Sync.unpair()
@@ -2591,27 +2643,37 @@ function viewSettings() {
 function syncSettingsHTML(role) {
   const st = Sync.state
   const status = { on: '已連線', connecting: '連線中', error: '重新連線中', off: '未連線' }[Sync.status] || ''
+  const dot = `<span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span>`
+  const pend = S.syncQ?.length ? `還有 ${S.syncQ.length} 筆待上傳` : '紀錄都已上傳'
+  if (ACTIVE)
+    return `<div class="group"><div class="group-h">上課模式</div><div class="list"><div class="row static">${dot}<span class="row-t">上課中：${esc(S.profile.name || '學生')}<small>${status}・這台的作答會同步到 ${esc(S.profile.name || '這個學生')} 的紀錄・${pend}</small></span></div>
+      <button class="row" data-endclass><span class="row-ic">⏹</span><span class="row-t">結束上課<small>回到老師後台</small></span>${ICON.chev}</button></div></div>`
   let rows
   if (!S.sync?.code) {
-    rows = `<label class="row field"><span class="row-t">加入老師的班級<small>點老師傳的連結就好；也可以把連結貼在這裡</small></span><input id="f-pair" placeholder="貼上老師給的連結" autocomplete="off" autocapitalize="off" spellcheck="false"></label>`
-  } else if (st === 'closed' || st === 'removed') {
-    const t = { closed: '這個班級目前暫停加入', removed: '這台已經被移出班級' }[st]
-    rows = `<div class="row static"><span class="row-ic">${{ closed: '🔒', removed: '🚫' }[st]}</span><span class="row-t">${t}<small>這台是${ROLES[role]}的${S.syncQ?.length ? `・加入後會上傳 ${S.syncQ.length} 筆` : ''}</small></span></div>
-      <button class="row" data-rejoin><span class="row-ic">📨</span><span class="row-t">再試一次</span></button>
+    rows = `<button class="row" data-x="code"><span class="row-ic">🔢</span><span class="row-t">輸入代碼<small>老師給的 6 碼代碼</small></span>${ICON.chev}</button>
+      <label class="row field"><span class="row-t">貼上連結<small>直接點老師傳的連結、掃 QR Code 也可以</small></span><input id="f-pair" placeholder="貼上老師給的連結" autocomplete="off" autocapitalize="off" spellcheck="false"></label>`
+  } else if (['closed', 'removed', 'invalid', 'wait'].includes(st)) {
+    const t = { closed: '目前暫停加入', removed: '這台已經被移出', invalid: '沒辦法加入：連結可能已經失效', wait: '正在更新，老師那邊打開 App 之後就會完成' }[st]
+    rows = `<div class="row static"><span class="row-ic">${{ closed: '🔒', removed: '🚫', invalid: '⚠️', wait: '⏳' }[st]}</span><span class="row-t">${t}<small>這台是${ROLES[role]}的${S.syncQ?.length ? `・加入後會上傳 ${S.syncQ.length} 筆` : ''}</small></span></div>
+      ${st !== 'wait' ? '<button class="row" data-rejoin><span class="row-ic">📨</span><span class="row-t">再試一次</span></button>' : ''}
+      ${st === 'invalid' ? `<button class="row" data-x="code"><span class="row-ic">🔢</span><span class="row-t">輸入新的代碼</span>${ICON.chev}</button>` : ''}
       <button class="row danger" data-x="unpair"><span class="row-t">不加入了</span></button>`
-  } else {
-    const admin = Sync.isAdmin() && Auth.ok()
+  } else if (teacherMode()) {
     const n = pendingCount()
-    rows = `<div class="row static"><span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span><span class="row-t">${st === 'owner' ? '已建立班級（這台是管理裝置）' : `已加入（這台是${ROLES[role]}的）`}<small>${status}・${S.syncQ?.length ? `還有 ${S.syncQ.length} 筆待上傳` : '紀錄都已上傳'}</small></span></div>
-      ${admin ? `<button class="row" data-x="manage"><span class="row-ic">👥</span><span class="row-t">成員管理<small>看誰加入了、移除裝置、暫停加入</small></span>${n ? `<b class="row-badge">${n}</b>` : ''}${ICON.chev}</button>` : ''}
-      ${role !== 'student' ? `<button class="row" data-x="live"><span class="row-ic">📡</span><span class="row-t">即時作答<small>看學生正在做哪一題、每題答了什麼</small></span>${ICON.chev}</button>` : ''}
-      ${Sync.isAdmin() ? `<button class="row" data-x="sharepair"><span class="row-ic">${ICON.share}</span><span class="row-t">傳送加入連結<small>學生用、家長用、老師用三種連結</small></span>${ICON.chev}</button>` : ''}
-      <button class="row danger" data-x="unpair"><span class="row-t">${st === 'owner' ? '解除這台的管理' : '退出同步'}</span></button>`
+    rows = `<div class="row static">${dot}<span class="row-t">老師後台${st === 'owner' ? '（這台是建立後台的裝置）' : ''}<small>${status}</small></span></div>
+      <button class="row" data-x="students"><span class="row-ic">${ICON.people}</span><span class="row-t">學生<small>新增學生、傳 QR Code／連結／代碼、看即時作答、上課</small></span>${ICON.chev}</button>
+      ${Sync.isAdmin() ? `<button class="row" data-x="manage"><span class="row-ic">👥</span><span class="row-t">成員管理<small>看哪些裝置加入了、移除裝置、暫停加入</small></span>${n ? `<b class="row-badge">${n}</b>` : ''}${ICON.chev}</button>` : ''}
+      <button class="row danger" data-x="unpair"><span class="row-t">${st === 'owner' ? '解除這台的管理' : '退出老師後台'}</span></button>`
+  } else {
+    const nm = Sync.stu?.name
+    rows = `<div class="row static">${dot}<span class="row-t">已連結老師（${role === 'parent' ? `${esc(nm || '孩子')}的家長` : `學生${nm ? '・' + esc(nm) : ''}`}）<small>${status}${role === 'student' ? '・' + pend : ''}</small></span></div>
+      ${role === 'parent' ? `<button class="row" data-x="live"><span class="row-ic">📡</span><span class="row-t">即時作答<small>看孩子正在做哪一題、每題答了什麼</small></span>${ICON.chev}</button>` : ''}
+      <button class="row danger" data-x="unpair"><span class="row-t">退出同步</span></button>`
   }
   const teacher = S.sync?.code
     ? ''
-    : `<div class="group"><div class="group-h">老師專區</div><div class="list"><button class="row" data-x="newpair"><span class="row-ic">📚</span><span class="row-t">建立班級<small>建立後把加入連結傳給學生和家長；誰加入了都看得到，可以隨時移除</small></span>${ICON.chev}</button></div></div>`
-  return `<div class="group"><div class="group-h">即時同步</div><div class="list">${rows}</div><p class="group-f">${Auth.ok() ? '點連結就能加入；建立班級的裝置可以看名單、移除裝置、暫停加入。' : '加入的裝置會同步同一份作答紀錄。'}學生名字建議用暱稱。</p></div>${teacher}`
+    : `<div class="group"><div class="group-h">老師專區</div><div class="list"><button class="row" data-x="newpair"><span class="row-ic">📚</span><span class="row-t">開始使用老師後台<small>新增學生，再把 QR Code、連結或代碼給學生和家長</small></span>${ICON.chev}</button></div></div>`
+  return `<div class="group"><div class="group-h">${S.sync?.code ? '即時同步' : '連結老師'}</div><div class="list">${rows}</div><p class="group-f">每個學生、每個家庭都只看得到自己的紀錄。學生名字建議用暱稱。</p></div>${teacher}`
 }
 async function checkUpdate() {
   toast('檢查中…', '⏳')
@@ -2630,8 +2692,9 @@ async function checkUpdate() {
 }
 
 // ───────────────────────── 即時同步（Firebase Realtime Database：REST 寫入＋EventSource 串流） ─────────────────────────
-// 建立班級 → 把加入連結傳給學生、家長 → 對方點一下就加入；管理者可以看名單、移除某一台、暫停加入
-// 每台裝置在背景用 Firebase 匿名登入拿一張識別證（不用帳號、不會看到登入畫面）；資料庫規則只讓「名單上的裝置」讀寫
+// 老師後台：一個隱藏的「班級」，裡面每個學生各自獨立（a/<學生>、s/<學生>、live/<學生>）
+// 學生、家長用 QR Code、連結或 6 碼代碼加入；家長只看得到自己的孩子；老師的裝置（管理裝置）看得到全部
+// 每台裝置在背景用 Firebase 匿名登入拿一張識別證（不用帳號）；資料庫規則（database.rules.json）只讓名單上的裝置讀寫
 const SYNC_DB = 'https://g7-english-review-default-rtdb.asia-southeast1.firebasedatabase.app'
 const AUTH_KEY = 'AIzaSyBnoANfTAai_y9C4yyBUKxZwOXByBEbTT4' // Firebase 網頁 API 金鑰（匿名登入用；本來就是公開的，安全靠資料庫規則）
 const lsGet = (k) => {
@@ -2642,7 +2705,11 @@ const lsGet = (k) => {
   }
 }
 const dbBase = () => (lsGet('g7review:db') || SYNC_DB).replace(/\/+$/, '')
-const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(20)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('')
+const ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789' // 沒有 0／o、1／l／i，念、抄都不會看錯
+const randStr = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => ALPHA[b % 31]).join('')
+const newCode = () => randStr(20)
+const newSid = () => randStr(10)
+const fmtShort = (k) => String(k || '').toUpperCase().replace(/^(...)(...)$/, '$1 $2')
 const deviceKind = () => {
   const u = navigator.userAgent
   if (/iPhone/.test(u)) return 'iPhone'
@@ -2717,20 +2784,39 @@ const Auth = {
   },
 }
 
+// 串流事件套到本機的資料：put 取代、patch 合併（null 代表刪除）
+function applyAt(root, segs, data, ev) {
+  if (!segs.length) {
+    if (ev !== 'patch') return data
+    const o = root && typeof root === 'object' ? root : {}
+    for (const [k, v] of Object.entries(data || {})) v == null ? delete o[k] : (o[k] = v)
+    return o
+  }
+  const o = root && typeof root === 'object' ? root : {}
+  const [k, ...rest] = segs
+  const v = applyAt(o[k], rest, data, ev)
+  if (v == null) delete o[k]
+  else o[k] = v
+  return o
+}
+
 const Sync = {
   status: 'off', // 連線：off | connecting | on | error
-  state: 'off', // 身分：off | owner | member | closed（暫停加入）| removed（被移除）
+  state: 'off', // 身分：off | owner | member | wait（等管理裝置更新）| closed（暫停加入）| removed（被移出）| invalid（連結失效）
   admin: false,
   es: [],
   keys: null,
   timer: 0,
   flushing: false,
-  live: {},
-  members: {},
-  blocked: {},
-  open: true,
+  D: {}, // 管理裝置：整個班級的資料（students、members、a、s、live…）
+  live: {}, // 學生、家長：自己這個學生的即時狀態（裝置 → 狀態）
+  stu: null, // 學生、家長：自己這個學生的資料（名字）
+  loaded: false,
+  ver: 0,
+  cache: {},
   last: null,
   code: () => S.sync?.code || '',
+  sid: () => ACTIVE || S.sync?.sid || '',
   paired: () => !!(dbBase() && S.sync?.code),
   ready() {
     return this.paired() && (this.state === 'owner' || this.state === 'member')
@@ -2738,14 +2824,27 @@ const Sync = {
   isAdmin() {
     return this.state === 'owner' || (this.state === 'member' && this.admin)
   },
+  get members() {
+    return this.D.members || {}
+  },
+  get blocked() {
+    return this.D.blocked || {}
+  },
+  get students() {
+    return this.D.students || {}
+  },
+  get open() {
+    return this.D.open !== false
+  },
   akey: (a) => `${a.ts}-${a.q}-${a.d}`.replace(/[.#$[\]/]/g, '_'),
   skey: (s) => `${s.ts}-${s.k}-${s.d}`.replace(/[.#$[\]/:]/g, '_'),
-  async url(path) {
+  // top：路徑不在班級底下（例如 codes/<代碼>）
+  async url(path, top = false) {
     const t = await Auth.token()
-    return `${dbBase()}/classes/${this.code()}${path ? '/' + path : ''}.json${t ? '?auth=' + encodeURIComponent(t) : ''}`
+    return `${dbBase()}/${top ? path : `classes/${this.code()}${path ? '/' + path : ''}`}.json${t ? '?auth=' + encodeURIComponent(t) : ''}`
   },
-  async req(method, path, body) {
-    const r = await fetch(await this.url(path), { method, body: body === undefined ? undefined : JSON.stringify(body) })
+  async req(method, path, body, top = false) {
+    const r = await fetch(await this.url(path, top), { method, body: body === undefined ? undefined : JSON.stringify(body) })
     if (!r.ok) {
       const e = new Error('HTTP ' + r.status)
       e.status = r.status
@@ -2765,8 +2864,9 @@ const Sync = {
   // 自己的作答＆練習紀錄：排進佇列（沒網路或還沒加入時先存著，之後一次送出）
   queue(kind, obj) {
     if (!this.paired() || !obj || obj.d !== S.profile.id) return
+    if (myRole() !== 'student') return // 老師、家長自己按的題目不同步（上課模式算學生）
     if (kind === 'a') this.keys?.add(this.akey(obj))
-    ;(S.syncQ ||= []).push([kind, obj])
+    ;(S.syncQ ||= []).push([kind, obj, this.sid()])
     save()
     this.flushSoon()
   },
@@ -2776,17 +2876,18 @@ const Sync = {
   },
   async flush() {
     if (!this.ready() || !S.syncQ?.length || this.flushing || navigator.onLine === false) return
+    const def = this.sid()
     this.flushing = true
     const batch = S.syncQ.slice(0, 300)
-    const a = {}
-    const s = {}
-    for (const [k, o] of batch) {
-      if (k === 'a') a[this.akey(o)] = o
-      else s[this.skey(o)] = o
+    const by = {}
+    for (const [k, o, sid] of batch) {
+      const s = sid || def
+      if (!s || !o) continue // 沒有學生可以歸的紀錄（例如舊版老師平板自己的練習）：不上傳
+      const g = (by[`${k === 'a' ? 'a' : 's'}/${s}`] ||= {})
+      g[k === 'a' ? this.akey(o) : this.skey(o)] = o
     }
     try {
-      if (Object.keys(a).length) await this.req('PATCH', 'a', a)
-      if (Object.keys(s).length) await this.req('PATCH', 's', s)
+      for (const [path, body] of Object.entries(by)) await this.req('PATCH', path, body)
       S.syncQ.splice(0, batch.length)
       save()
       if (this.status !== 'on' && this.es.length) this.setStatus('on')
@@ -2807,9 +2908,10 @@ const Sync = {
   // 現在在做什麼（老師、家長的「即時作答」會顯示）
   presence(info) {
     if (info.view !== 'away') this.last = info
-    if (!this.ready()) return
-    const body = { ...info, dev: S.profile.device || '未命名裝置', kind: deviceKind(), name: S.profile.name || '', role: myRole(), ts: Date.now() }
-    this.url('live/' + S.profile.id)
+    const sid = this.sid()
+    if (!this.ready() || !sid || (myRole() === 'teacher' && !ACTIVE)) return
+    const body = { ...info, dev: ACTIVE ? '上課平板' : S.profile.device || '未命名裝置', kind: deviceKind(), name: S.profile.name || '', role: myRole(), ts: Date.now() }
+    this.url(`live/${sid}/${S.profile.id}`)
       .then((u) => fetch(u, { method: 'PUT', body: JSON.stringify(body), keepalive: true }))
       .catch(() => {})
   },
@@ -2817,13 +2919,11 @@ const Sync = {
   async start() {
     this.stop()
     if (!this.paired()) return this.setState('off')
-    this.setStatus('connecting')
     if (!Auth.ok()) {
-      // 還沒設定匿名登入：舊版做法（有連結就能同步）
-      this.admin = myRole() === 'teacher'
-      this.setState('member')
-      return this.startData()
+      this.setStatus('error')
+      return this.setState('off')
     }
+    this.setStatus('connecting')
     try {
       await Auth.token()
       const uid = Auth.uid()
@@ -2832,6 +2932,7 @@ const Sync = {
         if (!o) {
           await this.req('PUT', 'owner', uid)
           await this.req('PUT', 'open', true)
+          await this.req('PUT', 'tkey', newCode())
         } else if (o !== uid) {
           S.sync.owner = false
           save()
@@ -2847,17 +2948,24 @@ const Sync = {
         this.admin = !!m.admin
         S.sync.member = true
         delete S.sync.removed
+        if (m.sid && m.role !== 'teacher') S.sync.sid = m.sid
         save()
-        this.setState('member')
-        return this.startData()
+        if (this.admin || (m.role !== 'teacher' && m.sid)) {
+          this.setState('member')
+          return this.startData()
+        }
+        // 名單上有這台，但還不能看資料（舊版加入的裝置：等管理裝置把它歸到學生）
+        this.setStatus('off')
+        this.setState('wait')
+        await this.listenSelf()
+        return this.retry(60000)
       }
-      // 以前在名單上、現在不在了＝被移除；不要自己加回去（要使用者按「再試一次」）
+      // 以前在名單上、現在不在了＝被移出；不要自己加回去（要使用者按「再試一次」）
       if (S.sync.member || S.sync.removed) {
         S.sync.member = false
         S.sync.removed = true
         save()
-        this.setStatus('off')
-        return this.setState('removed')
+        return this.fail(S.sync.fail || 'removed')
       }
       await this.join()
     } catch {
@@ -2865,14 +2973,31 @@ const Sync = {
       this.retry(20000)
     }
   },
-  // 點連結加入：把這台寫進名單（暫停加入或被移除過的裝置會被資料庫擋下）
+  fail(st) {
+    this.setStatus('off')
+    this.setState(st)
+  },
+  // 加入：把這台寫進名單（學生、家長要帶學生代號；老師要帶老師連結裡的鑰匙）
   async join() {
-    const uid = Auth.uid()
+    const role = S.sync.role || 'student'
+    const body = { role, name: S.profile.name || '', dev: deviceKind(), pid: S.profile.id, at: Date.now() }
+    if (role === 'teacher') {
+      if (!S.sync.tkey) return this.fail('invalid')
+      Object.assign(body, { key: S.sync.tkey, admin: true })
+    } else {
+      if (!S.sync.sid)
+        try {
+          S.sync.sid = (await this.req('GET', 'legacy')) || '' // 2.1 以前的連結沒有學生代號
+        } catch {}
+      if (!S.sync.sid) return this.fail('invalid')
+      body.sid = S.sync.sid
+    }
     try {
-      await this.req('PUT', 'members/' + uid, { role: myRole(), name: S.profile.name || '', dev: deviceKind(), pid: S.profile.id, at: Date.now() })
-      this.admin = false
+      await this.req('PUT', 'members/' + Auth.uid(), body)
+      this.admin = role === 'teacher'
       S.sync.member = true
       delete S.sync.removed
+      delete S.sync.fail
       save()
       this.setState('member')
       return this.startData()
@@ -2881,54 +3006,79 @@ const Sync = {
         this.setStatus('error')
         return this.retry(20000)
       }
+      // 同時送了兩次（例如連點）：其實已經在名單上了
+      try {
+        if (await this.req('GET', 'members/' + Auth.uid())) {
+          S.sync.member = true
+          save()
+          return this.recheck()
+        }
+      } catch {}
       let open = true
       try {
         open = (await this.req('GET', 'open')) === true
       } catch {}
-      this.setStatus('off')
-      if (open) {
-        S.sync.removed = true
-        save()
-        this.setState('removed')
-      } else {
-        this.setState('closed')
-        this.retry(60000) // 暫停加入：之後再自動試試看
+      if (!open && role !== 'teacher') {
+        this.fail('closed')
+        return this.retry(60000) // 暫停加入：之後再自動試試看
       }
+      S.sync.removed = true
+      S.sync.fail = 'invalid'
+      save()
+      this.fail('invalid')
     }
   },
+  async listen(path, fn) {
+    const es = new EventSource(await this.url(path))
+    const on = (ev) => (e) => {
+      try {
+        const { path: p, data } = JSON.parse(e.data)
+        fn(p, data, ev)
+      } catch {}
+    }
+    es.addEventListener('put', on('put'))
+    es.addEventListener('patch', on('patch'))
+    es.addEventListener('open', () => this.state !== 'wait' && this.setStatus('on'))
+    es.addEventListener('cancel', () => {
+      es.close()
+      this.recheck()
+    })
+    es.onerror = () => this.setStatus('error')
+    this.es.push(es)
+  },
+  // 一般成員：盯著自己在名單上的那一筆（被移出、被設為可管理、被歸到學生時馬上重新確認）
+  async listenSelf() {
+    let first = true
+    await this.listen('members/' + Auth.uid(), (p) => {
+      if (first && p === '/') return (first = false)
+      if (p === '/' || p === '/admin' || p === '/sid') this.recheck()
+    })
+  },
+  // 瀏覽器對同一個網站最多同時開 6 條連線：管理裝置只開 1 條（整個班級），學生、家長開 4 條
   async startData() {
     this.keys = new Set(S.attempts.map((a) => this.akey(a)))
-    this.membersLoaded = false
-    const listen = async (path, fn) => {
-      const es = new EventSource(await this.url(path))
-      const on = (ev) => (e) => {
-        try {
-          const { path: p, data } = JSON.parse(e.data)
-          fn(p, data, ev)
-        } catch {}
-      }
-      es.addEventListener('put', on('put'))
-      es.addEventListener('patch', on('patch'))
-      es.addEventListener('open', () => this.setStatus('on'))
-      es.addEventListener('cancel', () => {
-        es.close()
-        this.recheck()
-      })
-      es.onerror = () => this.setStatus('error')
-      this.es.push(es)
-    }
-    // 瀏覽器對同一個網站最多同時開 6 條連線：管理裝置只開 1 條（整個班級），一般成員最多 4 條
+    this.loaded = false
     try {
-      if (Auth.ok() && this.isAdmin()) await listen('', (p, d, ev) => this.mergeAll(p, d, ev))
+      if (this.isAdmin()) await this.listen('', (p, d, ev) => this.mergeAll(p, d, ev))
       else {
-        await listen('a', (p, d) => this.mergeAttempts(p, d))
-        await listen('s', (p, d) => this.mergeSessions(p, d))
-        await listen('live', (p, d, ev) => this.mergeMap('live', p, d, ev))
-        // 一般成員：盯著自己在名單上的那一筆（被移除、被設為可管理時馬上重新確認）
-        if (Auth.ok())
-          await listen('members/' + Auth.uid(), (p, d) => {
-            if ((p === '/' && (!d || d.admin === true)) || (p === '/admin' && d === true)) this.recheck()
+        const sid = this.sid()
+        await this.listen('a/' + sid, (p, d) => this.mergeAttempts(p, d))
+        await this.listen('s/' + sid, (p, d) => this.mergeSessions(p, d))
+        await this.listen('live/' + sid, (p, d, ev) => {
+          this.live = applyAt(this.live, p.split('/').filter(Boolean), d, ev) || {}
+          onSyncChange('live')
+        })
+        await this.listenSelf()
+        this.req('GET', 'students/' + sid)
+          .then((st) => {
+            this.stu = st
+            if (st?.name && myRole() === 'student' && !S.profile.name) {
+              S.profile.name = st.name
+              save()
+            }
+            onSyncChange('members')
           })
+          .catch(() => {})
       }
     } catch {
       this.setStatus('error')
@@ -2938,7 +3088,6 @@ const Sync = {
     if (this.last) this.presence(this.last)
     this.retry(50 * 60000) // 識別證一小時過期：快到了就重新開始
   },
-  // 被移除或權限改變：重新確認身分
   recheck() {
     clearTimeout(this.rc)
     this.rc = setTimeout(() => this.start(), 600)
@@ -2961,56 +3110,80 @@ const Sync = {
     if (seg.length === 1) return [[seg[0], data]]
     return []
   },
-  // put '/' 是整包、patch '/' 是部分、'/<id>' 是一筆、'/<id>/<欄位>' 是一個欄位
-  mergeMap(name, p, data, ev) {
-    const seg = p.split('/').filter(Boolean)
-    if (!seg.length) {
-      if (ev === 'patch') Object.assign(this[name], data || {})
-      else this[name] = data || {}
-    } else if (seg.length === 1) {
-      if (data === null) delete this[name][seg[0]]
-      else this[name][seg[0]] = data
-    } else {
-      const o = (this[name][seg[0]] ||= {})
-      if (data === null) delete o[seg[1]]
-      else o[seg[1]] = data
-    }
-    onSyncChange(name === 'live' ? 'live' : 'members')
-  },
-  // 管理裝置收到整個班級的串流：依第一層（a／s／live／members／blocked／open）分給各自的處理
+  // 管理裝置：整個班級的串流
   mergeAll(p, data, ev) {
     const seg = p.split('/').filter(Boolean)
-    if (!seg.length) {
-      if (ev === 'patch') return Object.entries(data || {}).forEach(([k, v]) => this.mergeAll('/' + k, v, 'put'))
-      const d = data || {}
-      this.mergeAttempts('/', d.a)
-      this.mergeSessions('/', d.s)
-      this.mergeMap('live', '/', d.live || null, 'put')
-      this.mergeMap('blocked', '/', d.blocked || null, 'put')
-      this.open = d.open !== false
-      return this.mergeMembers('/', d.members || null, 'put')
-    }
-    const rest = '/' + seg.slice(1).join('/')
-    if (seg[0] === 'a') this.mergeAttempts(rest, data)
-    else if (seg[0] === 's') this.mergeSessions(rest, data)
-    else if (seg[0] === 'live' || seg[0] === 'blocked') this.mergeMap(seg[0], rest, data, ev)
-    else if (seg[0] === 'members') this.mergeMembers(rest, data, ev)
-    else if (seg[0] === 'open') {
-      this.open = data !== false
-      onSyncChange('members')
-    }
+    const before = this.loaded ? new Set(Object.keys(this.members)) : null
+    this.D = applyAt(this.D, seg, data, ev) || {}
+    this.ver++
+    this.loaded = true
+    const top = seg[0] || ''
+    if (before)
+      for (const [uid, m] of Object.entries(this.members)) {
+        if (before.has(uid) || uid === Auth.uid() || !m) continue
+        const nm = this.students[m.sid]?.name
+        toast(`新成員加入：${ROLES[m.role] || '成員'}${nm ? `（${nm}）` : ''}・${m.dev || '裝置'}`, ROLE_IC[m.role] || '👋')
+      }
+    // 上課模式：把這個學生在其他裝置的紀錄也合併進這台
+    if (ACTIVE && (!top || top === 'a')) this.mergeAttempts('/', this.D.a?.[ACTIVE])
+    if (ACTIVE && (!top || top === 's')) this.mergeSessions('/', this.D.s?.[ACTIVE])
+    if (!top || ['a', 's', 'members', 'tkey'].includes(top)) this.migrateSoon()
+    onSyncChange(!top ? 'all' : top === 'a' || top === 's' ? 'a' : top === 'live' ? 'live' : 'members')
   },
-  // 名單：有新成員加入時通知管理裝置
-  mergeMembers(p, data, ev) {
-    const before = new Set(Object.keys(this.members))
-    this.mergeMap('members', p, data, ev)
-    if (!this.membersLoaded) {
-      this.membersLoaded = true
-      return
-    }
-    for (const [uid, m] of Object.entries(this.members)) {
-      if (before.has(uid) || uid === Auth.uid() || !m) continue
-      toast(`新成員加入：${ROLES[m.role] || '成員'}${m.name ? '・' + m.name : ''}（${m.dev || '裝置'}）`, ROLE_IC[m.role] || '👋')
+  attemptsOf(sid) {
+    const c = this.cache['a' + sid]
+    if (c && c.ver === this.ver) return c.list
+    const list = Object.values(this.D.a?.[sid] || {})
+      .filter((a) => a && typeof a.q === 'string' && a.ts)
+      .sort((x, y) => x.ts - y.ts)
+    this.cache['a' + sid] = { ver: this.ver, list }
+    return list
+  },
+  sessionsOf(sid) {
+    return Object.values(this.D.s?.[sid] || {})
+      .filter((s) => s && s.ts)
+      .sort((x, y) => x.ts - y.ts)
+  },
+  // 2.1 以前只有一個學生，紀錄直接放在 a／s 底下：由建立後台的裝置搬進「學生」
+  migrateSoon() {
+    if (this.state !== 'owner') return
+    clearTimeout(this.mt)
+    this.mt = setTimeout(() => this.migrate(), 800)
+  },
+  async migrate() {
+    if (this.migrating || this.state !== 'owner') return
+    this.migrating = true
+    try {
+      const D = this.D
+      if (!D.tkey) await this.req('PUT', 'tkey', newCode())
+      const flatA = Object.entries(D.a || {}).filter(([, v]) => v && typeof v.q === 'string')
+      const flatS = Object.entries(D.s || {}).filter(([, v]) => v && typeof v.k === 'string')
+      const flatL = Object.entries(D.live || {}).filter(([, v]) => v && v.ts)
+      const noSid = Object.entries(D.members || {}).filter(([, m]) => m && m.role !== 'teacher' && !m.sid)
+      const oldT = Object.entries(D.members || {}).filter(([, m]) => m && m.role === 'teacher' && m.admin === undefined)
+      if (!flatA.length && !flatS.length && !flatL.length && !noSid.length && !oldT.length) return
+      let sid = D.legacy
+      if (!sid && (flatA.length || flatS.length || noSid.length)) {
+        const name = noSid.find(([, m]) => m.role === 'student' && m.name)?.[1].name || flatL.map(([, l]) => l).find((l) => (l.role || 'student') === 'student' && l.name)?.name || '學生'
+        sid = newSid()
+        await this.req('PUT', 'students/' + sid, { name: name.slice(0, 20), at: Date.now() })
+        await this.req('PUT', 'legacy', sid)
+      }
+      if (sid && flatA.length) {
+        await this.req('PATCH', 'a/' + sid, Object.fromEntries(flatA))
+        await this.req('PATCH', 'a', Object.fromEntries(flatA.map(([k]) => [k, null])))
+      }
+      if (sid && flatS.length) {
+        await this.req('PATCH', 's/' + sid, Object.fromEntries(flatS))
+        await this.req('PATCH', 's', Object.fromEntries(flatS.map(([k]) => [k, null])))
+      }
+      if (flatL.length) await this.req('PATCH', 'live', Object.fromEntries(flatL.map(([k]) => [k, null])))
+      for (const [uid] of noSid) if (sid) await this.req('PUT', `members/${uid}/sid`, sid)
+      for (const [uid] of oldT) await this.req('PUT', `members/${uid}/admin`, true) // 2.0 用老師連結加入的裝置：維持看得到全部
+    } catch {
+      this.migrateSoon() // 規則還沒更新之類的：等下一次變動再試
+    } finally {
+      this.migrating = false
     }
   },
   mergeAttempts(p, data) {
@@ -3053,14 +3226,18 @@ const Sync = {
       onSyncChange('s', add)
     }
   },
-  // 加入：建立班級（owner）或點連結加入；以前的紀錄排進佇列，加入後一起上傳
-  pair(code, role, { owner = false } = {}) {
-    S.sync = { code, role, at: Date.now(), owner, joined: !owner }
+  // 連結：建立老師後台（owner）或加入（學生、家長帶學生代號 sid；老師帶鑰匙 tkey）
+  pair(code, role, { owner = false, sid = '', tkey = '' } = {}) {
+    S.sync = { code, role, at: Date.now(), owner, ...(sid ? { sid } : {}), ...(tkey ? { tkey } : {}) }
     S.profile.role = role
     if (!S.profile.device) S.profile.device = role === 'teacher' ? '老師平板' : ROLES[role]
-    S.syncQ = [...S.attempts.filter((a) => a.d === S.profile.id).map((a) => ['a', a]), ...S.sessions.filter((s) => s.d === S.profile.id).map((s) => ['s', s])]
+    // 學生：這台以前的紀錄也一起傳上去
+    S.syncQ = role === 'student' ? [...S.attempts.filter((a) => a.d === S.profile.id).map((a) => ['a', a, sid]), ...S.sessions.filter((s) => s.d === S.profile.id).map((s) => ['s', s, sid])] : []
     const n = S.syncQ.filter(([k]) => k === 'a').length
     if (n) S.sync.backfill = n
+    this.D = {}
+    this.live = {}
+    this.stu = null
     save()
     return this.start()
   },
@@ -3069,16 +3246,16 @@ const Sync = {
     this.stop()
     delete S.sync
     S.syncQ = []
+    this.D = {}
     this.live = {}
-    this.members = {}
-    this.blocked = {}
+    this.stu = null
     save()
     this.setState('off')
   },
-  // 管理裝置的操作
+  // ── 管理裝置的操作 ──
   async remove(uid) {
     const m = this.members[uid] || {}
-    await this.req('PUT', 'blocked/' + uid, { role: m.role || '', name: m.name || '', dev: m.dev || '', at: Date.now() })
+    await this.req('PUT', 'blocked/' + uid, { role: m.role || '', name: m.name || '', dev: m.dev || '', sid: m.sid || '', at: Date.now() })
     await this.req('DELETE', 'members/' + uid)
   },
   async unblock(uid) {
@@ -3089,25 +3266,90 @@ const Sync = {
   },
   async setOpen(v) {
     await this.req('PUT', 'open', !!v)
-    this.open = !!v
+    this.D.open = !!v
+  },
+  async addStudent(name) {
+    const sid = newSid()
+    const st = { name: name.slice(0, 20), at: Date.now() }
+    await this.req('PUT', 'students/' + sid, st)
+    this.D = applyAt(this.D, ['students', sid], st, 'put')
+    return sid
+  },
+  async renameStudent(sid, name) {
+    await this.req('PUT', `students/${sid}/name`, name.slice(0, 20))
+  },
+  // 刪除學生：這個學生的裝置都移出，紀錄、代碼一起刪掉
+  async deleteStudent(sid) {
+    const st = this.students[sid] || {}
+    for (const [uid, m] of Object.entries(this.members)) if (m?.sid === sid) await this.req('DELETE', 'members/' + uid)
+    if (st.code) await this.req('DELETE', 'codes/' + st.code, undefined, true).catch(() => {})
+    for (const k of ['a', 's', 'live']) await this.req('DELETE', `${k}/${sid}`)
+    await this.req('DELETE', 'students/' + sid)
+  },
+  // 6 碼代碼（學生、家長共用）：7 天有效，過期或按「重新產生」就換一組
+  async ensureCode(sid, force = false) {
+    const st = this.students[sid]
+    if (!st) throw new Error('no student')
+    if (!force && st.code && (st.codeExp || 0) > Date.now() + DAY) return st
+    const old = st.code // 先記下來：寫入後串流會馬上把 st 改成新代碼
+    for (let i = 0; i < 3; i++) {
+      const k = randStr(6)
+      const exp = Date.now() + 7 * DAY
+      try {
+        await this.req('PUT', 'codes/' + k, { c: this.code(), s: sid, exp }, true)
+      } catch (e) {
+        if (e.status === 401 || e.status === 403) continue // 剛好撞到別人的代碼：換一組
+        throw e
+      }
+      await this.req('PATCH', 'students/' + sid, { code: k, codeExp: exp })
+      if (old && old !== k) this.req('DELETE', 'codes/' + old, undefined, true).catch(() => {})
+      this.D = applyAt(this.D, ['students', sid], { code: k, codeExp: exp }, 'patch')
+      return this.students[sid]
+    }
+    throw new Error('code')
+  },
+  async resetTeacherKey() {
+    await this.req('PUT', 'tkey', newCode())
   },
 }
 function addSession(s) {
   S.sessions.push(s)
   Sync.queue('s', s)
 }
+// 代碼 → 班級、學生
+async function lookupCode(raw) {
+  const k = String(raw || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+  if (k.length !== 6) return { err: '代碼是 6 個英文字母或數字' }
+  try {
+    const d = await Sync.req('GET', 'codes/' + k, undefined, true)
+    if (!d || !d.c || !d.s) return { err: '找不到這個代碼，請再確認一次' }
+    if (d.exp < Date.now()) return { err: '這個代碼已經過期了，請老師重新產生' }
+    return d
+  } catch {
+    return { err: '現在連不上，請檢查網路再試一次' }
+  }
+}
+// 這台是老師後台（建立後台或用老師連結加入），而且不在上課模式
+const teacherMode = () => !ACTIVE && !!S.sync?.code && myRole() === 'teacher'
 // 管理裝置：還沒看過的新成員（首頁通知、設定分頁的紅點）
 function newMembers() {
-  if (!Sync.isAdmin() || !Auth.ok()) return []
+  if (!Sync.isAdmin() || ACTIVE) return []
   const seen = S.sync?.seenAt || S.sync?.at || 0
-  return Object.entries(Sync.members || {}).filter(([uid, m]) => m && uid !== Auth.uid() && (m.at || 0) > seen)
+  return Object.entries(Sync.members).filter(([uid, m]) => m && uid !== Auth.uid() && (m.at || 0) > seen)
 }
 const pendingCount = () => newMembers().length
 // 同步收到新資料或身分改變：在相關畫面上就地更新
 let syncRedraw = 0
-function onSyncChange(kind) {
+let syncKinds = new Set() // 250 毫秒內收到的變動種類都要記住（不能只留最後一個）
+function onSyncChange(k) {
+  syncKinds.add(k)
   clearTimeout(syncRedraw)
   syncRedraw = setTimeout(() => {
+    const ks = syncKinds
+    syncKinds = new Set()
+    const kind = ks.has('state') ? 'state' : ks.has('all') ? 'all' : ks.has('members') ? 'members' : ks.has('a') || ks.has('s') ? 'a' : [...ks][0]
     const h = location.hash || '#/'
     const tb = $('.tabbar a[href="#/settings"]')
     if (tb) {
@@ -3126,17 +3368,22 @@ function onSyncChange(kind) {
     } else if (sheetClose) {
       // 上面有開著的視窗：只更新設定頁的同步區塊，不要整頁重畫（會把視窗關掉）
       const sec = h === '#/settings' && $('#sync-sec')
-      if (sec && (kind === 'state' || kind === 'members')) sec.innerHTML = syncSettingsHTML(myRole())
+      if (sec && (kind === 'state' || kind === 'members' || kind === 'all')) sec.innerHTML = syncSettingsHTML(myRole())
       return
     }
+    const any = kind === 'state' || kind === 'all'
     if (h === '#/live') return viewLive(true)
+    if (h === '#/students') return viewStudents(true)
+    if (h.startsWith('#/student/')) return viewStudent(h.split('/')[2], true)
     // 成員管理：只在名單變動時重畫（避免按鈕在手指下被換掉）
-    if (h === '#/manage') return kind === 'members' || kind === 'state' ? viewManage(true) : undefined
-    if (h === '#/settings' && (kind === 'state' || kind === 'members')) return viewSettings()
-    if ((kind === 'a' || kind === 's') && (h === '#/stats' || h === '#/book')) return route(true)
+    if (h === '#/manage') return kind === 'members' || any ? viewManage(true) : undefined
+    if (h === '#/settings' && (kind === 'members' || any)) return viewSettings()
+    if ((kind === 'a' || kind === 's' || any) && (h === '#/stats' || h === '#/book')) return route(true)
     if (h === '#/' || h === '') {
       const b = $('.live-banner')
       if (b) b.outerHTML = liveBannerHTML() || '<div class="live-banner" hidden></div>'
+      const c = $('.stu-card')
+      if (c) c.outerHTML = studentsCardHTML() || '<div class="stu-card" hidden></div>'
     }
   }, 250)
 }
@@ -3147,58 +3394,126 @@ const agoText = (ts) => {
 function liveText(l) {
   if (!l) return '還沒有上線'
   const fresh = Date.now() - l.ts < 10 * 60000
-  if (l.view === 'run' && fresh) return `正在做：${l.title}・第 ${l.n}／${l.of} 題`
-  if (l.view === 'exam' && fresh) return '正在寫模擬段考'
-  if (l.view === 'flash' && fresh) return '正在玩閃電挑戰'
+  const where = l.dev === '上課平板' ? '（上課中）' : ''
+  if (l.view === 'run' && fresh) return `正在做：${l.title}・第 ${l.n}／${l.of} 題${where}`
+  if (l.view === 'exam' && fresh) return `正在寫模擬段考${where}`
+  if (l.view === 'flash' && fresh) return `正在玩閃電挑戰${where}`
   if (l.view === 'away' || !fresh) return `離開 App（${agoText(l.ts)}）`
-  return `在 App 裡（${agoText(l.ts)}）`
+  return `在 App 裡${where}（${agoText(l.ts)}）`
 }
+const isActive = (l) => !!l && l.view !== 'away' && Date.now() - l.ts < 10 * 60000
 // 身分：學生的裝置會被「看」；老師、家長的裝置是用來看學生的
 const ROLES = { student: '學生', teacher: '老師', parent: '家長' }
 const ROLE_IC = { student: '🎒', teacher: '📚', parent: '👪' }
-const myRole = () => S.sync?.role || S.profile.role || 'student'
-function others() {
-  return Object.entries(Sync.live || {}).filter(([id, l]) => id !== S.profile.id && l)
-}
+const myRole = () => (ACTIVE ? 'student' : S.sync?.role || S.profile.role || 'student')
+// 學生、家長：同一個學生的其他裝置
 function studentsLive() {
-  return others().filter(([, l]) => (l.role || 'student') === 'student')
+  return Object.entries(Sync.live || {}).filter(([id, l]) => id !== S.profile.id && l && (l.role || 'student') === 'student')
 }
-// 首頁橫幅：新成員加入（管理裝置）＞ 學生正在練習（老師、家長）
+// 管理裝置：某個學生最近的狀態
+function latestLive(sid) {
+  return Object.values(Sync.D.live?.[sid] || {})
+    .filter((l) => l && (l.role || 'student') === 'student')
+    .sort((a, b) => b.ts - a.ts)[0]
+}
+const studentIds = () =>
+  Object.entries(Sync.students)
+    .filter(([, s]) => s)
+    .sort((a, b) => (a[1].at || 0) - (b[1].at || 0))
+    .map(([sid]) => sid)
+// 首頁橫幅：新成員加入（管理裝置）＞ 學生正在練習
 function liveBannerHTML() {
   const nm = newMembers()
   if (nm.length) {
     const m = nm[nm.length - 1][1]
-    return `<button class="live-banner card req" data-go="#/manage"><span class="req-ic">🔔</span><span class="lb-t"><b>新成員加入</b>　${esc(`${ROLES[m.role] || '成員'}${m.name ? '・' + m.name : ''}（${m.dev || '裝置'}）`)}${nm.length > 1 ? ` 等 ${nm.length} 位` : ''}</span><span class="lb-go">查看名單 ${ICON.chev}</span></button>`
+    const sn = Sync.students[m.sid]?.name
+    return `<button class="live-banner card req" data-go="#/manage"><span class="req-ic">🔔</span><span class="lb-t"><b>新成員加入</b>　${esc(`${ROLES[m.role] || '成員'}${sn ? `（${sn}）` : ''}・${m.dev || '裝置'}`)}${nm.length > 1 ? ` 等 ${nm.length} 位` : ''}</span><span class="lb-go">查看 ${ICON.chev}</span></button>`
   }
   if (!Sync.ready() || myRole() === 'student') return ''
-  const act = studentsLive().filter(([, l]) => Date.now() - l.ts < 10 * 60000 && l.view !== 'away')
+  if (Sync.isAdmin()) {
+    const act = studentIds()
+      .map((sid) => [sid, latestLive(sid)])
+      .filter(([, l]) => isActive(l))
+      .sort((a, b) => b[1].ts - a[1].ts)
+    if (!act.length) return ''
+    const [sid, l] = act[0]
+    return `<button class="live-banner card" data-stu="${sid}"><span class="live-pulse"></span><span class="lb-t"><b>${esc(Sync.students[sid]?.name || '學生')}</b>　${esc(liveText(l))}</span><span class="lb-go">看即時作答 ${ICON.chev}</span></button>`
+  }
+  const act = studentsLive().filter(([, l]) => isActive(l))
   if (!act.length) return ''
   const [, l] = act.sort((a, b) => b[1].ts - a[1].ts)[0]
-  return `<button class="live-banner card" data-go="#/live"><span class="live-pulse"></span><span class="lb-t"><b>${esc(l.name || l.dev)}</b>　${esc(liveText(l))}</span><span class="lb-go">看即時作答 ${ICON.chev}</span></button>`
+  return `<button class="live-banner card" data-go="#/live"><span class="live-pulse"></span><span class="lb-t"><b>${esc(Sync.stu?.name || l.name || l.dev)}</b>　${esc(liveText(l))}</span><span class="lb-go">看即時作答 ${ICON.chev}</span></button>`
+}
+// 老師後台：學生列表的一列
+function stuRowHTML(sid) {
+  const st = Sync.students[sid] || {}
+  const list = Sync.attemptsOf(sid)
+  const t0 = dayStart()
+  const today = list.filter((a) => a.ts >= t0)
+  const ok = today.filter((a) => a.r === 'ok').length
+  const l = latestLive(sid)
+  const last = list[list.length - 1]
+  return `<button class="row stu-row" data-stu="${sid}"><span class="ld-dot${isActive(l) ? ' on' : ''}"></span><span class="row-t"><b>${esc(st.name || '學生')}</b><small>${esc(isActive(l) ? liveText(l) : last ? `最後練習：${agoText(last.ts)}` : '還沒有練習紀錄')}</small></span><span class="row-r">${today.length ? `今天 ${today.length} 題・對 ${Math.round((ok / today.length) * 100)}%` : ''}</span>${ICON.chev}</button>`
+}
+function studentsCardHTML() {
+  if (!teacherMode()) return ''
+  const ids = studentIds()
+  return `<section class="card stu-card"><div class="sec-h"><div><h2>學生</h2><p>${!Sync.loaded ? '載入中…' : ids.length ? `${ids.length} 位・點一位看即時作答` : '還沒有學生'}</p></div><button class="link" data-go="#/students">全部</button></div>
+    ${ids.length ? `<div class="list flat">${ids.slice(0, 6).map(stuRowHTML).join('')}</div>` : Sync.loaded ? '<button class="btn primary" data-go="#/students">新增第一個學生</button>' : ''}</section>`
 }
 // 沒辦法加入時的說明
 function joinStatusHTML() {
   const st = Sync.state
   const stu = myRole() === 'student'
-  if (st === 'closed') return `<div class="js-ic">🔒</div><h2>這個班級目前暫停加入</h2><p class="muted">請跟老師說一聲。開放加入之後，這台會自動加入，不用再點一次連結。</p><button class="btn primary" data-rejoin>現在再試一次</button>`
-  if (st === 'removed') return `<div class="js-ic">🚫</div><h2>這台裝置已經被移出班級</h2><p class="muted">如果是誤會，請跟老師說一聲；老師允許之後，再按下面的按鈕就能重新加入。</p><button class="btn primary" data-rejoin>再試一次</button>`
-  if (st === 'member' || st === 'owner') return `<div class="js-ic">✅</div><h2>已加入</h2><p class="muted">${stu ? '你在這台做的題目，老師都會即時看到。' : '可以在「即時作答」看學生的練習。'}</p>`
+  if (st === 'closed') return `<div class="js-ic">🔒</div><h2>目前暫停加入</h2><p class="muted">請跟老師說一聲。開放加入之後，這台會自動加入，不用再點一次連結。</p><button class="btn primary" data-rejoin>現在再試一次</button>`
+  if (st === 'removed') return `<div class="js-ic">🚫</div><h2>這台裝置已經被移出</h2><p class="muted">如果是誤會，請跟老師說一聲；老師允許之後，再按下面的按鈕就能重新加入。</p><button class="btn primary" data-rejoin>再試一次</button>`
+  if (st === 'invalid') return `<div class="js-ic">⚠️</div><h2>沒辦法加入</h2><p class="muted">這個連結可能已經失效，或這台已經被移出。請跟老師要新的連結或代碼。</p><button class="btn primary" data-rejoin>再試一次</button>`
+  if (st === 'wait') return `<div class="js-ic">⏳</div><h2>正在更新</h2><p class="muted">老師那邊打開 App 之後就會完成，不用做任何事。</p>`
+  if (st === 'member' || st === 'owner') return `<div class="js-ic">✅</div><h2>已加入</h2><p class="muted">${stu ? '你在這台做的題目，老師都會即時看到。' : '可以在這裡即時看到學生的練習。'}</p>`
   return `<div class="js-ic">📡</div><h2>連線中…</h2><p class="muted">網路不穩時會自動重試。</p>`
 }
 document.addEventListener('click', (e) => {
   if (e.target.closest('[data-rejoin]')) {
     if (S.sync) {
       delete S.sync.removed
+      delete S.sync.fail
       S.sync.member = false
       save()
     }
     Sync.start()
     toast('再試一次…', '📨')
   }
+  const s = e.target.closest('[data-stu]')
+  if (s) go('#/student/' + s.dataset.stu)
+  if (e.target.closest('[data-endclass]')) endClass()
 })
 
-// 老師、家長看：學生正在做哪一題、每一題答了什麼（即時更新）
+// 一個學生的作答紀錄（即時更新；點一題看完整題目與解析）
+function feedHTML(list) {
+  const feed = list.slice(-40).reverse()
+  return feed.length
+    ? `<div class="list flat live-feed">${feed
+        .map((a) => {
+          const it = ITEM[a.q]
+          if (!it) return ''
+          return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・有點猜' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
+        })
+        .join('')}</div>`
+    : '<p class="muted pad">還沒有作答紀錄。</p>'
+}
+function feedClick(e, list) {
+  const r = e.target.closest('[data-att]')
+  if (!r) return
+  const a = list.find((x) => Sync.akey(x) === r.dataset.att)
+  if (!a) return
+  const b = sheet(`<h2 class="sheet-title">學生的作答</h2><p class="sheet-p">${esc(fmtTime(a.ts))}</p><div class="review-slot"></div>`, { wide: true })
+  $('.review-slot', b).append(reviewCard(ITEM[a.q], a, '學生的答案'))
+}
+const syncPill = () => `<span class="sync-pill"><i class="sync-dot" data-s="${Sync.status}"></i>${{ on: '已連線', connecting: '連線中', error: '重新連線中', off: '未連線' }[Sync.status] || ''}</span>`
+
+// 家長（和學生的其他裝置）：這個學生正在做哪一題、每一題答了什麼
 function viewLive(keepScroll = false) {
+  if (teacherMode()) return viewStudents(keepScroll)
   const y = window.scrollY
   if (!Sync.ready()) {
     setView(
@@ -3206,113 +3521,272 @@ function viewLive(keepScroll = false) {
       ${
         Sync.paired()
           ? `<div class="empty card join-status">${joinStatusHTML()}</div>`
-          : `<div class="empty card"><div class="empty-ic">📡</div><h2>還沒有加入班級</h2><p class="muted">點老師傳來的加入連結，就能在這裡即時看到學生的練習。</p><button class="btn primary" data-go="#/settings">去設定</button></div>`
+          : `<div class="empty card"><div class="empty-ic">📡</div><h2>還沒有連結老師</h2><p class="muted">點老師傳來的連結、掃 QR Code，或到「設定」輸入代碼，就能在這裡即時看到孩子的練習。</p><button class="btn primary" data-go="#/settings">去設定</button></div>`
       }</div>`,
     )
     $('.page').addEventListener('click', (e) => e.target.closest('[data-go]') && go(e.target.closest('[data-go]').dataset.go))
     if (keepScroll) window.scrollTo(0, y)
     return
   }
-  // 學生的裝置（看得到「正在做哪一題」）＋其他有作答紀錄的裝置（例如上課用的老師平板）
-  const devs = new Map()
-  for (const [id, l] of studentsLive()) devs.set(id, l)
-  for (const a of S.attempts) if (a.d !== S.profile.id && !devs.has(a.d)) devs.set(a.d, Sync.live?.[a.d] || null)
   const t0 = dayStart()
-  const cards = [...devs.entries()]
-    .sort((x, y) => ((y[1]?.role || 'student') === 'student') - ((x[1]?.role || 'student') === 'student') || (y[1]?.ts || 0) - (x[1]?.ts || 0))
-    .map(([id, l]) => {
-      const mine = S.attempts.filter((a) => a.d === id)
-      const today = mine.filter((a) => a.ts >= t0)
-      const ok = today.filter((a) => a.r === 'ok').length
-      const care = today.filter((a) => a.r === 'care').length
-      const feed = mine.slice(-40).reverse()
-      const isStudent = (l?.role || 'student') === 'student'
-      const active = isStudent && l && l.view !== 'away' && Date.now() - l.ts < 10 * 60000
-      const who = isStudent ? l?.name || l?.dev || '學生' : `${l?.dev || ROLES[l?.role] || '其他裝置'}・上課時的練習`
-      return `<section class="card live-dev">
-        <div class="ld-head"><span class="ld-dot${active ? ' on' : ''}"></span><div class="ld-who"><b>${esc(who)}</b><span>${esc(isStudent ? liveText(l) : '在這台裝置上做的題目')}</span></div>
-          <div class="ld-today"><b>${today.length}</b> 題<span>今天・對 ${ok}${care ? `・粗心 ${care}` : ''}</span></div></div>
-        ${
-          feed.length
-            ? `<div class="list flat live-feed">${feed
-                .map((a) => {
-                  const it = ITEM[a.q]
-                  if (!it) return ''
-                  return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・有點猜' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
-                })
-                .join('')}</div>`
-            : '<p class="muted pad">還沒有作答紀錄。</p>'
-        }
-      </section>`
-    })
-    .join('')
+  const list = S.attempts
+  const today = list.filter((a) => a.ts >= t0)
+  const ok = today.filter((a) => a.r === 'ok').length
+  const care = today.filter((a) => a.r === 'care').length
+  const l = studentsLive().sort((a, b) => b[1].ts - a[1].ts)[0]?.[1]
+  const name = Sync.stu?.name || l?.name || '學生'
   setView(
     `<div class="page narrow live-page">
-      ${header('即時作答', '學生每答一題，這裡幾秒內就會更新。點一題可以看完整題目與解析。', `<span class="sync-pill"><i class="sync-dot" data-s="${Sync.status}"></i>${{ on: '已連線', connecting: '連線中', error: '重新連線中', off: '未連線' }[Sync.status] || ''}</span>`, true)}
-      ${cards || `<div class="empty card"><div class="empty-ic">⏳</div><h2>等學生上線</h2><p class="muted">學生點了加入連結之後，就會出現在這裡。</p>${Sync.isAdmin() ? '<button class="btn primary" data-share-pair>傳送加入連結</button>' : ''}</div>`}
+      ${header('即時作答', '每答一題，這裡幾秒內就會更新。點一題可以看完整題目與解析。', syncPill(), true)}
+      <section class="card live-dev">
+        <div class="ld-head"><span class="ld-dot${isActive(l) ? ' on' : ''}"></span><div class="ld-who"><b>${esc(name)}</b><span>${esc(liveText(l))}</span></div>
+          <div class="ld-today"><b>${today.length}</b> 題<span>今天・對 ${ok}${care ? `・粗心 ${care}` : ''}</span></div></div>
+        ${feedHTML(list)}
+      </section>
+      ${selfRecHTML(list, S.sessions)}
     </div>`,
   )
   if (keepScroll) window.scrollTo(0, y)
-  $('.live-page').addEventListener('click', (e) => {
-    const r = e.target.closest('[data-att]')
-    if (r) {
-      const a = S.attempts.find((x) => Sync.akey(x) === r.dataset.att)
-      if (a) {
-        const b = sheet(`<h2 class="sheet-title">學生的作答</h2><p class="sheet-p">${esc(fmtTime(a.ts))}</p><div class="review-slot"></div>`, { wide: true })
-        $('.review-slot', b).append(reviewCard(ITEM[a.q], a, '學生的答案'))
+  $('.live-page').addEventListener('click', (e) => feedClick(e, list))
+}
+
+// 老師後台：學生列表
+function viewStudents(keepScroll = false) {
+  const y = window.scrollY
+  if (!Sync.isAdmin()) {
+    if (teacherMode()) setView(`<div class="page narrow">${header('學生', '', '', false)}<div class="empty card join-status">${joinStatusHTML()}</div></div>`)
+    else go('#/settings')
+    return
+  }
+  const ids = studentIds()
+  setView(
+    `<div class="page narrow stu-page">
+      ${header('學生', '每個學生各自獨立：學生和家長只看得到自己的紀錄。', syncPill())}
+      ${ids.length ? `<div class="list stu-list">${ids.map(stuRowHTML).join('')}</div>` : `<div class="empty card"><div class="empty-ic">🎒</div><h2>${Sync.loaded ? '還沒有學生' : '載入中…'}</h2><p class="muted">新增學生之後，把 QR Code、連結或代碼給學生和家長，就能即時看到練習。</p></div>`}
+      <div class="sheet-actions"><button class="btn primary big" data-add>＋ 新增學生</button></div>
+      <div class="group"><div class="list">
+        <button class="row" data-go="#/manage"><span class="row-ic">👥</span><span class="row-t">成員管理<small>看哪些裝置加入了、移除裝置、暫停加入</small></span>${pendingCount() ? `<b class="row-badge">${pendingCount()}</b>` : ''}${ICON.chev}</button>
+      </div></div>
+    </div>`,
+  )
+  if (keepScroll) window.scrollTo(0, y)
+  $('.stu-page').addEventListener('click', (e) => {
+    if (e.target.closest('[data-add]')) return addStudentSheet()
+    const g = e.target.closest('[data-go]')
+    if (g) go(g.dataset.go)
+  })
+}
+function addStudentSheet() {
+  const b = sheet(`<h2 class="sheet-title">新增學生</h2>
+    <div class="list form"><label class="row field"><span class="row-t">暱稱<small>學生和家長會看到，可以用英文名字</small></span><input id="ns-name" placeholder="例如：Amy" maxlength="20" autocomplete="off"></label></div>
+    <div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn primary" data-ok>新增</button></div>`)
+  const inp = $('#ns-name', b)
+  setTimeout(() => inp.focus(), 300)
+  const ok = async () => {
+    const n = inp.value.trim()
+    if (!n) return inp.focus()
+    $('[data-ok]', b).disabled = true
+    try {
+      const sid = await Sync.addStudent(n)
+      closeSheet()
+      go('#/student/' + sid)
+      setTimeout(() => shareStudent(sid, 'student'), 350)
+    } catch {
+      $('[data-ok]', b).disabled = false
+      toast('沒有成功，請檢查網路再試一次', '⚠️')
+    }
+  }
+  $('[data-ok]', b).onclick = ok
+  inp.addEventListener('keydown', (e) => e.key === 'Enter' && ok())
+}
+
+// 老師後台：一個學生的詳細（即時作答、常錯的地方、跟自己比、上課、傳連結）
+function viewStudent(sid, keepScroll = false) {
+  if (!Sync.isAdmin()) return viewStudents()
+  const st = Sync.students[sid]
+  if (!st) {
+    if (Sync.loaded) return go('#/students')
+    return setView(`<div class="page narrow">${header('學生', '', '', true)}<div class="empty card"><div class="empty-ic">📡</div><h2>載入中…</h2></div></div>`)
+  }
+  const y = window.scrollY
+  const list = Sync.attemptsOf(sid)
+  const sess = Sync.sessionsOf(sid)
+  const t0 = dayStart()
+  const today = list.filter((a) => a.ts >= t0)
+  const ok = today.filter((a) => a.r === 'ok').length
+  const l = latestLive(sid)
+  const devs = Object.values(Sync.members).filter((m) => m?.sid === sid)
+  const nS = devs.filter((m) => m.role === 'student').length
+  const nP = devs.filter((m) => m.role === 'parent').length
+  const tc = tagCounts(list.filter((a) => a.ts >= Date.now() - 14 * DAY)).slice(0, 5)
+  const max = tc[0]?.[1] || 1
+  setView(
+    `<div class="page narrow stu-detail">
+      ${header(st.name || '學生', `學生的裝置 ${nS} 台・家長的裝置 ${nP} 台`, syncPill(), true)}
+      <div class="stu-actions">
+        <button class="btn primary" data-class>${ICON.play}<span>上課（用這台）</span></button>
+        <button class="btn ghost" data-share="student">傳給學生</button>
+        <button class="btn ghost" data-share="parent">傳給家長</button>
+      </div>
+      <section class="card live-dev">
+        <div class="ld-head"><span class="ld-dot${isActive(l) ? ' on' : ''}"></span><div class="ld-who"><b>即時作答</b><span>${esc(liveText(l))}</span></div>
+          <div class="ld-today"><b>${today.length}</b> 題<span>今天${today.length ? `・對 ${Math.round((ok / today.length) * 100)}%` : ''}</span></div></div>
+        ${feedHTML(list)}
+      </section>
+      ${
+        tc.length
+          ? `<section class="card"><div class="sec-h"><div><h2>最近兩週常錯的地方</h2><p>上課可以從這裡開始講。</p></div></div><div class="bars">${tc
+              .map(([t, n]) => `<div class="bar-row static"><span class="bar-k">${TAGS[t] || t}${FORMAT_TAGS.includes(t) ? '<em>格式</em>' : ''}</span><span class="bar-track"><i style="width:${(n / max) * 100}%"></i></span><span class="bar-v">${n}</span></div>`)
+              .join('')}</div></section>`
+          : ''
+      }
+      ${selfRecHTML(list, sess)}
+      <div class="group"><div class="list">
+        <button class="row" data-rename><span class="row-ic">✏️</span><span class="row-t">改暱稱</span>${ICON.chev}</button>
+        <button class="row" data-go="#/manage"><span class="row-ic">👥</span><span class="row-t">裝置管理<small>看這個學生、家長有哪些裝置，可以移除</small></span>${ICON.chev}</button>
+        <button class="row danger" data-delstu><span class="row-t">刪除這個學生</span></button>
+      </div><p class="group-f">刪除後，這個學生和家長的裝置都會被移出，雲端的練習紀錄也會刪掉（各自裝置上的紀錄還在）。</p></div>
+    </div>`,
+  )
+  if (keepScroll) window.scrollTo(0, y)
+  $('.stu-detail').addEventListener('click', (e) => {
+    feedClick(e, list)
+    const sh = e.target.closest('[data-share]')
+    if (sh) return shareStudent(sid, sh.dataset.share)
+    if (e.target.closest('[data-class]')) return enterClass(sid)
+    const g = e.target.closest('[data-go]')
+    if (g) return go(g.dataset.go)
+    if (e.target.closest('[data-rename]')) {
+      const b = sheet(`<h2 class="sheet-title">改暱稱</h2><div class="list form"><label class="row field"><span class="row-t">暱稱</span><input id="rn" value="${esc(st.name || '')}" maxlength="20" autocomplete="off"></label></div><div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn primary" data-ok>儲存</button></div>`)
+      $('[data-ok]', b).onclick = async () => {
+        const n = $('#rn', b).value.trim()
+        if (!n) return
+        closeSheet()
+        try {
+          await Sync.renameStudent(sid, n)
+        } catch {
+          toast('沒有成功，請檢查網路再試一次', '⚠️')
+        }
       }
     }
-    if (e.target.closest('[data-share-pair]')) sharePair()
+    if (e.target.closest('[data-delstu]'))
+      confirmSheet(
+        `刪除 ${st.name || '這個學生'}？`,
+        '這個學生和家長的裝置都會被移出，雲端的練習紀錄也會刪掉，沒辦法復原。',
+        '刪除',
+        async () => {
+          try {
+            await Sync.deleteStudent(sid)
+            toast('已刪除', '🗑️')
+            go('#/students')
+          } catch {
+            toast('沒有成功，請檢查網路再試一次', '⚠️')
+          }
+        },
+        true,
+      )
   })
 }
 
-// 成員管理（管理裝置才看得到）：名單、移除、允許重新加入、暫停加入
+// 跟自己比：本週 vs 上週、連續天數、模擬段考、閃電挑戰（不跟別人比）
+const weekStart = (t = Date.now()) => {
+  const d = dayStart(t)
+  return d - ((new Date(d).getDay() + 6) % 7) * DAY
+}
+function selfRecHTML(list = S.attempts, sess = S.sessions) {
+  if (!list.length) return ''
+  const w0 = weekStart()
+  const thisW = list.filter((a) => a.ts >= w0).length
+  const lastW = list.filter((a) => a.ts >= w0 - 7 * DAY && a.ts < w0).length
+  const sd = streakDays(list)
+  const best = maxStreakDays(list)
+  const ex = sess.filter((s) => s.k === 'exam')
+  const fl = sess.filter((s) => s.k === 'flash')
+  const diff = thisW - lastW
+  const cell = (v, k, sub) => `<div class="sr-cell"><div class="sr-v">${v}</div><div class="sr-k">${k}</div><div class="sr-sub">${sub}</div></div>`
+  return `<section class="card self-rec"><div class="sec-h"><div><h2>跟自己比</h2><p>不跟別人比，只看有沒有比自己進步。</p></div></div>
+    <div class="sr-grid">
+      ${cell(`${thisW}<small> 題</small>`, '這週', lastW ? `上週 ${lastW} 題${diff > 0 ? `・<b class="up">多 ${diff} 題</b>` : ''}` : '上週沒有練習')}
+      ${cell(`${sd}<small> 天</small>`, '連續練習', `最長 ${best} 天${sd > 1 && sd >= best ? '・<b class="up">追平紀錄</b>' : ''}`)}
+      ${cell(ex.length ? `${Math.max(...ex.map((s) => s.s))}<small> 分</small>` : '—', '模擬段考最高', ex.length ? `最近一次 ${ex[ex.length - 1].s} 分` : '還沒寫過')}
+      ${cell(fl.length ? `${Math.max(...fl.map((s) => s.s))}<small> 題</small>` : '—', '閃電挑戰最高', fl.length ? `玩了 ${fl.length} 次` : '還沒玩過')}
+    </div></section>`
+}
+// 破紀錄提醒（只跟自己比）
+function checkRecords(silent = false) {
+  const r = (S.rec ||= {})
+  const w0 = weekStart()
+  const thisW = S.attempts.filter((a) => a.ts >= w0).length
+  const lastW = S.attempts.filter((a) => a.ts >= w0 - 7 * DAY && a.ts < w0).length
+  const sd = streakDays()
+  if (silent || r.streak == null) {
+    r.streak = Math.max(r.streak || 0, maxStreakDays())
+    if (thisW > lastW) r.week = w0
+    return
+  }
+  if (lastW >= 10 && thisW > lastW && r.week !== w0) {
+    r.week = w0
+    toast(`這週已經做了 ${thisW} 題，比上週的 ${lastW} 題還多！`, '📈')
+  }
+  if (sd > r.streak && sd >= 2) {
+    r.streak = sd
+    toast(`連續練習 ${sd} 天，新紀錄！`, '🔥')
+  }
+}
+
+// 成員管理（管理裝置才看得到）：依學生分組的名單、移除、允許重新加入、暫停加入、老師的其他裝置
 function viewManage(keepScroll = false) {
   const y = window.scrollY
   if (!Sync.isAdmin()) return go('#/settings')
   const seen = S.sync?.seenAt || S.sync?.at || 0
   const me = Auth.uid()
-  const mems = Object.entries(Sync.members || {})
+  const mems = Object.entries(Sync.members)
     .filter(([uid, m]) => m && uid !== me)
     .sort((a, b) => (b[1].at || 0) - (a[1].at || 0))
-  const blk = Object.entries(Sync.blocked || {}).filter(([, b]) => b)
-  const last = (pid) => (Sync.live?.[pid]?.ts ? `最後上線 ${agoText(Sync.live[pid].ts)}` : '還沒上線')
+  const blk = Object.entries(Sync.blocked).filter(([, b]) => b)
+  const last = (m) => {
+    const l = Sync.D.live?.[m.sid]?.[m.pid]
+    return l?.ts ? `最後上線 ${agoText(l.ts)}` : '還沒上線'
+  }
+  const row = ([uid, m]) =>
+    `<div class="row mg-row"><span class="mg-ic">${ROLE_IC[m.role] || '❔'}</span><span class="row-t"><b>${esc(ROLES[m.role] || '成員')}${(m.at || 0) > seen ? '<em class="mg-new">新加入</em>' : ''}${m.admin ? '<em class="mg-admin">可管理</em>' : ''}</b><small>${esc(m.dev || '裝置')}・${fmtDate(m.at || 0)} 加入${m.role !== 'teacher' ? '・' + last(m) : ''}</small></span>${m.role === 'teacher' ? `<button class="btn ghost small-btn" data-admin="${uid}" data-v="${m.admin ? 0 : 1}">${m.admin ? '取消管理' : '設為可管理'}</button>` : ''}<button class="btn ghost small-btn danger-t" data-remove="${uid}">移除</button></div>`
+  const ids = studentIds()
+  const teachers = mems.filter(([, m]) => m.role === 'teacher')
+  const loose = mems.filter(([, m]) => m.role !== 'teacher' && !Sync.students[m.sid])
   setView(
     `<div class="page narrow manage-page">
-      ${header('成員管理', '看得到學生練習的裝置都列在這裡，可以隨時移除。大家都加入之後，把「開放加入」關掉，連結就算被轉傳也加不進來。', '', true)}
-      ${
-        !Auth.ok()
-          ? `<div class="callout care"><b>成員管理還沒啟用。</b>完成 Firebase「匿名登入」設定之後，這裡就能看到名單、移除裝置。</div>`
-          : `
+      ${header('成員管理', '看得到練習紀錄的裝置都列在這裡，可以隨時移除。大家都加入之後，把「開放加入」關掉，連結和代碼就算被轉傳也加不進來。', '', true)}
       <div class="group"><div class="list form">
-        <div class="row field"><span class="row-t">開放加入<small>${Sync.open ? '現在點連結就能加入' : '現在點連結不能加入（已加入的不受影響）'}</small></span><div class="seg small" id="open-seg"><button class="${Sync.open ? 'on' : ''}" data-open="1">開</button><button class="${Sync.open ? '' : 'on'}" data-open="0">關</button></div></div>
+        <div class="row field"><span class="row-t">開放加入<small>${Sync.open ? '現在用連結、QR Code、代碼都能加入' : '現在不能加入（已加入的不受影響）'}</small></span><div class="seg small" id="open-seg"><button class="${Sync.open ? 'on' : ''}" data-open="1">開</button><button class="${Sync.open ? '' : 'on'}" data-open="0">關</button></div></div>
       </div></div>
-      <div class="group"><div class="group-h">已加入的裝置（${mems.length + (Sync.state === 'owner' ? 1 : 2)}）</div><div class="list">
-        <div class="row static mg-row"><span class="mg-ic">📚</span><span class="row-t"><b>這台・${esc(S.profile.device || '老師')}</b><small>${Sync.state === 'owner' ? '建立班級的管理裝置' : '管理裝置'}</small></span></div>
-        ${Sync.state === 'owner' ? '' : '<div class="row static mg-row"><span class="mg-ic">📚</span><span class="row-t"><b>老師</b><small>建立班級的管理裝置</small></span></div>'}
-        ${mems
-          .map(
-            ([uid, m]) => `<div class="row mg-row"><span class="mg-ic">${ROLE_IC[m.role] || '❔'}</span><span class="row-t"><b>${esc(ROLES[m.role] || '成員')}${m.name ? '・' + esc(m.name) : ''}${(m.at || 0) > seen ? '<em class="mg-new">新加入</em>' : ''}${m.admin ? '<em class="mg-admin">可管理</em>' : ''}</b><small>${esc(m.dev || '裝置')}・${fmtDate(m.at || 0)} 加入・${last(m.pid)}</small></span>${m.role === 'teacher' ? `<button class="btn ghost small-btn" data-admin="${uid}" data-v="${m.admin ? 0 : 1}">${m.admin ? '取消管理' : '設為可管理'}</button>` : ''}<button class="btn ghost small-btn danger-t" data-remove="${uid}">移除</button></div>`,
-          )
-          .join('')}
+      ${ids
+        .map((sid) => {
+          const rows = mems.filter(([, m]) => m.sid === sid && m.role !== 'teacher')
+          return `<div class="group"><div class="group-h">${esc(Sync.students[sid]?.name || '學生')}（${rows.length}）</div><div class="list">${rows.length ? rows.map(row).join('') : '<div class="row static"><span class="row-t muted">還沒有裝置加入</span></div>'}</div></div>`
+        })
+        .join('')}
+      ${loose.length ? `<div class="group"><div class="group-h">還沒分到學生（${loose.length}）</div><div class="list">${loose.map(row).join('')}</div></div>` : ''}
+      <div class="group"><div class="group-h">老師的裝置（${teachers.length + (Sync.state === 'owner' ? 1 : 2)}）</div><div class="list">
+        <div class="row static mg-row"><span class="mg-ic">📚</span><span class="row-t"><b>這台・${esc(S.profile.device || '老師')}</b><small>${Sync.state === 'owner' ? '建立後台的管理裝置' : '管理裝置'}</small></span></div>
+        ${Sync.state === 'owner' ? '' : '<div class="row static mg-row"><span class="mg-ic">📚</span><span class="row-t"><b>老師</b><small>建立後台的管理裝置</small></span></div>'}
+        ${teachers.map(row).join('')}
+        <button class="row" data-share-teacher><span class="row-ic">${ICON.share}</span><span class="row-t">加入老師的其他裝置<small>QR Code 或連結；加入後看得到所有學生</small></span>${ICON.chev}</button>
       </div></div>
       ${
         blk.length
           ? `<div class="group"><div class="group-h">已移除（${blk.length}）</div><div class="list">${blk
               .map(
-                ([uid, b]) => `<div class="row mg-row"><span class="mg-ic">🚫</span><span class="row-t"><b>${esc(ROLES[b.role] || '裝置')}${b.name ? '・' + esc(b.name) : ''}</b><small>${esc(b.dev || '裝置')}・${fmtDate(b.at || 0)} 移除</small></span><button class="btn ghost small-btn" data-unblock="${uid}">允許重新加入</button></div>`,
+                ([uid, b]) => `<div class="row mg-row"><span class="mg-ic">🚫</span><span class="row-t"><b>${esc(ROLES[b.role] || '裝置')}${Sync.students[b.sid]?.name ? `（${esc(Sync.students[b.sid].name)}）` : ''}</b><small>${esc(b.dev || '裝置')}・${fmtDate(b.at || 0)} 移除</small></span><button class="btn ghost small-btn" data-unblock="${uid}">允許重新加入</button></div>`,
               )
-              .join('')}</div><p class="group-f">被移除的裝置不能自己加回來；按「允許重新加入」之後，對方再點一次連結就能加入。</p></div>`
+              .join('')}</div><p class="group-f">被移除的裝置不能自己加回來；按「允許重新加入」之後，對方再點一次連結或輸入代碼就能加入。</p></div>`
           : ''
-      }`
       }
-      <div class="sheet-actions"><button class="btn primary big" data-share-pair>${ICON.share}<span>傳送加入連結</span></button></div>
       <p class="foot">被移除的裝置會立刻看不到任何資料；之前同步到那台裝置上的紀錄會留在那台，但不會再更新。</p>
     </div>`,
   )
   if (keepScroll) window.scrollTo(0, y)
   // 看過名單：新成員的通知就收起來
-  if (Auth.ok() && S.sync) {
+  if (S.sync) {
     const latest = Math.max(0, ...mems.map(([, m]) => m.at || 0))
     if (latest > seen) {
       S.sync.seenAt = latest
@@ -3326,9 +3800,10 @@ function viewManage(keepScroll = false) {
     try {
       if (t.dataset.remove) {
         const m = Sync.members[t.dataset.remove] || {}
+        const sn = Sync.students[m.sid]?.name
         return confirmSheet(
           '移除這台裝置？',
-          `${esc(ROLES[m.role] || '成員')}${m.name ? '・' + esc(m.name) : ''}（${esc(m.dev || '裝置')}）會立刻看不到任何資料，也不能用這台再加回來（之後可以在「已移除」按允許重新加入）。`,
+          `${esc(ROLES[m.role] || '成員')}${sn ? `（${esc(sn)}）` : ''}・${esc(m.dev || '裝置')} 會立刻看不到任何資料，也不能用這台再加回來（之後可以在「已移除」按允許重新加入）。`,
           '移除',
           async () => {
             try {
@@ -3349,14 +3824,14 @@ function viewManage(keepScroll = false) {
       if (t.dataset.admin) {
         t.disabled = true
         await Sync.setAdmin(t.dataset.admin, t.dataset.v === '1')
-        toast(t.dataset.v === '1' ? '這台也可以管理成員了' : '已取消管理權限', '✅')
+        toast(t.dataset.v === '1' ? '這台也可以管理了' : '已取消管理權限', '✅')
       }
       if (t.dataset.open) {
         await Sync.setOpen(t.dataset.open === '1')
-        toast(t.dataset.open === '1' ? '已開放加入' : '已暫停加入：連結暫時不能用', t.dataset.open === '1' ? '🔓' : '🔒')
+        toast(t.dataset.open === '1' ? '已開放加入' : '已暫停加入：連結和代碼暫時不能用', t.dataset.open === '1' ? '🔓' : '🔒')
         viewManage(true)
       }
-      if (t.matches('[data-share-pair]')) sharePair()
+      if (t.matches('[data-share-teacher]')) shareTeacher()
     } catch {
       toast('沒有成功，請檢查網路再試一次', '⚠️')
       t.disabled = false
@@ -3364,48 +3839,157 @@ function viewManage(keepScroll = false) {
   })
 }
 
-// 加入連結帶著身分（學生／家長／老師）：點一下就加入
-function pairLink(role) {
-  return `${location.origin}${location.pathname}#/pair/${Sync.code()}${role ? '/' + role : ''}`
+// ── 分享：QR Code、連結、代碼 ──
+function pairLink(role, x = '') {
+  return `${location.origin}${location.pathname}#/pair/${Sync.code()}/${role}${x ? '/' + x : ''}`
 }
-const PAIR_FOR = [
-  ['student', '學生用', '學生點一下就加入，之前做的題目會自動同步上來'],
-  ['parent', '家長用', '家長點一下就加入，可以即時看孩子的練習'],
-  ['teacher', '老師用', '老師的其他裝置點一下就加入，可以看即時作答'],
-]
-function sharePair() {
+let QR = null
+async function qrSVG(text) {
+  QR ||= (await import('./qrcode.js')).default
+  const q = QR(0, 'M')
+  q.addData(text)
+  q.make()
+  return q.createSvgTag({ cellSize: 4, margin: 8, scalable: true })
+}
+async function copyLink(link) {
+  try {
+    await Promise.race([navigator.clipboard.writeText(link), new Promise((_, r) => setTimeout(r, 1500))])
+    toast('已複製連結', '📋')
+  } catch {
+    sheet(`<h2 class="sheet-title">請長按複製</h2><div class="pair-link">${esc(link)}</div>`)
+  }
+}
+// 傳給某個學生（或他的家長）：三種方式擺在一起
+function shareStudent(sid, role = 'student') {
+  const st = Sync.students[sid] || {}
   const b = sheet(
-    `<h2 class="sheet-title">傳送加入連結</h2><p class="sheet-p">${
-      Auth.ok() ? '點連結就會加入。誰加入了都會出現在「成員管理」，可以隨時移除；大家都加入之後，把「開放加入」關掉，連結就算被轉傳也加不進來。' : '點連結就會加入。連結就是密碼，不要貼到公開的地方。'
-    }</p>
-    <div class="list">${PAIR_FOR.map(
-      ([r, t, d]) => `<div class="row pair-row"><span class="row-t"><b>${t}</b><small>${d}</small></span><button class="btn ghost small-btn" data-copy="${r}">複製</button>${navigator.share ? `<button class="btn primary small-btn" data-share="${r}">傳送</button>` : ''}</div>`,
-    ).join('')}</div>`,
+    `<h2 class="sheet-title">傳給 ${esc(st.name || '學生')}</h2>
+    <div class="seg" id="sh-role"><button data-r="student">學生用</button><button data-r="parent">家長用</button></div>
+    <div class="share-grid">
+      <div class="qr-box"><div class="qr" role="img" aria-label="加入用的 QR Code"></div><small>用手機相機掃描</small></div>
+      <div class="share-side">
+        <div class="sh-block"><div class="sh-k">連結</div><p class="sh-p">點一下就加入，可以用 LINE 傳</p><div class="sh-actions"><button class="btn ghost small-btn" data-copy>複製</button>${navigator.share ? '<button class="btn primary small-btn" data-send>傳送</button>' : ''}</div></div>
+        <div class="sh-block"><div class="sh-k">代碼</div><div class="code-big" aria-live="polite">產生中…</div><p class="sh-p sh-exp"></p><button class="link" data-regen>重新產生</button></div>
+      </div>
+    </div>
+    <p class="sheet-p sh-how"></p>`,
+    { wide: true },
   )
-  b.addEventListener('click', async (e) => {
-    const c = e.target.closest('[data-copy]')
-    if (c) {
-      const link = pairLink(c.dataset.copy)
-      try {
-        await Promise.race([navigator.clipboard.writeText(link), new Promise((_, r) => setTimeout(r, 1500))])
-        toast('已複製加入連結', '📋')
-      } catch {
-        sheet(`<h2 class="sheet-title">請長按複製</h2><div class="pair-link">${esc(link)}</div>`)
-      }
+  const draw = async () => {
+    $$('#sh-role button', b).forEach((x) => x.classList.toggle('on', x.dataset.r === role))
+    $('.sh-how', b).textContent =
+      role === 'student'
+        ? `學生用：加入後，${st.name || '學生'} 在那台做的題目會即時同步，之前做過的也會一起傳上來。代碼在 App 的「設定 → 連結老師 → 輸入代碼」使用。`
+        : `家長用：加入後只看得到 ${st.name || '這個學生'} 的練習，看不到其他學生。代碼在 App 的「設定 → 連結老師 → 輸入代碼」使用。`
+    try {
+      $('.qr', b).innerHTML = await qrSVG(pairLink(role, sid))
+    } catch {
+      $('.qr', b).textContent = 'QR Code 載入失敗'
     }
-    const s = e.target.closest('[data-share]')
-    if (s) navigator.share({ title: '英文段考複習：加入班級', text: '點這個連結加入：', url: pairLink(s.dataset.share) }).catch(() => {})
+  }
+  const code = async (force) => {
+    $('.code-big', b).textContent = '產生中…'
+    try {
+      const s = await Sync.ensureCode(sid, force)
+      $('.code-big', b).textContent = fmtShort(s.code)
+      $('.sh-exp', b).textContent = `學生、家長都能用・${fmtDate(s.codeExp)} 前有效`
+    } catch {
+      $('.code-big', b).textContent = '—'
+      $('.sh-exp', b).textContent = '現在連不上，請稍後再試'
+    }
+  }
+  draw()
+  code(false)
+  b.addEventListener('click', (e) => {
+    const r = e.target.closest('[data-r]')
+    if (r) {
+      role = r.dataset.r
+      return draw()
+    }
+    if (e.target.closest('[data-copy]')) return copyLink(pairLink(role, sid))
+    if (e.target.closest('[data-send]')) return navigator.share({ title: '英文段考複習', text: role === 'student' ? `${st.name || ''}：點這個連結開始練習` : `點這個連結，就能看到${st.name || '孩子'}的練習`, url: pairLink(role, sid) }).catch(() => {})
+    if (e.target.closest('[data-regen]')) return code(true)
   })
 }
-// 打開加入連結
-function viewPair(code, preset) {
+// 老師的其他裝置（例如手機）：QR Code 或連結（不提供代碼）
+function shareTeacher() {
+  const link = pairLink('teacher', Sync.D.tkey || '')
+  const b = sheet(
+    `<h2 class="sheet-title">加入老師的其他裝置</h2>
+    <div class="share-grid">
+      <div class="qr-box"><div class="qr" role="img" aria-label="加入用的 QR Code"></div><small>用手機相機掃描</small></div>
+      <div class="share-side"><div class="sh-block"><div class="sh-k">連結</div><p class="sh-p">用這個連結加入的裝置看得到所有學生，也能管理成員。只傳給老師的裝置。</p><div class="sh-actions"><button class="btn ghost small-btn" data-copy>複製</button></div></div>
+      <div class="sh-block"><button class="link danger-t" data-reset>重設老師連結</button><p class="sh-p">重設後，舊的老師連結就不能用了（已經加入的裝置不受影響）。</p></div></div>
+    </div>`,
+    { wide: true },
+  )
+  if (!Sync.D.tkey) $('.qr', b).textContent = '載入中…'
+  else qrSVG(link).then((s) => ($('.qr', b).innerHTML = s)).catch(() => {})
+  b.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-copy]')) return copyLink(link)
+    if (e.target.closest('[data-reset]'))
+      try {
+        await Sync.resetTeacherKey()
+        closeSheet()
+        toast('已重設老師連結', '🔑')
+      } catch {
+        toast('沒有成功，請檢查網路再試一次', '⚠️')
+      }
+  })
+}
+// 輸入代碼（學生、家長）
+function codeSheet(role, prefill = '') {
+  role = role || (S.profile.role === 'parent' ? 'parent' : 'student')
+  const b = sheet(`<h2 class="sheet-title">輸入老師給的代碼</h2>
+    <div class="list form"><div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" id="cs-role"><button data-r="student">學生</button><button data-r="parent">家長</button></div></div></div>
+    <input id="cs-code" class="code-input" placeholder="例如 K7M 4QP" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="代碼">
+    <p class="cs-err" role="alert"></p>
+    <div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn primary" data-ok>連結</button></div>`)
+  const draw = () => $$('#cs-role button', b).forEach((x) => x.classList.toggle('on', x.dataset.r === role))
+  draw()
+  const inp = $('#cs-code', b)
+  inp.value = prefill
+  setTimeout(() => inp.focus(), 300)
+  $('#cs-role', b).addEventListener('click', (e) => {
+    const r = e.target.closest('[data-r]')
+    if (r) {
+      role = r.dataset.r
+      draw()
+    }
+  })
+  const ok = async () => {
+    const btn = $('[data-ok]', b)
+    btn.disabled = true
+    $('.cs-err', b).textContent = ''
+    const d = await lookupCode(inp.value)
+    btn.disabled = false
+    if (d.err) return ($('.cs-err', b).textContent = d.err)
+    closeSheet()
+    if (S.sync?.code && (S.sync.code !== d.c || S.sync.sid !== d.s || myRole() !== role))
+      return confirmSheet('換成新的連結？', '這台已經連結了另一個學生或老師。換成這一個之後，舊的那一個不會再同步。', '換成這一個', () => finishPair(d.c, role, { sid: d.s }))
+    finishPair(d.c, role, { sid: d.s })
+  }
+  $('[data-ok]', b).onclick = ok
+  inp.addEventListener('keydown', (e) => e.key === 'Enter' && ok())
+}
+// 打開加入連結：#/pair/<班級>/<身分>/<學生代號或老師鑰匙>
+function viewPair(code, preset, x = '') {
   if (!/^[a-z0-9]{16,40}$/.test(code)) {
     toast('這個連結不完整', '⚠️')
     return go('#/')
   }
+  if (ACTIVE) {
+    toast('上課中：請先按「結束上課」', '⚠️')
+    return go('#/')
+  }
+  // 老師後台的裝置點到學生、家長的連結：不要把這台換掉
+  if (S.sync?.code === code && myRole() === 'teacher' && preset !== 'teacher') {
+    toast('這是給學生或家長的連結，請傳給對方', '💡')
+    return go('#/students')
+  }
+  const opt = preset === 'teacher' ? { tkey: x } : x ? { sid: x } : {}
   if (ROLES[preset]) {
-    if (S.sync?.code === code) {
-      if (myRole() !== preset && !S.sync.owner) setRole(preset)
+    if (S.sync?.code === code && myRole() === preset && (preset === 'teacher' || !x || S.sync.sid === x)) {
       if (!Sync.ready()) {
         Sync.start()
         return showJoin()
@@ -3415,34 +3999,22 @@ function viewPair(code, preset) {
     }
     if (S.sync?.code) {
       viewHome()
-      return confirmSheet('換成新的班級？', '這台已經加入另一個班級了。換成這一個之後，舊的那一個不會再同步。', '換成這一個', () => finishPair(code, preset))
+      return confirmSheet('換成新的連結？', '這台已經連結了另一個學生或老師。換成這一個之後，舊的那一個不會再同步。', '換成這一個', () => finishPair(code, preset, opt))
     }
-    return finishPair(code, preset)
+    return finishPair(code, preset, opt)
   }
-  if (S.sync?.code === code) {
-    toast('已經加入了', '✅')
-    return go('#/')
-  }
+  // 1.8 以前沒有身分的連結：選學生或家長
   viewHome()
-  let role = S.profile.role && S.profile.role !== 'teacher' ? S.profile.role : 'student'
-  const DESC = {
-    student: '加入之後，你在這台裝置的作答會即時同步，以前做過的題目也會一起傳上去。',
-    teacher: '加入之後，這台可以看學生的即時作答。',
-    parent: '加入之後，就能在這台即時看到孩子正在做哪一題、每題答了什麼。',
-  }
+  let role = S.profile.role === 'parent' ? 'parent' : 'student'
   const b = sheet(
-    `<h2 class="sheet-title">加入班級</h2>
-    <div class="list form"><div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" id="pair-role">${Object.entries(ROLES)
-      .map(([k, t]) => `<button class="${k === role ? 'on' : ''}" data-r="${k}">${t}</button>`)
-      .join('')}</div></div>
-    <label class="row field" id="pair-name-row"><span class="row-t">學生的暱稱<small>老師會看到，可以用英文名字</small></span><input id="pair-name" value="${esc(S.profile.name)}" placeholder="例如：Amy" maxlength="20" autocomplete="off"></label></div>
+    `<h2 class="sheet-title">連結老師</h2>
+    <div class="list form"><div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" id="pair-role"><button data-r="student">學生</button><button data-r="parent">家長</button></div></div></div>
     <p class="sheet-p pair-desc" style="margin-top:12px"></p>
     <div class="sheet-actions"><button class="btn ghost" data-close>先不要</button><button class="btn primary" data-ok>加入</button></div>`,
   )
   const draw = () => {
-    $$('#pair-role button', b).forEach((x) => x.classList.toggle('on', x.dataset.r === role))
-    $('#pair-name-row', b).hidden = role !== 'student'
-    $('.pair-desc', b).textContent = DESC[role]
+    $$('#pair-role button', b).forEach((y) => y.classList.toggle('on', y.dataset.r === role))
+    $('.pair-desc', b).textContent = role === 'student' ? '加入之後，你在這台的作答會即時同步，以前做過的題目也會一起傳上去。' : '加入之後，就能在這台即時看到孩子正在做哪一題、每題答了什麼。'
   }
   draw()
   $('#pair-role', b).addEventListener('click', (e) => {
@@ -3452,24 +4024,21 @@ function viewPair(code, preset) {
     draw()
   })
   $('[data-ok]', b).onclick = () => {
-    if (role === 'student') {
-      const n = $('#pair-name', b).value.trim()
-      if (n) S.profile.name = n
-    }
     closeSheet()
-    finishPair(code, role)
+    finishPair(code, role, opt)
   }
 }
-// 點連結之後要看到的畫面
-async function finishPair(code, role) {
+// 點連結、掃 QR Code、輸入代碼之後
+async function finishPair(code, role, opt = {}) {
   const mine = S.attempts.filter((a) => a.d === S.profile.id).length
   S.profile.device = ROLES[role]
   if (role === 'student') S.seen = { ...(S.seen || {}), intro: S.seen?.intro || Date.now() }
   go(role === 'student' ? '#/' : '#/live')
-  await Sync.pair(code, role)
+  await Sync.pair(code, role, opt)
   if (Sync.ready()) {
-    if (role !== 'student') return toast('加入完成！這裡可以即時看到學生的練習', '📡')
-    if (mine) return toast(`加入完成！正在把你之前的 ${mine} 筆作答同步上去`, '📡')
+    if (role === 'teacher') return toast('加入完成！這台看得到所有學生的練習', '📡')
+    if (role === 'parent') return toast('連結完成！這裡可以即時看到孩子的練習', '📡')
+    if (mine) return toast(`連結完成！正在把你之前的 ${mine} 筆作答同步上去`, '📡')
     return setTimeout(noRecordsHint, 350)
   }
   showJoin()
@@ -3478,10 +4047,36 @@ function showJoin() {
   sheet(`<div class="empty join-status">${joinStatusHTML()}</div><div class="sheet-actions"><button class="btn ghost" data-close>知道了</button></div>`)
 }
 function noRecordsHint() {
-  sheet(`<h2 class="sheet-title">加入完成 ✅</h2><p class="sheet-p">之後在這裡做的題目，老師都會即時看到。</p>
-    <div class="callout care"><b>這裡沒有找到你之前的練習紀錄。</b>如果你之前是用別的方式打開 App（例如 LINE 裡的連結、Safari、主畫面的圖示），請用「那個方式」再點一次連結，之前做的題目才會同步上來。</div>
+  sheet(`<h2 class="sheet-title">連結完成 ✅</h2><p class="sheet-p">之後在這裡做的題目，老師都會即時看到。</p>
+    <div class="callout care"><b>這裡沒有找到你之前的練習紀錄。</b>如果你之前是用別的方式打開 App（例如 LINE 裡的連結、Safari、主畫面的圖示），請用「那個方式」再點一次連結或輸入代碼，之前做的題目才會同步上來。</div>
     <div class="sheet-actions"><button class="btn primary" data-close>知道了</button></div>`)
 }
+
+// ── 上課模式：老師平板暫時給一個學生用（題目、錯題本、紀錄都是那個學生的，作答同步到他那裡） ──
+function enterClass(sid) {
+  const st = Sync.students[sid] || {}
+  try {
+    const key = `${KEY}@${sid}`
+    const d = JSON.parse(localStorage.getItem(key) || 'null') || DEF()
+    d.profile = { ...d.profile, name: st.name || '', role: 'student', device: '上課平板', exam: d.profile.exam || S.profile.exam || '', oral: S.profile.oral, size: S.profile.size }
+    d.seen = { ...(d.seen || {}), intro: d.seen?.intro || Date.now() }
+    localStorage.setItem(key, JSON.stringify(d))
+    localStorage.setItem('g7review:active', sid)
+  } catch {
+    return toast('這個瀏覽器沒辦法切換（可能是無痕模式）', '⚠️')
+  }
+  location.hash = '#/'
+  location.reload()
+}
+function endClass() {
+  Sync.presence({ view: 'away' })
+  try {
+    localStorage.removeItem('g7review:active')
+  } catch {}
+  location.hash = ACTIVE ? '#/student/' + ACTIVE : '#/students'
+  location.reload()
+}
+const classBarHTML = () => (ACTIVE ? `<div class="class-bar"><span>上課中：<b>${esc(S.profile.name || '學生')}</b></span><button class="btn ghost small-btn" data-endclass>結束上課</button></div>` : '')
 
 // ───────────────────────── 路由與外框 ─────────────────────────
 const TABS = [
@@ -3493,10 +4088,13 @@ const TABS = [
 function setView(html, { tabs = true } = {}) {
   closeSheet()
   const root = $('#app')
-  root.innerHTML = `<main id="view" class="${tabs ? 'with-tabs' : 'immersive'}">${html}</main>${
+  // 老師後台多一個「學生」分頁
+  const list = teacherMode() ? [['#/students', '學生', ICON.people], ...TABS] : TABS
+  const cur = location.hash || '#/'
+  root.innerHTML = `<main id="view" class="${tabs ? 'with-tabs' : 'immersive'}">${tabs ? classBarHTML() : ''}${html}</main>${
     tabs
-      ? `<nav class="tabbar" aria-label="主選單">${TABS.map(([h, label, ic]) => {
-          const on = (location.hash || '#/') === h || (h === '#/' && !location.hash)
+      ? `<nav class="tabbar" aria-label="主選單">${list.map(([h, label, ic]) => {
+          const on = cur === h || (h === '#/students' && (cur.startsWith('#/student/') || cur === '#/manage'))
           const badge = h === '#/book' ? bookIds().length : h === '#/settings' ? pendingCount() : 0
           return `<a href="${h}" class="${on ? 'on' : ''}" ${on ? 'aria-current="page"' : ''}>${ic}<span>${label}</span>${badge ? `<b class="badge">${badge > 99 ? '99+' : badge}</b>` : ''}</a>`
         }).join('')}</nav>`
@@ -3522,8 +4120,10 @@ function route() {
   if (a === 'notes') return viewAllNotes()
   if (a === 'print' && b) return viewPrint(decodeURIComponent(b))
   if (a === 'live') return viewLive()
+  if (a === 'students') return viewStudents()
+  if (a === 'student' && b) return viewStudent(b)
   if (a === 'manage') return viewManage()
-  if (a === 'pair' && b) return viewPair(decodeURIComponent(b), h.split('/')[3])
+  if (a === 'pair' && b) return viewPair(decodeURIComponent(b), h.split('/')[3], h.split('/')[4] || '')
   viewHome()
 }
 window.addEventListener('hashchange', () => {
