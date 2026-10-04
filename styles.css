@@ -3493,3 +3493,72 @@ ul.plain b {
   margin: 14px 4px 18px;
   gap: 12px;
 }
+/* 2.0：加入申請／成員管理 */
+.role-pick.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 420px;
+  margin: 0 auto;
+}
+.live-banner.req {
+  background: var(--care-bg);
+}
+.req-ic {
+  font-size: 24px;
+  flex: none;
+}
+.row-badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: var(--red-v);
+  color: #fff;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.mg-row {
+  gap: 10px;
+}
+.mg-ic {
+  font-size: 26px;
+  width: 34px;
+  text-align: center;
+  flex: none;
+}
+.mg-admin,
+.mg-new {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--sel-bg);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: 2px;
+}
+.mg-new {
+  color: #fff;
+  background: var(--red);
+}
+.btn.danger-t {
+  color: var(--red);
+}
+.join-status {
+  text-align: center;
+  padding: 18px 8px 6px;
+}
+.js-ic {
+  font-size: 48px;
+}
+.join-status h2 {
+  margin: 6px 0 6px;
+}
+.join-status .btn {
+  margin-top: 12px;
+}
+.manage-page .sheet-actions {
+  justify-content: center;
+}

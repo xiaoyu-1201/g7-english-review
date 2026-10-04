@@ -2,11 +2,55 @@
   "rules": {
     "classes": {
       "$code": {
-        ".read": "$code.length >= 16",
-        ".write": "$code.length >= 16",
-        "a": { "$k": { ".validate": "newData.hasChildren(['q', 'r', 'ts', 'd']) && newData.child('q').isString() && newData.child('q').val().length < 24" } },
-        "s": { "$k": { ".validate": "newData.hasChildren(['k', 'ts', 'd'])" } },
-        "live": { "$d": { ".validate": "newData.hasChildren(['ts'])" } }
+        ".read": "auth != null && $code.length >= 16 && (data.child('owner').val() === auth.uid || data.child('members/' + auth.uid + '/admin').val() === true)",
+        "owner": {
+          ".read": "auth != null",
+          ".write": "auth != null && $code.length >= 16 && !data.exists() && newData.val() === auth.uid"
+        },
+        "open": {
+          ".read": "auth != null",
+          ".write": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid + '/admin').val() === true)",
+          ".validate": "newData.isBoolean()"
+        },
+        "blocked": {
+          ".write": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid + '/admin').val() === true)",
+          "$uid": { ".validate": "newData.hasChildren(['at'])" }
+        },
+        "members": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && ((root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid + '/admin').val() === true) || (auth.uid === $uid && !data.exists() && newData.exists() && root.child('classes/' + $code + '/open').val() === true && !root.child('classes/' + $code + '/blocked/' + $uid).exists()))",
+            ".validate": "newData.hasChildren(['role', 'at'])",
+            "role": { ".validate": "newData.isString() && newData.val().matches(/^(student|parent|teacher)$/)" },
+            "name": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "dev": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "pid": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "at": { ".validate": "newData.isNumber()" },
+            "admin": { ".validate": "newData.isBoolean() && (newData.val() === false || root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid + '/admin').val() === true)" },
+            "$other": { ".validate": false }
+          }
+        },
+        "a": {
+          ".read": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid).exists())",
+          "$k": {
+            ".write": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || (root.child('classes/' + $code + '/members/' + auth.uid).exists() && newData.exists()))",
+            ".validate": "newData.hasChildren(['q', 'r', 'ts', 'd']) && newData.child('q').isString() && newData.child('q').val().length < 24"
+          }
+        },
+        "s": {
+          ".read": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid).exists())",
+          "$k": {
+            ".write": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || (root.child('classes/' + $code + '/members/' + auth.uid).exists() && newData.exists()))",
+            ".validate": "newData.hasChildren(['k', 'ts', 'd'])"
+          }
+        },
+        "live": {
+          ".read": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid).exists())",
+          "$d": {
+            ".write": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid).exists())",
+            ".validate": "newData.hasChildren(['ts'])"
+          }
+        }
       }
     }
   }
