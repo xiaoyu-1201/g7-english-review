@@ -4386,3 +4386,6 @@ ul.plain b {
   color: #fff;
   box-shadow: none;
 }
+.spw.name {
+  color: var(--label2);
+}

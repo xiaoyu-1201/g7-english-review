@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.6（10/4）'
+const VERSION = '2.6.1（10/4）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -2817,10 +2817,16 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition
 const NUM = 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(' ')
 const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
 const numWord = (n) => (n < 20 ? NUM[n] : n < 100 ? TENS[Math.floor(n / 10)] + (n % 10 ? ' ' + NUM[n % 10] : '') : String(n))
-const SP_CONTR = { "what's": 'what is', "who's": 'who is', "where's": 'where is', "it's": 'it is', "he's": 'he is', "she's": 'she is', "that's": 'that is', "i'm": 'i am', "you're": 'you are', "we're": 'we are', "they're": 'they are', "isn't": 'is not', "aren't": 'are not', "don't": 'do not', "doesn't": 'does not', "can't": 'cannot', "let's": 'let us' }
-// 比對用的字：小寫、去標點、數字轉英文、縮寫展開（He's＝He is，辨識結果寫哪一種都算對）
-function speakWords(s) {
-  return String(s)
+// 比對看的是「念出來的音」，不是拼字：語音辨識常把 they're 寫成 there、Mr. 寫成 mister，這些都算對
+// ① 兩個字的完整寫法併成縮寫（they are ＝ they're），兩邊用同一種寫法比
+const SP_JOIN = { 'what is': "what's", 'who is': "who's", 'where is': "where's", 'it is': "it's", 'he is': "he's", 'she is': "she's", 'that is': "that's", 'i am': "i'm", 'you are': "you're", 'we are': "we're", 'they are': "they're", 'let us': "let's" }
+// 否定的縮寫先拆開（isn't ＝ is not），這樣 he isn't、he's not、he is not 三種都比得起來
+const SP_NEG = { "isn't": ['is', 'not'], "aren't": ['are', 'not'], "don't": ['do', 'not'], "doesn't": ['does', 'not'], "can't": ['can', 'not'], cannot: ['can', 'not'] }
+// ② 同音字（念起來一樣）算同一個字
+const SP_SAME = { "they're": 'their', there: 'their', "you're": 'your', "it's": 'its', "who's": 'whose', "we're": 'were', too: 'to', two: 'to', four: 'for', write: 'right', eye: 'i', know: 'no', hear: 'here', won: 'one', ate: 'eight', sea: 'see', bye: 'by', buy: 'by', mister: 'mr', missus: 'mrs', misses: 'mrs', miss: 'ms', miz: 'ms', okay: 'ok', grey: 'gray', favourite: 'favorite', colour: 'color', mum: 'mom', ant: 'aunt', sun: 'son', high: 'hi', deer: 'dear' }
+// 一個字（或一段話）→ 小寫、去標點、數字轉英文
+const spBasic = (s) =>
+  String(s)
     .toLowerCase()
     .replace(/[’‘]/g, "'")
     .replace(/\d+/g, (m) => ` ${numWord(+m)} `)
@@ -2828,40 +2834,65 @@ function speakWords(s) {
     .replace(/[^a-z' ]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
-    .flatMap((w) => (SP_CONTR[w] || w.replace(/'/g, '')).split(' '))
+    .flatMap((w) => SP_NEG[w] || [w])
+// 一串字 → 比對用的寫法（src：每個比對字來自原句的哪幾個字）
+function spCanon(list) {
+  const out = []
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]
+    const b = list[i + 1]
+    const j = SP_JOIN[a.w] || (b && SP_JOIN[a.w + ' ' + b.w])
+    // 最後拿掉撇號：he's → hes、Lee's → lees（兩邊做法一樣，比得起來）
+    if (j && !SP_JOIN[a.w] && b) {
+      out.push({ w: (SP_SAME[j] || j).replace(/'/g, ''), src: [...a.src, ...b.src] })
+      i++
+    } else out.push({ w: (SP_SAME[j || a.w] || j || a.w).replace(/'/g, ''), src: a.src })
+  }
+  return out
 }
-// 逐字比對（最長共同子序列）：回傳每個字有沒有念到、分數、聽到的句子
+// 人名不算分（語音辨識常把 Lee 寫成 Li、Leigh）：句中大寫開頭的字，English 和稱謂除外
+const SP_NOT_NAME = new Set(['english', 'mr', 'mrs', 'ms', 'i'])
+function spIsName(toks, i) {
+  const t = toks[i].replace(/[^A-Za-z']/g, '')
+  if (!/^[A-Z][a-z]/.test(t) || SP_NOT_NAME.has(t.toLowerCase().replace(/'s$/, ''))) return false
+  // 前一個字是句尾（. ! ?）就是新句子的開頭，不是人名；但 Mr. Mrs. Ms. 的點不算句尾
+  const prev = toks[i - 1] || ''
+  return i > 0 && (!/[.!?]$/.test(prev) || /^(Mr|Mrs|Ms|Dr)\.$/i.test(prev))
+}
+// 逐字比對（最長共同子序列）；語音辨識給的幾個候選結果，任一個念到就算
 function speakScore(target, heards) {
   const toks = target.split(/\s+/)
-  const parts = toks.map((t) => speakWords(t))
-  const T = parts.flat()
-  let best = null
+  const name = toks.map((_, i) => spIsName(toks, i))
+  const T = spCanon(toks.flatMap((t, i) => spBasic(t).map((w) => ({ w, src: [i] }))))
+  const scored = T.map((x) => !x.src.every((i) => name[i]))
+  const hit = new Array(T.length).fill(false)
+  let heard = ''
+  let bestN = -1
   for (const h of heards || []) {
-    const H = speakWords(h)
+    const H = spCanon(spBasic(h).map((w) => ({ w, src: [] }))).map((x) => x.w)
     const dp = Array.from({ length: T.length + 1 }, () => new Array(H.length + 1).fill(0))
-    for (let i = T.length - 1; i >= 0; i--) for (let j = H.length - 1; j >= 0; j--) dp[i][j] = T[i] === H[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
-    const hit = new Array(T.length).fill(false)
+    for (let i = T.length - 1; i >= 0; i--) for (let j = H.length - 1; j >= 0; j--) dp[i][j] = T[i].w === H[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+    let n = 0
     for (let i = 0, j = 0; i < T.length && j < H.length; ) {
-      if (T[i] === H[j]) {
-        hit[i++] = true
+      if (T[i].w === H[j]) {
+        hit[i] = true
+        n++
+        i++
         j++
       } else if (dp[i + 1][j] >= dp[i][j + 1]) i++
       else j++
     }
-    const n = hit.filter(Boolean).length
-    if (!best || n > best.n) best = { n, hit, heard: h }
+    if (n > bestN) {
+      bestN = n
+      heard = h
+    }
   }
-  if (!best) return { score: 0, words: toks.map((t) => ({ t, ok: false })), heard: '' }
-  let k = 0
-  const words = toks.map((t, i) => {
-    const m = parts[i].length
-    const ok = !m || best.hit.slice(k, k + m).every(Boolean)
-    k += m
-    return { t, ok }
-  })
-  return { score: Math.round((best.n / Math.max(1, T.length)) * 100), words, heard: best.heard }
+  const total = scored.filter(Boolean).length
+  const got = T.filter((_, k) => scored[k] && hit[k]).length
+  const words = toks.map((t, i) => ({ t, name: name[i], ok: name[i] || T.every((x, k) => !x.src.includes(i) || hit[k]) }))
+  return { score: heards?.length ? Math.round((got / Math.max(1, total)) * 100) : 0, words, heard }
 }
-const speakWordsHTML = (words) => words.map(({ t, ok }) => `<span class="spw ${ok ? 'ok' : 'miss'}">${esc(t)}</span>`).join(' ')
+const speakWordsHTML = (words) => words.map(({ t, ok, name }) => `<span class="spw ${name ? 'name' : ok ? 'ok' : 'miss'}">${esc(t)}</span>`).join(' ')
 const SPEAK_ERR = {
   'not-allowed': '沒有麥克風權限：請允許這個網站使用麥克風（iPhone、iPad：設定 → Safari → 麥克風；也要打開「設定 → 一般 → 鍵盤 → 聽寫」）',
   'service-not-allowed': '語音辨識沒有開：iPhone、iPad 請打開「設定 → 一般 → 鍵盤 → 聽寫」',
@@ -2931,6 +2962,7 @@ function viewSpeak() {
         <li>第一次會問能不能用麥克風，請按「允許」。</li>
         <li>環境安靜一點，手機或平板離嘴巴近一點。</li>
         <li>念錯的字會標成紅色，點一下可以聽那個字。</li>
+        <li>App 聽的是發音，不是拼字：人名不算分（灰色），同音字（例如 they're／there）、縮寫和完整寫法都算對。</li>
       </ul>
     </div>`,
   )
@@ -3050,15 +3082,15 @@ function speakRun() {
       const res = speakScore(s.en, alts)
       const prev = SP.res[SP.i]
       SP.res[SP.i] = { ...res, tries: (prev?.tries || 0) + 1, best: Math.max(prev?.best || 0, res.score) }
-      buzz(res.score >= 90 ? 15 : [10, 60, 10])
+      buzz(res.score >= 85 ? 15 : [10, 60, 10])
       speakRun()
     }
   })
 }
 function speakResultHTML(r) {
-  const msg = r.score >= 90 ? '很棒！每個字都很清楚' : r.score >= 70 ? '不錯！紅色的字再念一次' : '先按「聽」，跟著節奏再念一次'
+  const msg = r.score >= 100 ? '完美！每個字都很清楚' : r.score >= 85 ? '很棒！只差一點點' : r.score >= 65 ? '不錯！紅色的字再念一次' : '先按「聽」，跟著節奏再念一次'
   const miss = r.words.filter((w) => !w.ok).map((w) => w.t.replace(/[^A-Za-z' -]/g, ''))
-  return `<div class="sp-score ${r.score >= 90 ? 'ok' : r.score >= 70 ? 'care' : 'bad'}"><b>${r.score}</b><span>分</span></div>
+  return `<div class="sp-score ${r.score >= 85 ? 'ok' : r.score >= 65 ? 'care' : 'bad'}"><b>${r.score}</b><span>分</span></div>
     <div class="sp-res-t"><div class="sp-msg">${msg}</div><div class="sp-heard">我聽到：<span lang="en">${esc(r.heard)}</span></div>
     ${miss.length ? `<div class="chips">${miss.map((w) => `<button class="chip say" data-say="${esc(w)}">${esc(w)} ${ICON.speaker}</button>`).join('')}</div>` : ''}</div>`
 }
@@ -3072,12 +3104,12 @@ function speakSummary() {
     save()
     checkBadges()
   }
-  const low = done.filter((x) => x.r.best < 80).map((x) => x.s)
+  const low = done.filter((x) => x.r.best < 85).map((x) => x.s)
   Sync.presence({ view: 'home' })
   setView(
     `<div class="page narrow speak-sum">
       ${header('口說練習', done.length ? `念了 ${done.length} 句` : '這一回沒有念任何一句', '', false)}
-      <section class="card sp-sum-head"><div class="sp-score ${avg >= 90 ? 'ok' : avg >= 70 ? 'care' : 'bad'}"><b>${avg}</b><span>分</span></div><div class="sp-res-t"><div class="sp-msg">${avg >= 90 ? '發音很清楚！' : avg >= 70 ? '很不錯，再練幾個字就更好' : '多聽幾次，跟著節奏念'}</div>${weak.length ? `<div class="sp-heard">要再練的字（點一下聽）</div><div class="chips">${weak.map((w) => `<button class="chip say" data-say="${esc(w)}">${esc(w)} ${ICON.speaker}</button>`).join('')}</div>` : ''}</div></section>
+      <section class="card sp-sum-head"><div class="sp-score ${avg >= 85 ? 'ok' : avg >= 65 ? 'care' : 'bad'}"><b>${avg}</b><span>分</span></div><div class="sp-res-t"><div class="sp-msg">${avg >= 85 ? '發音很清楚！' : avg >= 65 ? '很不錯，再練幾個字就更好' : '多聽幾次，跟著節奏念'}</div>${weak.length ? `<div class="sp-heard">要再練的字（點一下聽）</div><div class="chips">${weak.map((w) => `<button class="chip say" data-say="${esc(w)}">${esc(w)} ${ICON.speaker}</button>`).join('')}</div>` : ''}</div></section>
       <div class="list sp-sum-list">${done.map((x) => `<div class="row static"><span class="row-t" lang="en">${speakWordsHTML(x.r.words)}</span><span class="row-r">${x.r.best} 分</span></div>`).join('')}</div>
       <div class="sheet-actions">${low.length ? `<button class="btn ghost" data-act="low">再練分數低的 ${low.length} 句</button>` : ''}<button class="btn ghost" data-act="again">再練一回</button><button class="btn primary" data-act="home">回首頁</button></div>
     </div>`,
@@ -4177,7 +4209,7 @@ function viewWatch(sid, keepScroll = false) {
   // 口說：正在念哪一句、念完的分數與漏掉的字
   const sp = isActive(l) && l.view === 'speak' && l.text
   const spKey = sp && l.said ? `sp${l.ts}` : ''
-  const spCls = sp && l.said ? (l.sc >= 90 ? 'ok' : l.sc >= 70 ? 'care' : 'bad') : ''
+  const spCls = sp && l.said ? (l.sc >= 85 ? 'ok' : l.sc >= 65 ? 'care' : 'bad') : ''
   setView(
     `<div class="page narrow watch-page">
       ${header(name, it ? `${l.title}・第 ${l.n}／${l.of} 題` : sp ? `${l.title}・第 ${l.n}／${l.of} 句` : '課堂檢視', syncPill(), true)}
