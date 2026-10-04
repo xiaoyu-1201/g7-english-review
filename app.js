@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.2（10/4）'
+const VERSION = '2.3（10/4）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -53,7 +53,7 @@ const DEF = () => ({
   progress: {},
   flash: { best: 0, runs: 0 },
 })
-// 在這台作答（上課模式）：老師的裝置暫時借給某個學生用（紀錄存在另一份，同步到那個學生）；同步設定（S.sync、S.syncQ）存在共用的 SYNC_KEY
+// 學生模式：老師的裝置暫時借給某個學生用（紀錄存在另一份，同步到那個學生）；同步設定（S.sync、S.syncQ）存在共用的 SYNC_KEY
 const ACTIVE = (() => {
   try {
     return localStorage.getItem('g7review:active') || ''
@@ -134,7 +134,7 @@ function bookState() {
       }
     if (!wrong) continue
     const after = list.filter((a) => a.ts > lastWrongTs)
-    const oks = after.filter((a) => a.r === 'ok')
+    const oks = after.filter((a) => a.r === 'ok' && a.x !== 'r') // 看完解析馬上再試一次答對的，不算畢業
     const graduated = oks.length >= 3 || (oks.length >= 2 && oks[oks.length - 1].ts - oks[0].ts >= 8 * 3600000)
     out[q] = { wrong, inBook: !graduated, oks: oks.length, last: list[list.length - 1] }
   }
@@ -481,7 +481,7 @@ const Voice = {
   },
   speak(lines, slow = false) {
     if (!this.ok) {
-      toast('這台裝置不支援語音，請用 Safari 或 Chrome 開啟', '🔇')
+      toast('這個瀏覽器不支援語音，請用 Safari 或 Chrome 開啟', '🔇')
       return Promise.resolve()
     }
     if (!this.list.length) this.load()
@@ -1201,7 +1201,7 @@ function runShell(pr, it, at, reviewing) {
         <div class="run-mid"><div class="run-title">${esc(pr.title)}</div><div class="run-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${pr.ids.length}" aria-valuenow="${at}"><i style="width:${(at / pr.ids.length) * 100}%"></i></div></div>
         <button class="icon-btn" data-act="notes" aria-label="重點">${ICON.notes}</button>
       </header>
-      <div class="run-stage"><div class="run-count">${reviewing ? '<span class="rev-tag">回顧・只能看</span>' : ''}${it.t === 'learn' ? '觀念' : `第 ${nBefore + 1}／${scored.length} 題`}</div><div class="run-card"></div><div class="hint-box" hidden></div></div>
+      <div class="run-stage"><div class="run-count">${reviewing ? '<span class="rev-tag">回顧</span>' : ''}${it.t === 'learn' ? '觀念' : `第 ${nBefore + 1}／${scored.length} 題`}</div><div class="run-card"></div><div class="hint-box" hidden></div></div>
       <footer class="run-actions">
         <div class="ra-left">
           ${at > 0 ? `<button class="pill back" data-act="back" aria-label="上一題">${ICON.back}<span>上一題</span></button>` : ''}
@@ -1247,6 +1247,7 @@ function viewRun(key, at) {
     if (act === 'close') return leaveRun()
     if (act === 'notes') return showNotes(pr.mid || it.mid)
     if (act === 'back') return goBack()
+    if (act === 'retry') return retryItem()
     if (act === 'hint') return showHint()
     if (act === 'guess') {
       RUN.guess = !RUN.guess
@@ -1300,11 +1301,15 @@ function viewRunReview(key, at, it, streak) {
   }
   $('.run-card').append(el)
   RUN = { key, at, it, reviewing: true, streak }
+  // 回顧到答錯的題目：可以馬上再試一次（在視窗裡作答，不改這次的分數）
+  const mine = [...S.attempts].reverse().find((a) => a.q === it.id && a.ts >= (pr.t0 || 0))
+  if (mine && mine.r !== 'ok') $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="retry">↻<span>再試一次</span></button>`)
   $('.run').addEventListener('click', (e) => {
     const a = e.target.closest('[data-act]')?.dataset.act
     if (a === 'close') return leaveRun()
     if (a === 'notes') return showNotes(pr.mid || it.mid)
     if (a === 'back') return goBack()
+    if (a === 'retry') return reviewSheet(it.id, { quick: true })
     if (a === 'check') {
       Voice.stop()
       viewRun(key, at + 1)
@@ -1385,9 +1390,12 @@ function checkItem() {
   const res = C.grade()
   RUN.checked = true
   const pr = S.progress[RUN.key]
-  pr.res[it.id] = res.r
-  RUN.streak = res.r === 'ok' ? RUN.streak + 1 : 0
-  const att = record(it, res, { h: RUN.hints, c: RUN.guess })
+  // 再試一次：分數照第一次算，紀錄標成 x:'r'（剛看過解析，答對不算錯題本畢業）
+  if (!RUN.retry) {
+    pr.res[it.id] = res.r
+    RUN.streak = res.r === 'ok' ? RUN.streak + 1 : 0
+  }
+  const att = record(it, res, { h: RUN.hints, c: RUN.guess, ...(RUN.retry ? { x: 'r' } : {}) })
   save()
   C.reveal(res)
   const fb = $('.q-feedback', C.el)
@@ -1409,6 +1417,7 @@ function checkItem() {
   checkBadges()
   C.el.classList.add('done', 'r-' + res.r)
   $$('.ra-left [data-act=hint], .ra-left [data-act=guess]').forEach((b) => b.remove())
+  if (res.r !== 'ok') $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="retry">↻<span>再試一次</span></button>`)
   const btn = $('[data-act=check]')
   btn.textContent = pr.i + 1 >= pr.ids.length ? '看結果' : '繼續'
   btn.disabled = false
@@ -1416,6 +1425,29 @@ function checkItem() {
   if (res.r === 'ok') buzz(15)
   else buzz([10, 60, 10])
   requestAnimationFrame(() => fb.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' }))
+}
+// 答錯後馬上再試一次：同一題重新作答（老師的課堂檢視也會跟著換回「正在作答」）
+function retryItem() {
+  const { key, it } = RUN
+  const pr = S.progress[key]
+  const C = makeItem(it, 'practice')
+  $('.run-card').replaceChildren(C.el)
+  const box = $('.hint-box')
+  box.hidden = true
+  box.innerHTML = ''
+  Object.assign(RUN, { C, hints: 0, guess: false, checked: false, retry: true })
+  $('.ra-left [data-act=retry]')?.remove()
+  $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="hint">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false">🤔<span>有點猜</span></button>`)
+  const btn = $('[data-act=check]')
+  btn.textContent = '檢查'
+  btn.disabled = true
+  C.onAnswer = () => (btn.disabled = !C.answered())
+  C.onEnter = () => C.answered() && btn.click()
+  const scored = pr.ids.filter((id) => ITEM[id]?.t !== 'learn')
+  const n = pr.ids.slice(0, RUN.at).filter((id) => ITEM[id]?.t !== 'learn').length + 1
+  Sync.presence({ view: 'run', title: pr.title, n: Math.min(n, scored.length), of: scored.length, q: it.id })
+  if (C.focus && matchMedia('(pointer: fine)').matches) setTimeout(() => C.focus(), 60)
+  window.scrollTo(0, 0)
 }
 function nextItem() {
   const pr = S.progress[RUN.key]
@@ -1498,10 +1530,11 @@ function snippet(it) {
   return s.replace(/\n/g, ' ').replace(/___/g, '＿＿').slice(0, 70)
 }
 // 結果頁、錯題本點一題：先看上次的答案與解析，可以直接「再練一次」（會記錄、會影響錯題本）
-function reviewSheet(id, { onDone } = {}) {
+// quick：檢討時「再試一次」（直接作答；剛看過解析，答對不算錯題本畢業）
+function reviewSheet(id, { onDone, quick = false } = {}) {
   const it = ITEM[id]
   let retried = null
-  const body = sheet(`<h2 class="sheet-title">題目回顧</h2><div class="review-slot"></div><div class="hint-box review-hints" hidden></div><div class="sheet-actions review-acts"></div>`, {
+  const body = sheet(`<h2 class="sheet-title">${quick ? '再試一次' : '題目回顧'}</h2><div class="review-slot"></div><div class="hint-box review-hints" hidden></div><div class="sheet-actions review-acts"></div>`, {
     wide: true,
     onClose: () => retried && onDone?.(retried),
   })
@@ -1516,6 +1549,7 @@ function reviewSheet(id, { onDone } = {}) {
   const practice = () => {
     const C = makeItem(it, 'practice')
     slot.replaceChildren(C.el)
+    Sync.presence({ view: 'run', title: '再試一次', n: 1, of: 1, q: it.id })
     hintBox.hidden = true
     hintBox.innerHTML = ''
     let hints = 0
@@ -1533,7 +1567,7 @@ function reviewSheet(id, { onDone } = {}) {
     btn.onclick = () => {
       if (!C.answered()) return
       const res = C.grade()
-      record(it, res, { h: hints })
+      record(it, res, { h: hints, ...(quick ? { x: 'r' } : {}) })
       save()
       retried = res.r
       C.reveal(res)
@@ -1552,7 +1586,7 @@ function reviewSheet(id, { onDone } = {}) {
   acts.addEventListener('click', (e) => {
     if (e.target.closest('[data-retry]')) practice()
   })
-  showReview()
+  quick ? practice() : showReview()
 }
 // 唯讀的題目卡：題目＋作答紀錄＋正確答案＋解析
 function reviewCard(it, last, label) {
@@ -1751,7 +1785,7 @@ function welcome() {
         <button data-role="parent"><span class="rp-ic">👪</span><b>我是家長</b><small>看孩子的練習</small></button>
       </div>
       <button class="link w-code" data-code>有老師給的代碼？點這裡輸入</button>
-      <p class="w-note">選錯了沒關係，之後到「設定 → 這台是誰的」就能改。</p>
+      <p class="w-note">選錯了沒關係，之後到「設定 → 身分」就能改。</p>
     </div>`,
     { onClose: markSeen },
   )
@@ -2139,7 +2173,7 @@ function gradeExam() {
     record(C.it, res, { x: 'e' })
     C.reveal(res)
     const fb = $('.q-feedback', C.el)
-    fb.innerHTML = feedbackHTML(C.it, res, { exam: true })
+    fb.innerHTML = feedbackHTML(C.it, res, { exam: true }) + (res.r !== 'ok' ? `<button class="btn ghost retry-btn" data-retry="${C.it.id}">↻ 再試一次</button>` : '')
     fb.hidden = false
     revealExtras(C)
     C.el.classList.add('done', 'r-' + res.r)
@@ -2161,6 +2195,11 @@ function gradeExam() {
     ${tagList.length ? `<div class="chips">${tagList.slice(0, 6).map(([t, n]) => `<span class="chip ${FORMAT_TAGS.includes(t) ? 'care' : ''}">${TAGS[t] || t} × ${n}</span>`).join('')}</div>` : ''}</div>
     <div class="er-btns"><button class="btn primary" data-act="book">去錯題本</button><button class="btn ghost" data-act="again">再考一次</button></div>`
   $('.exam-paper').prepend(head)
+  // 檢討時答錯的題目可以馬上再試一次（不改分數）
+  $('.exam-paper').addEventListener('click', (e) => {
+    const r = e.target.closest('[data-retry]')
+    if (r) reviewSheet(r.dataset.retry, { quick: true })
+  })
   $('.exam-foot').innerHTML = `<span class="muted small">往下看每一題的解析</span><button class="btn primary big" data-act="home">回首頁</button>`
   $('.exam-foot').addEventListener('click', (e) => e.target.closest('[data-act=home]') && go('#/'))
   head.addEventListener('click', (e) => {
@@ -2334,15 +2373,15 @@ function viewStats() {
   const sess = S.sessions.filter((s) => !mine || s.d === S.profile.id).slice(-12).reverse()
   setView(
     `<div class="page">
-      ${header('學習紀錄', S.profile.name ? `${S.profile.name}・${S.profile.device || '這台裝置'}` : '紀錄存在這台裝置；可以匯出給老師或另一台裝置。')}
+      ${header('學習紀錄', S.profile.name ? `${S.profile.name}・${S.profile.device || ''}` : '紀錄存在這個瀏覽器裡；可以匯出給老師或其他裝置。')}
       ${
         teacherMode()
-          ? `<button class="card live-link" data-x="students"><span class="live-pulse${studentIds().some((sid) => isActive(latestLive(sid))) ? '' : ' idle'}"></span><span class="row-t"><b>學生的紀錄</b><small>這一頁是這台自己的練習；學生的紀錄在「學生」分頁</small></span>${ICON.chev}</button>`
+          ? `<button class="card live-link" data-x="students"><span class="live-pulse${studentIds().some((sid) => isActive(latestLive(sid))) ? '' : ' idle'}"></span><span class="row-t"><b>學生的紀錄</b><small>這一頁是老師自己的練習；學生的紀錄在「學生」分頁</small></span>${ICON.chev}</button>`
           : Sync.ready() && myRole() === 'parent'
             ? `<button class="card live-link" data-x="live"><span class="live-pulse${studentsLive().some(([, l]) => isActive(l)) ? '' : ' idle'}"></span><span class="row-t"><b>即時作答</b><small>${esc(studentsLive().map(([, l]) => `${Sync.stu?.name || l.name || l.dev}：${liveText(l)}`)[0] || '等孩子開始練習')}</small></span>${ICON.chev}</button>`
             : ''
       }
-      ${devices.size > 1 ? `<div class="seg" role="tablist"><button role="tab" class="${!mine ? 'on' : ''}" data-f="all">全部裝置</button><button role="tab" class="${mine ? 'on' : ''}" data-f="mine">只看這台</button></div>` : ''}
+      ${devices.size > 1 ? `<div class="seg" role="tablist"><button role="tab" class="${!mine ? 'on' : ''}" data-f="all">全部</button><button role="tab" class="${mine ? 'on' : ''}" data-f="mine">只看這裡做的</button></div>` : ''}
       <div class="tiles">
         <div class="tile"><div class="tile-v">${list.length}</div><div class="tile-k">已作答</div></div>
         <div class="tile"><div class="tile-v">${list.length ? Math.round((ok / list.length) * 100) + '<small>%</small>' : '—'}</div><div class="tile-k">正確率</div></div>
@@ -2390,7 +2429,7 @@ function viewStats() {
           <button class="row" data-x="report"><span class="row-ic">${ICON.share}</span><span class="row-t">傳學習報告給老師<small>文字版，可以貼到 LINE</small></span>${ICON.chev}</button>
           <button class="row" data-x="export"><span class="row-ic">${ICON.doc}</span><span class="row-t">匯出備份檔<small>完整紀錄（.json），可以傳到另一台裝置</small></span>${ICON.chev}</button>
           <button class="row" data-x="import"><span class="row-ic">${ICON.list}</span><span class="row-t">匯入備份檔<small>把另一台裝置的紀錄合併進來</small></span>${ICON.chev}</button>
-          <button class="row danger" data-x="clear"><span class="row-t">清除這台裝置的所有紀錄</span></button>
+          <button class="row danger" data-x="clear"><span class="row-t">清除所有紀錄</span></button>
         </div>
         <input type="file" accept=".json,application/json" class="file-in" hidden>
       </section>
@@ -2413,7 +2452,7 @@ function viewStats() {
     if (x === 'report') shareReport()
     if (x === 'export') exportData()
     if (x === 'import') $('.file-in').click()
-    if (x === 'clear') confirmSheet('清除這台裝置的紀錄？', '所有作答紀錄、錯題本、進度都會刪除，而且不能復原。建議先「匯出備份檔」。', '全部清除', () => {
+    if (x === 'clear') confirmSheet('清除所有紀錄？', '所有作答紀錄、錯題本、進度都會刪除，而且不能復原。建議先「匯出備份檔」。', '全部清除', () => {
       const p = S.profile
       S = DEF()
       S.profile = p
@@ -2554,12 +2593,12 @@ function viewSettings() {
         ${
           ACTIVE
             ? ''
-            : `<div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" data-seg="role">${Object.entries(ROLES)
+            : `<div class="row field"><span class="row-t">身分</span><div class="seg small" data-seg="role">${Object.entries(ROLES)
                 .map(([k, t]) => `<button class="${role === k ? 'on' : ''}" data-v="${k}">${t}</button>`)
                 .join('')}</div></div>`
         }
         <label class="row field"><span class="row-t">段考日期</span><input id="f-exam" type="date" value="${esc(p.exam)}"></label>
-      </div><p class="group-f">「這台是誰的」會寫在學習報告和備份檔上；老師、家長的裝置是用來看學生練習的。</p></div>
+      </div><p class="group-f">「身分」會寫在學習報告和備份檔上；老師、家長是用來看學生練習的。</p></div>
 
       <div class="group"><div class="group-h">練習</div><div class="list form">
         <div class="row field"><span class="row-t">每日目標</span><div class="seg small" data-seg="goal">${[20, 30, 50].map((g) => `<button class="${+p.goal === g ? 'on' : ''}" data-v="${g}">${g} 題</button>`).join('')}</div></div>
@@ -2578,7 +2617,7 @@ function viewSettings() {
         <button class="row" data-x="update"><span class="row-t">檢查更新</span><span class="row-r">${VERSION}</span>${ICON.chev}</button>
         <button class="row" data-x="install"><span class="row-t">加到主畫面（像 App 一樣打開）</span>${ICON.chev}</button>
       </div></div>
-      <p class="foot">題目、文章、聽力稿都是依翰林版七上 Starter～Review 1 的字彙與句型自編，不含課本原文。<br>紀錄只存在這台裝置的瀏覽器裡；清除瀏覽器資料會一起刪除，記得定期匯出備份。</p>
+      <p class="foot">題目、文章、聽力稿都是依翰林版七上 Starter～Review 1 的字彙與句型自編，不含課本原文。<br>紀錄存在這個瀏覽器裡；清除瀏覽器資料會一起刪除，記得定期匯出備份。</p>
     </div>`,
   )
   const v = $('.page')
@@ -2624,9 +2663,9 @@ function viewSettings() {
     if (x === 'manage') return go('#/manage')
     if (x === 'unpair')
       return confirmSheet(
-        Sync.state === 'owner' ? '解除這台的管理？' : '退出同步？',
-        Sync.state === 'owner' ? '解除之後，這台不再是老師後台的管理裝置，也看不到學生的資料（資料還在雲端）。之後要管理，得重新開始使用老師後台。' : '之後這台不會再同步，已經同步過來的紀錄會留著。',
-        Sync.state === 'owner' ? '確定解除' : '退出',
+        Sync.state === 'owner' ? '停用老師後台？' : '退出同步？',
+        Sync.state === 'owner' ? '停用之後，這裡就看不到學生的資料（資料還在雲端）。之後要管理，得重新開始使用老師後台。' : '之後不會再同步，已經同步過來的紀錄會留著。',
+        Sync.state === 'owner' ? '停用' : '退出',
         () => {
           Sync.unpair()
           toast('已解除', '👋')
@@ -2647,24 +2686,24 @@ function syncSettingsHTML(role) {
   const dot = `<span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span>`
   const pend = S.syncQ?.length ? `還有 ${S.syncQ.length} 筆待上傳` : '紀錄都已上傳'
   if (ACTIVE)
-    return `<div class="group"><div class="group-h">在這台作答</div><div class="list"><div class="row static">${dot}<span class="row-t">${esc(S.profile.name || '學生')} 正在這台作答<small>${status}・作答會同步到 ${esc(S.profile.name || '這個學生')} 的紀錄・${pend}</small></span></div>
+    return `<div class="group"><div class="group-h">學生模式</div><div class="list"><div class="row static">${dot}<span class="row-t">學生模式：${esc(S.profile.name || '學生')}<small>${status}・作答會同步到 ${esc(S.profile.name || '這個學生')} 的紀錄・${pend}</small></span></div>
       <button class="row" data-endclass><span class="row-ic">⏹</span><span class="row-t">結束<small>回到老師後台</small></span>${ICON.chev}</button></div></div>`
   let rows
   if (!S.sync?.code) {
     rows = `<button class="row" data-x="code"><span class="row-ic">🔢</span><span class="row-t">輸入代碼<small>老師給的 6 碼代碼</small></span>${ICON.chev}</button>
       <label class="row field"><span class="row-t">貼上連結<small>直接點老師傳的連結、掃 QR Code 也可以</small></span><input id="f-pair" placeholder="貼上老師給的連結" autocomplete="off" autocapitalize="off" spellcheck="false"></label>`
   } else if (['closed', 'removed', 'invalid', 'wait'].includes(st)) {
-    const t = { closed: '目前暫停加入', removed: '這台已經被移出', invalid: '沒辦法加入：連結可能已經失效', wait: '正在更新，老師那邊打開 App 之後就會完成' }[st]
-    rows = `<div class="row static"><span class="row-ic">${{ closed: '🔒', removed: '🚫', invalid: '⚠️', wait: '⏳' }[st]}</span><span class="row-t">${t}<small>這台是${ROLES[role]}的${S.syncQ?.length ? `・加入後會上傳 ${S.syncQ.length} 筆` : ''}</small></span></div>
+    const t = { closed: '目前暫停加入', removed: '已經被移出', invalid: '沒辦法加入：連結可能已經失效', wait: '正在更新，老師那邊打開 App 之後就會完成' }[st]
+    rows = `<div class="row static"><span class="row-ic">${{ closed: '🔒', removed: '🚫', invalid: '⚠️', wait: '⏳' }[st]}</span><span class="row-t">${t}<small>身分：${ROLES[role]}${S.syncQ?.length ? `・加入後會上傳 ${S.syncQ.length} 筆` : ''}</small></span></div>
       ${st !== 'wait' ? '<button class="row" data-rejoin><span class="row-ic">📨</span><span class="row-t">再試一次</span></button>' : ''}
       ${st === 'invalid' ? `<button class="row" data-x="code"><span class="row-ic">🔢</span><span class="row-t">輸入新的代碼</span>${ICON.chev}</button>` : ''}
       <button class="row danger" data-x="unpair"><span class="row-t">不加入了</span></button>`
   } else if (teacherMode()) {
     const n = pendingCount()
-    rows = `<div class="row static">${dot}<span class="row-t">老師後台${st === 'owner' ? '（這台是建立後台的裝置）' : ''}<small>${status}</small></span></div>
+    rows = `<div class="row static">${dot}<span class="row-t">老師後台${st === 'owner' ? '（建立者）' : ''}<small>${status}</small></span></div>
       <button class="row" data-x="students"><span class="row-ic">${ICON.people}</span><span class="row-t">學生<small>新增學生、傳 QR Code／連結／代碼、看即時作答、上課</small></span>${ICON.chev}</button>
       ${Sync.isAdmin() ? `<button class="row" data-x="manage"><span class="row-ic">👥</span><span class="row-t">成員管理<small>看哪些裝置加入了、移除裝置、暫停加入</small></span>${n ? `<b class="row-badge">${n}</b>` : ''}${ICON.chev}</button>` : ''}
-      <button class="row danger" data-x="unpair"><span class="row-t">${st === 'owner' ? '解除這台的管理' : '退出老師後台'}</span></button>`
+      <button class="row danger" data-x="unpair"><span class="row-t">${st === 'owner' ? '停用老師後台' : '退出老師後台'}</span></button>`
   } else {
     const nm = Sync.stu?.name
     rows = `<div class="row static">${dot}<span class="row-t">已連結老師（${role === 'parent' ? `${esc(nm || '孩子')}的家長` : `學生${nm ? '・' + esc(nm) : ''}`}）<small>${status}${role === 'student' ? '・' + pend : ''}</small></span></div>
@@ -2896,7 +2935,7 @@ const Sync = {
         const n = S.sync.backfill
         delete S.sync.backfill
         save()
-        toast(`已把這台以前的 ${n} 筆作答同步上去`, '☁️')
+        toast(`已把之前的 ${n} 筆作答同步上去`, '☁️')
       }
     } catch (e) {
       this.setStatus('error')
@@ -3472,11 +3511,11 @@ function studentsCardHTML() {
 function joinStatusHTML() {
   const st = Sync.state
   const stu = myRole() === 'student'
-  if (st === 'closed') return `<div class="js-ic">🔒</div><h2>目前暫停加入</h2><p class="muted">請跟老師說一聲。開放加入之後，這台會自動加入，不用再點一次連結。</p><button class="btn primary" data-rejoin>現在再試一次</button>`
-  if (st === 'removed') return `<div class="js-ic">🚫</div><h2>這台裝置已經被移出</h2><p class="muted">如果是誤會，請跟老師說一聲；老師允許之後，再按下面的按鈕就能重新加入。</p><button class="btn primary" data-rejoin>再試一次</button>`
-  if (st === 'invalid') return `<div class="js-ic">⚠️</div><h2>沒辦法加入</h2><p class="muted">這個連結可能已經失效，或這台已經被移出。請跟老師要新的連結或代碼。</p><button class="btn primary" data-rejoin>再試一次</button>`
+  if (st === 'closed') return `<div class="js-ic">🔒</div><h2>目前暫停加入</h2><p class="muted">請跟老師說一聲。開放加入之後會自動加入，不用再點一次連結。</p><button class="btn primary" data-rejoin>現在再試一次</button>`
+  if (st === 'removed') return `<div class="js-ic">🚫</div><h2>已經被移出</h2><p class="muted">如果是誤會，請跟老師說一聲；老師允許之後，再按下面的按鈕就能重新加入。</p><button class="btn primary" data-rejoin>再試一次</button>`
+  if (st === 'invalid') return `<div class="js-ic">⚠️</div><h2>沒辦法加入</h2><p class="muted">這個連結可能已經失效，或已經被移出。請跟老師要新的連結或代碼。</p><button class="btn primary" data-rejoin>再試一次</button>`
   if (st === 'wait') return `<div class="js-ic">⏳</div><h2>正在更新</h2><p class="muted">老師那邊打開 App 之後就會完成，不用做任何事。</p>`
-  if (st === 'member' || st === 'owner') return `<div class="js-ic">✅</div><h2>已加入</h2><p class="muted">${stu ? '你在這台做的題目，老師都會即時看到。' : '可以在這裡即時看到學生的練習。'}</p>`
+  if (st === 'member' || st === 'owner') return `<div class="js-ic">✅</div><h2>已加入</h2><p class="muted">${stu ? '你做的題目，老師都會即時看到。' : '可以在這裡即時看到學生的練習。'}</p>`
   return `<div class="js-ic">📡</div><h2>連線中…</h2><p class="muted">網路不穩時會自動重試。</p>`
 }
 document.addEventListener('click', (e) => {
@@ -3649,7 +3688,7 @@ function viewStudent(sid, keepScroll = false) {
       }
       ${selfRecHTML(list, sess)}
       <div class="group"><div class="list">
-        <button class="row" data-class><span class="row-ic">📱</span><span class="row-t">在這台作答<small>學生沒帶裝置時，借這台做題目；作答算在 ${esc(st.name || '這個學生')} 的紀錄</small></span>${ICON.chev}</button>
+        <button class="row" data-class><span class="row-ic">📱</span><span class="row-t">學生模式<small>學生沒帶平板時，用老師的平板或手機練習；作答算在 ${esc(st.name || '這個學生')} 的紀錄</small></span>${ICON.chev}</button>
         <button class="row" data-rename><span class="row-ic">✏️</span><span class="row-t">改暱稱</span>${ICON.chev}</button>
         <button class="row" data-go="#/manage"><span class="row-ic">👥</span><span class="row-t">裝置管理<small>看這個學生、家長有哪些裝置，可以移除</small></span>${ICON.chev}</button>
         <button class="row danger" data-delstu><span class="row-t">刪除這個學生</span></button>
@@ -3715,8 +3754,8 @@ function viewWatch(sid, keepScroll = false) {
   const list = Sync.attemptsOf(sid)
   const l = latestLive(sid)
   const it = isActive(l) && l.view === 'run' && ITEM[l.q]
-  // 這一題作答了沒：在「進到這一題」之後才有的作答
-  const ans = it ? [...list].reverse().find((a) => a.q === l.q && a.ts >= l.ts - 1500) : null
+  // 這一題作答了沒：在「進到這一題」之後才有的作答（兩個時間都來自學生的裝置，不會有時差）
+  const ans = it ? [...list].reverse().find((a) => a.q === l.q && a.ts >= l.ts) : null
   // 這一輪（同一個單元、最近一小時）的對錯
   const run = it ? list.filter((a) => a.m === it.mid && a.ts > Date.now() - 3600000 && a.x !== 'e') : []
   const t0 = dayStart()
@@ -3834,7 +3873,7 @@ function viewManage(keepScroll = false) {
         .join('')}
       ${loose.length ? `<div class="group"><div class="group-h">還沒分到學生（${loose.length}）</div><div class="list">${loose.map(row).join('')}</div></div>` : ''}
       <div class="group"><div class="group-h">老師的裝置（${teachers.length + (Sync.state === 'owner' ? 1 : 2)}）</div><div class="list">
-        <div class="row static mg-row"><span class="mg-ic">📚</span><span class="row-t"><b>這台・${esc(S.profile.device || '老師')}</b><small>${Sync.state === 'owner' ? '建立後台的管理裝置' : '管理裝置'}</small></span></div>
+        <div class="row static mg-row"><span class="mg-ic">📚</span><span class="row-t"><b>${esc(S.profile.device || '老師')}（目前使用中）</b><small>${Sync.state === 'owner' ? '建立後台的管理裝置' : '管理裝置'}</small></span></div>
         ${Sync.state === 'owner' ? '' : '<div class="row static mg-row"><span class="mg-ic">📚</span><span class="row-t"><b>老師</b><small>建立後台的管理裝置</small></span></div>'}
         ${teachers.map(row).join('')}
         <button class="row" data-share-teacher><span class="row-ic">${ICON.share}</span><span class="row-t">加入老師的其他裝置<small>QR Code 或連結；加入後看得到所有學生</small></span>${ICON.chev}</button>
@@ -3869,8 +3908,8 @@ function viewManage(keepScroll = false) {
         const m = Sync.members[t.dataset.remove] || {}
         const sn = Sync.students[m.sid]?.name
         return confirmSheet(
-          '移除這台裝置？',
-          `${esc(ROLES[m.role] || '成員')}${sn ? `（${esc(sn)}）` : ''}・${esc(m.dev || '裝置')} 會立刻看不到任何資料，也不能用這台再加回來（之後可以在「已移除」按允許重新加入）。`,
+          '移除這個成員？',
+          `${esc(ROLES[m.role] || '成員')}${sn ? `（${esc(sn)}）` : ''}・${esc(m.dev || '裝置')} 會立刻看不到任何資料，也不能自己再加回來（之後可以在「已移除」按允許重新加入）。`,
           '移除',
           async () => {
             try {
@@ -3891,7 +3930,7 @@ function viewManage(keepScroll = false) {
       if (t.dataset.admin) {
         t.disabled = true
         await Sync.setAdmin(t.dataset.admin, t.dataset.v === '1')
-        toast(t.dataset.v === '1' ? '這台也可以管理了' : '已取消管理權限', '✅')
+        toast(t.dataset.v === '1' ? '已設為可管理' : '已取消管理權限', '✅')
       }
       if (t.dataset.open) {
         await Sync.setOpen(t.dataset.open === '1')
@@ -4008,7 +4047,7 @@ function shareTeacher() {
 function codeSheet(role, prefill = '') {
   role = role || (S.profile.role === 'parent' ? 'parent' : 'student')
   const b = sheet(`<h2 class="sheet-title">輸入老師給的代碼</h2>
-    <div class="list form"><div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" id="cs-role"><button data-r="student">學生</button><button data-r="parent">家長</button></div></div></div>
+    <div class="list form"><div class="row field"><span class="row-t">身分</span><div class="seg small" id="cs-role"><button data-r="student">學生</button><button data-r="parent">家長</button></div></div></div>
     <input id="cs-code" class="code-input" placeholder="例如 K7M 4QP" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="代碼">
     <p class="cs-err" role="alert"></p>
     <div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn primary" data-ok>連結</button></div>`)
@@ -4033,7 +4072,7 @@ function codeSheet(role, prefill = '') {
     if (d.err) return ($('.cs-err', b).textContent = d.err)
     closeSheet()
     if (S.sync?.code && (S.sync.code !== d.c || S.sync.sid !== d.s || myRole() !== role))
-      return confirmSheet('換成新的連結？', '這台已經連結了另一個學生或老師。換成這一個之後，舊的那一個不會再同步。', '換成這一個', () => finishPair(d.c, role, { sid: d.s }))
+      return confirmSheet('換成新的連結？', '已經連結了另一個學生或老師。換成這一個之後，舊的那一個不會再同步。', '換成這一個', () => finishPair(d.c, role, { sid: d.s }))
     finishPair(d.c, role, { sid: d.s })
   }
   $('[data-ok]', b).onclick = ok
@@ -4046,7 +4085,7 @@ function viewPair(code, preset, x = '') {
     return go('#/')
   }
   if (ACTIVE) {
-    toast('學生正在這台作答：請先按上面的「結束」', '⚠️')
+    toast('學生模式中：請先按上面的「結束」', '⚠️')
     return go('#/')
   }
   // 老師後台的裝置點到學生、家長的連結：不要把這台換掉
@@ -4066,7 +4105,7 @@ function viewPair(code, preset, x = '') {
     }
     if (S.sync?.code) {
       viewHome()
-      return confirmSheet('換成新的連結？', '這台已經連結了另一個學生或老師。換成這一個之後，舊的那一個不會再同步。', '換成這一個', () => finishPair(code, preset, opt))
+      return confirmSheet('換成新的連結？', '已經連結了另一個學生或老師。換成這一個之後，舊的那一個不會再同步。', '換成這一個', () => finishPair(code, preset, opt))
     }
     return finishPair(code, preset, opt)
   }
@@ -4075,13 +4114,13 @@ function viewPair(code, preset, x = '') {
   let role = S.profile.role === 'parent' ? 'parent' : 'student'
   const b = sheet(
     `<h2 class="sheet-title">連結老師</h2>
-    <div class="list form"><div class="row field"><span class="row-t">這台是誰的</span><div class="seg small" id="pair-role"><button data-r="student">學生</button><button data-r="parent">家長</button></div></div></div>
+    <div class="list form"><div class="row field"><span class="row-t">身分</span><div class="seg small" id="pair-role"><button data-r="student">學生</button><button data-r="parent">家長</button></div></div></div>
     <p class="sheet-p pair-desc" style="margin-top:12px"></p>
     <div class="sheet-actions"><button class="btn ghost" data-close>先不要</button><button class="btn primary" data-ok>加入</button></div>`,
   )
   const draw = () => {
     $$('#pair-role button', b).forEach((y) => y.classList.toggle('on', y.dataset.r === role))
-    $('.pair-desc', b).textContent = role === 'student' ? '加入之後，你在這台的作答會即時同步，以前做過的題目也會一起傳上去。' : '加入之後，就能在這台即時看到孩子正在做哪一題、每題答了什麼。'
+    $('.pair-desc', b).textContent = role === 'student' ? '加入之後，你的作答會即時同步，以前做過的題目也會一起傳上去。' : '加入之後，就能即時看到孩子正在做哪一題、每題答了什麼。'
   }
   draw()
   $('#pair-role', b).addEventListener('click', (e) => {
@@ -4103,7 +4142,7 @@ async function finishPair(code, role, opt = {}) {
   go(role === 'student' ? '#/' : '#/live')
   await Sync.pair(code, role, opt)
   if (Sync.ready()) {
-    if (role === 'teacher') return toast('加入完成！這台看得到所有學生的練習', '📡')
+    if (role === 'teacher') return toast('加入完成！可以看到所有學生的練習', '📡')
     if (role === 'parent') return toast('連結完成！這裡可以即時看到孩子的練習', '📡')
     if (mine) return toast(`連結完成！正在把你之前的 ${mine} 筆作答同步上去`, '📡')
     return setTimeout(noRecordsHint, 350)
@@ -4119,7 +4158,7 @@ function noRecordsHint() {
     <div class="sheet-actions"><button class="btn primary" data-close>知道了</button></div>`)
 }
 
-// ── 在這台作答（上課模式）：老師的裝置暫時借給一個學生用（題目、錯題本、紀錄都是那個學生的，作答同步到他那裡） ──
+// ── 學生模式：老師的裝置暫時借給一個學生用（題目、錯題本、紀錄都是那個學生的，作答同步到他那裡） ──
 function enterClass(sid) {
   const st = Sync.students[sid] || {}
   try {
@@ -4143,7 +4182,7 @@ function endClass() {
   location.hash = ACTIVE ? '#/student/' + ACTIVE : '#/students'
   location.reload()
 }
-const classBarHTML = () => (ACTIVE ? `<div class="class-bar"><span><b>${esc(S.profile.name || '學生')}</b> 正在這台作答</span><button class="btn ghost small-btn" data-endclass>結束</button></div>` : '')
+const classBarHTML = () => (ACTIVE ? `<div class="class-bar"><span>學生模式：<b>${esc(S.profile.name || '學生')}</b></span><button class="btn ghost small-btn" data-endclass>結束</button></div>` : '')
 
 // ───────────────────────── 路由與外框 ─────────────────────────
 const TABS = [
