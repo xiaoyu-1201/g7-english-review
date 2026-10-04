@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.7（10/5）'
+const VERSION = '2.7.1（10/5）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -496,11 +496,15 @@ const Voice = {
     // iPhone：語音偶爾會卡在「暫停」；只有正在講的時候才取消（取消後馬上講，iPhone 有時會吞掉）
     if (speechSynthesis.paused) speechSynthesis.resume()
     if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel()
-    this.muteHint()
+    this.keepAlive(true)
     const arr = typeof lines === 'string' ? [['W', lines]] : lines
     const PITCH = { M: 0.9, W: 1.05, B: 1.12, G: 1.25, A: 1 }
     return new Promise((res) => {
       let started = false
+      const done = () => {
+        this.keepAlive(false)
+        res()
+      }
       arr.forEach(([sp, text], i) => {
         const u = new SpeechSynthesisUtterance(text)
         u.lang = 'en-US'
@@ -510,28 +514,46 @@ const Voice = {
         u.rate = this.rate(slow)
         u.onstart = () => (started = true)
         if (i === arr.length - 1) {
-          u.onend = res
-          u.onerror = res
+          u.onend = done
+          u.onerror = done
         }
         speechSynthesis.speak(u)
       })
-      // 2.5 秒都沒開始講：多半是語音卡住了，重來一次
+      // 2.5 秒都沒開始講：多半是語音卡住了
       setTimeout(() => {
         if (started) return
         speechSynthesis.cancel()
-        toast(IS_IOS ? '沒有聲音嗎？請關掉 iPhone 的靜音模式，再把音量調大' : '沒有聲音嗎？請把音量調大再按一次', '🔈')
-        res()
+        toast('沒有聲音嗎？請把音量調大再按一次', '🔈')
+        done()
       }, 2500)
     })
   },
-  // iPhone 開著靜音模式時，網頁朗讀會沒有聲音：第一次按播放時提醒一次
-  muteHint() {
-    if (!IS_IOS || this.hinted) return
-    this.hinted = true
-    toast('聽不到聲音？iPhone 要關掉靜音模式（側邊開關或控制中心的鈴鐺）', '🔈')
+  // iPhone 靜音模式會擋掉網頁朗讀，但不擋「播放媒體」：朗讀時在背景播一段無聲音檔，讓 iPhone 把這頁當成在播媒體
+  silentURL: null,
+  keepAlive(on) {
+    if (!IS_IOS) return
+    if (!this.silentURL) {
+      // 0.5 秒的無聲 WAV（8kHz、8-bit、單聲道）
+      const n = 4000
+      const b = new Uint8Array(44 + n)
+      const v = new DataView(b.buffer)
+      const s = (o, t) => [...t].forEach((c, i) => (b[o + i] = c.charCodeAt(0)))
+      s(0, 'RIFF'), v.setUint32(4, 36 + n, true), s(8, 'WAVEfmt '), v.setUint32(16, 16, true), v.setUint16(20, 1, true), v.setUint16(22, 1, true)
+      v.setUint32(24, 8000, true), v.setUint32(28, 8000, true), v.setUint16(32, 1, true), v.setUint16(34, 8, true), s(36, 'data'), v.setUint32(40, n, true)
+      b.fill(128, 44)
+      this.silentURL = URL.createObjectURL(new Blob([b], { type: 'audio/wav' }))
+    }
+    if (!this.silent) {
+      this.silent = new Audio(this.silentURL)
+      this.silent.loop = true
+      this.silent.setAttribute('playsinline', '')
+    }
+    if (on) this.silent.play().catch(() => {})
+    else this.silent.pause()
   },
   stop() {
     if (this.ok) speechSynthesis.cancel()
+    this.keepAlive(false)
   },
 }
 if (Voice.ok) {
