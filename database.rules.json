@@ -79,6 +79,13 @@
             }
           }
         },
+        "hw": {
+          ".write": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid + '/admin').val() === true)",
+          "$sid": {
+            ".read": "auth != null && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid",
+            "$h": { ".validate": "newData.hasChildren(['title', 'tasks', 'at'])" }
+          }
+        },
         "live": {
           ".write": "auth != null && (root.child('classes/' + $code + '/owner').val() === auth.uid || root.child('classes/' + $code + '/members/' + auth.uid + '/admin').val() === true)",
           "$sid": {

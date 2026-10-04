@@ -4281,3 +4281,108 @@ ul.plain b {
   font-weight: 600;
   color: var(--label2);
 }
+
+/* ── 派作業 ── */
+.stu-actions .btn span {
+  margin-left: 4px;
+}
+.hw-card .sec-h {
+  align-items: center;
+}
+.hw-item {
+  padding: 10px 0 4px;
+  border-top: 0.5px solid var(--sep);
+}
+.hw-item:first-of-type {
+  border-top: 0;
+}
+.hw-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.hw-top b {
+  font-size: 17px;
+}
+.hw-top span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--blue);
+}
+.hw-top span.late {
+  color: var(--red);
+}
+.hw-item.all .hw-top span {
+  color: var(--green);
+}
+.hw-del {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--red);
+}
+.hw-note {
+  margin: 6px 0 2px;
+  font-size: 14px;
+  color: var(--label2);
+}
+.hw-task {
+  gap: 10px;
+}
+.hw-chk {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--label3);
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.hw-task.ok .hw-chk {
+  background: var(--green-v);
+  border-color: var(--green-v);
+}
+.hw-chk svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hw-task.ok .row-t {
+  color: var(--label2);
+}
+.hw-task .row-r {
+  font-size: 14px;
+}
+.hw-auto {
+  display: block;
+  margin: 14px auto 4px;
+}
+.hw-auto-why {
+  text-align: center;
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+.hw-groups {
+  margin-top: 8px;
+}
+.hw-g .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.hw-pick {
+  min-height: 38px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+.hw-pick.on {
+  background: var(--blue);
+  color: #fff;
+  box-shadow: none;
+}
