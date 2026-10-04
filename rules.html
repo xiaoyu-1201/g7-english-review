@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>複製資料庫規則</title>
+<style>
+  :root { --bg: #f2f2f7; --card: #fff; --label: #000; --label2: rgba(60, 60, 67, 0.62); --blue: #007aff; --green: #28a745; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #000; --card: #1c1c1e; --label: #fff; --label2: rgba(235, 235, 245, 0.6); --blue: #0a84ff; --green: #30d158; } }
+  body { margin: 0; background: var(--bg); color: var(--label); font: 17px/1.5 -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC', sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  p { color: var(--label2); margin: 0 0 18px; }
+  ol { padding-left: 1.3em; margin: 0 0 20px; }
+  li { margin-bottom: 6px; }
+  button { width: 100%; min-height: 54px; border: 0; border-radius: 14px; background: var(--blue); color: #fff; font: 600 18px -apple-system, BlinkMacSystemFont, sans-serif; }
+  button.done { background: var(--green); }
+  .meta { margin: 12px 0 0; font-size: 14px; text-align: center; }
+  textarea { width: 100%; box-sizing: border-box; height: 160px; margin-top: 18px; border: 0; border-radius: 12px; padding: 12px; background: var(--card); color: var(--label2); font: 12px/1.4 ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>複製資料庫規則</h1>
+  <p>按一下按鈕就會複製整份規則（不用自己全選）。</p>
+  <ol>
+    <li>按下面藍色按鈕，變綠色就是複製好了。</li>
+    <li>到 Firebase →「Realtime Database」→「規則」，先把裡面的文字全部刪掉。</li>
+    <li>長按貼上，再按「發布」。</li>
+  </ol>
+  <button id="copy" disabled>載入中…</button>
+  <p class="meta" id="meta"></p>
+  <textarea id="txt" readonly aria-label="規則內容"></textarea>
+</main>
+<script>
+  const btn = document.getElementById('copy')
+  const txt = document.getElementById('txt')
+  const meta = document.getElementById('meta')
+  fetch('database.rules.json?ts=' + Date.now(), { cache: 'no-store' })
+    .then((r) => r.text())
+    .then((t) => {
+      JSON.parse(t) // 確認是完整的規則
+      txt.value = t
+      btn.disabled = false
+      btn.textContent = '複製全部規則'
+      meta.textContent = `共 ${t.split('\n').length} 行，最後一行是「}」`
+    })
+    .catch(() => {
+      btn.textContent = '載入失敗，請重新整理'
+    })
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(txt.value)
+    } catch {
+      // 舊瀏覽器：選起來再複製
+      txt.focus()
+      txt.setSelectionRange(0, txt.value.length)
+      document.execCommand('copy')
+    }
+    btn.textContent = '✓ 已複製，去 Firebase 貼上'
+    btn.classList.add('done')
+  })
+</script>
+</body>
+</html>
