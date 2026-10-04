@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.1.2（10/4）'
+const VERSION = '2.2（10/4）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -53,7 +53,7 @@ const DEF = () => ({
   progress: {},
   flash: { best: 0, runs: 0 },
 })
-// 上課模式：老師平板暫時給某個學生用（紀錄存在另一份，同步到那個學生）；同步設定（S.sync、S.syncQ）存在共用的 SYNC_KEY
+// 在這台作答（上課模式）：老師的裝置暫時借給某個學生用（紀錄存在另一份，同步到那個學生）；同步設定（S.sync、S.syncQ）存在共用的 SYNC_KEY
 const ACTIVE = (() => {
   try {
     return localStorage.getItem('g7review:active') || ''
@@ -584,6 +584,7 @@ const ICON = {
   stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="fill" x="7" y="7" width="10" height="10" rx="2" /></svg>',
   check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>',
   notes: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="3" /><path d="M9 8.5h6M9 12h6M9 15.5h4" /></svg>',
+  eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></svg>',
   share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4" /><path d="M6 11v8.5h12V11" /></svg>',
   people: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.3" /><path d="M3 19.5c.6-3.4 3-5.3 6-5.3s5.4 1.9 6 5.3" /><path d="M15.5 5.6a3.1 3.1 0 010 5.8M17.6 14.6c1.8.7 3 2.4 3.4 4.9" /></svg>',
   star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z" /></svg>',
@@ -2646,8 +2647,8 @@ function syncSettingsHTML(role) {
   const dot = `<span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span>`
   const pend = S.syncQ?.length ? `還有 ${S.syncQ.length} 筆待上傳` : '紀錄都已上傳'
   if (ACTIVE)
-    return `<div class="group"><div class="group-h">上課模式</div><div class="list"><div class="row static">${dot}<span class="row-t">上課中：${esc(S.profile.name || '學生')}<small>${status}・這台的作答會同步到 ${esc(S.profile.name || '這個學生')} 的紀錄・${pend}</small></span></div>
-      <button class="row" data-endclass><span class="row-ic">⏹</span><span class="row-t">結束上課<small>回到老師後台</small></span>${ICON.chev}</button></div></div>`
+    return `<div class="group"><div class="group-h">在這台作答</div><div class="list"><div class="row static">${dot}<span class="row-t">${esc(S.profile.name || '學生')} 正在這台作答<small>${status}・作答會同步到 ${esc(S.profile.name || '這個學生')} 的紀錄・${pend}</small></span></div>
+      <button class="row" data-endclass><span class="row-ic">⏹</span><span class="row-t">結束<small>回到老師後台</small></span>${ICON.chev}</button></div></div>`
   let rows
   if (!S.sync?.code) {
     rows = `<button class="row" data-x="code"><span class="row-ic">🔢</span><span class="row-t">輸入代碼<small>老師給的 6 碼代碼</small></span>${ICON.chev}</button>
@@ -2910,7 +2911,7 @@ const Sync = {
     if (info.view !== 'away') this.last = info
     const sid = this.sid()
     if (!this.ready() || !sid || (myRole() === 'teacher' && !ACTIVE)) return
-    const body = { ...info, dev: ACTIVE ? '上課平板' : S.profile.device || '未命名裝置', kind: deviceKind(), name: S.profile.name || '', role: myRole(), ts: Date.now() }
+    const body = { ...info, dev: ACTIVE ? '老師的裝置' : S.profile.device || '未命名裝置', kind: deviceKind(), name: S.profile.name || '', role: myRole(), ts: Date.now() }
     this.url(`live/${sid}/${S.profile.id}`)
       .then((u) => fetch(u, { method: 'PUT', body: JSON.stringify(body), keepalive: true }))
       .catch(() => {})
@@ -3380,6 +3381,7 @@ function onSyncChange(k) {
     if (h === '#/live') return viewLive(true)
     if (h === '#/students') return viewStudents(true)
     if (h.startsWith('#/student/')) return viewStudent(h.split('/')[2], true)
+    if (h.startsWith('#/watch/')) return kind === 'members' ? undefined : viewWatch(h.split('/')[2], true)
     // 成員管理：只在名單變動時重畫（避免按鈕在手指下被換掉）
     if (h === '#/manage') return kind === 'members' || any ? viewManage(true) : undefined
     if (h === '#/settings' && (kind === 'members' || any)) return viewSettings()
@@ -3399,7 +3401,7 @@ const agoText = (ts) => {
 function liveText(l) {
   if (!l) return '還沒有上線'
   const fresh = Date.now() - l.ts < 10 * 60000
-  const where = l.dev === '上課平板' ? '（上課中）' : ''
+  const where = l.dev === '老師的裝置' || l.dev === '上課平板' ? '（在老師的裝置上）' : ''
   if (l.view === 'run' && fresh) return `正在做：${l.title}・第 ${l.n}／${l.of} 題${where}`
   if (l.view === 'exam' && fresh) return `正在寫模擬段考${where}`
   if (l.view === 'flash' && fresh) return `正在玩閃電挑戰${where}`
@@ -3629,7 +3631,7 @@ function viewStudent(sid, keepScroll = false) {
     `<div class="page narrow stu-detail">
       ${header(st.name || '學生', `學生的裝置 ${nS} 台・家長的裝置 ${nP} 台`, syncPill(), true)}
       <div class="stu-actions">
-        <button class="btn primary" data-class>${ICON.play}<span>上課（用這台）</span></button>
+        <button class="btn primary" data-go="#/watch/${sid}">${ICON.eye}<span>課堂檢視</span></button>
         <button class="btn ghost" data-share="student">傳給學生</button>
         <button class="btn ghost" data-share="parent">傳給家長</button>
       </div>
@@ -3647,6 +3649,7 @@ function viewStudent(sid, keepScroll = false) {
       }
       ${selfRecHTML(list, sess)}
       <div class="group"><div class="list">
+        <button class="row" data-class><span class="row-ic">📱</span><span class="row-t">在這台作答<small>學生沒帶裝置時，借這台做題目；作答算在 ${esc(st.name || '這個學生')} 的紀錄</small></span>${ICON.chev}</button>
         <button class="row" data-rename><span class="row-ic">✏️</span><span class="row-t">改暱稱</span>${ICON.chev}</button>
         <button class="row" data-go="#/manage"><span class="row-ic">👥</span><span class="row-t">裝置管理<small>看這個學生、家長有哪些裝置，可以移除</small></span>${ICON.chev}</button>
         <button class="row danger" data-delstu><span class="row-t">刪除這個學生</span></button>
@@ -3691,6 +3694,65 @@ function viewStudent(sid, keepScroll = false) {
         true,
       )
   })
+}
+
+// 課堂檢視：學生用自己的裝置上課時，老師在自己的裝置上跟著看（現在這一題、題目、正確答案；學生一按檢查，答案和對錯馬上出現）
+let WAKE = null // 螢幕保持開著
+let watchFresh = ''
+function viewWatch(sid, keepScroll = false) {
+  if (!Sync.isAdmin()) return viewStudents()
+  const st = Sync.students[sid]
+  if (!st) return Sync.loaded ? go('#/students') : setView(`<div class="page narrow">${header('課堂檢視', '', '', true)}<div class="empty card"><div class="empty-ic">📡</div><h2>載入中…</h2></div></div>`)
+  if (!WAKE && navigator.wakeLock && document.visibilityState === 'visible')
+    navigator.wakeLock
+      .request('screen')
+      .then((w) => {
+        WAKE = w
+        w.addEventListener('release', () => (WAKE = null))
+      })
+      .catch(() => {})
+  const y = window.scrollY
+  const list = Sync.attemptsOf(sid)
+  const l = latestLive(sid)
+  const it = isActive(l) && l.view === 'run' && ITEM[l.q]
+  // 這一題作答了沒：在「進到這一題」之後才有的作答
+  const ans = it ? [...list].reverse().find((a) => a.q === l.q && a.ts >= l.ts - 1500) : null
+  // 這一輪（同一個單元、最近一小時）的對錯
+  const run = it ? list.filter((a) => a.m === it.mid && a.ts > Date.now() - 3600000 && a.x !== 'e') : []
+  const t0 = dayStart()
+  const today = list.filter((a) => a.ts >= t0)
+  const ok = today.filter((a) => a.r === 'ok').length
+  const name = st.name || '學生'
+  const statusTxt = !l ? `${name} 還沒有上線` : !isActive(l) ? `${name} 現在沒有在練習（${agoText(l.ts)}）` : l.view === 'run' ? '' : l.view === 'exam' ? `${name} 正在寫模擬段考（交卷後看得到作答）` : l.view === 'flash' ? `${name} 正在玩閃電挑戰` : `${name} 在 App 的首頁`
+  setView(
+    `<div class="page narrow watch-page">
+      ${header(name, it ? `${l.title}・第 ${l.n}／${l.of} 題` : '課堂檢視', syncPill(), true)}
+      ${
+        it
+          ? `<div class="watch-run">${run.map((a) => `<i class="wr ${a.r}" title="${esc(snippet(ITEM[a.q] || {}))}"></i>`).join('')}<span>今天 ${today.length} 題・對 ${today.length ? Math.round((ok / today.length) * 100) : 0}%</span></div>
+            <section class="card watch-q${ans ? ' answered ' + ans.r : ''}${ans && Sync.akey(ans) !== watchFresh ? ' fresh' : ''}">
+              <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '有點猜・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : '正在作答…'}</div>
+              <div class="watch-slot"></div>
+            </section>`
+          : `<div class="empty card"><div class="empty-ic">${isActive(l) ? '📱' : '💤'}</div><h2>${esc(statusTxt)}</h2><p class="muted">${name} 開始做題目時，這裡會自動顯示那一題。</p></div>`
+      }
+      <section class="card"><div class="sec-h"><div><h2>剛剛的作答</h2></div></div>${feedHTML(list.slice(-10))}</section>
+    </div>`,
+  )
+  if (it) {
+    const card = reviewCard(it, ans, `${name} 的答案`)
+    // 選擇題：學生選的那個直接標顏色（對＝綠、錯＝紅）
+    if (ans && it.t === 'mcq')
+      $$('.opt', card).forEach((o) => {
+        const i = +o.dataset.i
+        if (i === it.a) o.classList.add('ok')
+        else if (it.opts[i] === ans.a) o.classList.add('bad')
+      })
+    $('.watch-slot').append(card)
+  }
+  if (ans) watchFresh = Sync.akey(ans)
+  if (keepScroll) window.scrollTo(0, y)
+  $('.watch-page').addEventListener('click', (e) => feedClick(e, list))
 }
 
 // 跟自己比：本週 vs 上週、連續天數、模擬段考、閃電挑戰（不跟別人比）
@@ -3984,7 +4046,7 @@ function viewPair(code, preset, x = '') {
     return go('#/')
   }
   if (ACTIVE) {
-    toast('上課中：請先按「結束上課」', '⚠️')
+    toast('學生正在這台作答：請先按上面的「結束」', '⚠️')
     return go('#/')
   }
   // 老師後台的裝置點到學生、家長的連結：不要把這台換掉
@@ -4057,13 +4119,13 @@ function noRecordsHint() {
     <div class="sheet-actions"><button class="btn primary" data-close>知道了</button></div>`)
 }
 
-// ── 上課模式：老師平板暫時給一個學生用（題目、錯題本、紀錄都是那個學生的，作答同步到他那裡） ──
+// ── 在這台作答（上課模式）：老師的裝置暫時借給一個學生用（題目、錯題本、紀錄都是那個學生的，作答同步到他那裡） ──
 function enterClass(sid) {
   const st = Sync.students[sid] || {}
   try {
     const key = `${KEY}@${sid}`
     const d = JSON.parse(localStorage.getItem(key) || 'null') || DEF()
-    d.profile = { ...d.profile, name: st.name || '', role: 'student', device: '上課平板', exam: d.profile.exam || S.profile.exam || '', oral: S.profile.oral, size: S.profile.size }
+    d.profile = { ...d.profile, name: st.name || '', role: 'student', device: '老師的裝置', exam: d.profile.exam || S.profile.exam || '', oral: S.profile.oral, size: S.profile.size }
     d.seen = { ...(d.seen || {}), intro: d.seen?.intro || Date.now() }
     localStorage.setItem(key, JSON.stringify(d))
     localStorage.setItem('g7review:active', sid)
@@ -4081,7 +4143,7 @@ function endClass() {
   location.hash = ACTIVE ? '#/student/' + ACTIVE : '#/students'
   location.reload()
 }
-const classBarHTML = () => (ACTIVE ? `<div class="class-bar"><span>上課中：<b>${esc(S.profile.name || '學生')}</b></span><button class="btn ghost small-btn" data-endclass>結束上課</button></div>` : '')
+const classBarHTML = () => (ACTIVE ? `<div class="class-bar"><span><b>${esc(S.profile.name || '學生')}</b> 正在這台作答</span><button class="btn ghost small-btn" data-endclass>結束</button></div>` : '')
 
 // ───────────────────────── 路由與外框 ─────────────────────────
 const TABS = [
@@ -4099,7 +4161,7 @@ function setView(html, { tabs = true } = {}) {
   root.innerHTML = `<main id="view" class="${tabs ? 'with-tabs' : 'immersive'}">${tabs ? classBarHTML() : ''}${html}</main>${
     tabs
       ? `<nav class="tabbar" aria-label="主選單">${list.map(([h, label, ic]) => {
-          const on = cur === h || (h === '#/students' && (cur.startsWith('#/student/') || cur === '#/manage'))
+          const on = cur === h || (h === '#/students' && (cur.startsWith('#/student/') || cur.startsWith('#/watch/') || cur === '#/manage'))
           const badge = h === '#/book' ? bookIds().length : h === '#/settings' ? pendingCount() : 0
           return `<a href="${h}" class="${on ? 'on' : ''}" ${on ? 'aria-current="page"' : ''}>${ic}<span>${label}</span>${badge ? `<b class="badge">${badge > 99 ? '99+' : badge}</b>` : ''}</a>`
         }).join('')}</nav>`
@@ -4116,6 +4178,8 @@ function route() {
   const h = location.hash || '#/'
   const [, a, b] = h.split('/')
   if (a !== 'exam' && EXAM && !EXAM.graded) clearInterval(EXAM.timer)
+  if (a !== 'watch' && WAKE) WAKE.release().catch(() => {})
+  if (a === 'watch' && b) return viewWatch(b)
   if (a === 'run' && b) return viewRun(decodeURIComponent(b))
   if (a === 'book') return viewBook()
   if (a === 'exam') return viewExam()
