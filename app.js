@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.9（10/6）'
+const VERSION = '2.9.1（10/6）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3650,7 +3650,8 @@ const Auth = {
   async signUp(email, password, keep = false) {
     if (keep) {
       const idToken = await this.token()
-      this.use(await this.call('update', { idToken, email, password }), email)
+      // 帶著現在的識別證呼叫 signUp＝把 Email 綁到這個匿名身分（Firebase 的 linkWithCredential 也是這樣做；accounts:update 會被「Email 保護」擋下）
+      this.use(await this.call('signUp', { idToken, email, password }), email)
     } else this.use(await this.call('signUp', { email, password }), email)
   },
   async resetPassword(email) {

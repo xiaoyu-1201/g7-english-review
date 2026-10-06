@@ -264,7 +264,8 @@ class H(BaseHTTPRequestHandler):
                     return self.err("EMAIL_EXISTS")
                 if len(pw) < 6:
                     return self.err("WEAK_PASSWORD : Password should be at least 6 characters")
-                uid = uuid.uuid4().hex[:20]
+                t = b.get("idToken") or ""  # 帶識別證＝把 Email 綁到這個匿名身分（uid 不變）
+                uid = t.split("-", 1)[1] if "-" in t else uuid.uuid4().hex[:20]
                 USERS[email] = {"uid": uid, "pw": pw}
                 return self.reply({**tokens(uid, "password"), "email": email})
             if p.endswith("accounts:signInWithPassword"):
@@ -272,17 +273,8 @@ class H(BaseHTTPRequestHandler):
                 if not u or u["pw"] != pw:
                     return self.err("INVALID_LOGIN_CREDENTIALS")
                 return self.reply({**tokens(u["uid"], "password"), "email": email})
-            if p.endswith("accounts:update"):  # 匿名身分升級成帳號：身分（uid）不變
-                t = b.get("idToken") or ""
-                uid = t.split("-", 1)[1] if "-" in t else ""
-                if not uid:
-                    return self.err("INVALID_ID_TOKEN")
-                if email in USERS:
-                    return self.err("EMAIL_EXISTS")
-                if len(pw) < 6:
-                    return self.err("WEAK_PASSWORD : Password should be at least 6 characters")
-                USERS[email] = {"uid": uid, "pw": pw}
-                return self.reply({**tokens(uid, "password"), "email": email})
+            if p.endswith("accounts:update"):  # 真的 Firebase 開了 Email 保護：直接改 Email 會被擋
+                return self.err("OPERATION_NOT_ALLOWED : Please verify the new email before changing email.")
             if p.endswith("accounts:sendOobCode"):
                 return self.reply({"email": email})
         return self.reply({"error": "not found"}, 404)
