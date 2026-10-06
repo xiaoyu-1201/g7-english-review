@@ -103,7 +103,7 @@ with sync_playwright() as p:
     check(wait_until(lambda: "完成作業" in txt(T, "#toast"), 12), "teacher notified of completion")
     check(wait_until(lambda: "全部完成" in txt(T, ".hw-card")), "teacher page shows done")
     T.goto(URL + "#/students")
-    check(wait_until(lambda: T.locator(".stu-row").count() == 1), "student list ok")
+    check(wait_until(lambda: T.locator(".sc").count() == 1), "student list ok")
     time.sleep(0.3)
     T.goto(URL + "#/student/" + amy)
     T.wait_for_selector(".hw-card")

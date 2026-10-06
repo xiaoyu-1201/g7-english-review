@@ -15,8 +15,15 @@ with sync_playwright() as p:
     b = p.chromium.launch(channel="msedge")
     T = page(b, 820, 1180, "T", seed=DBSEED + store({"seen": {"intro": 1}, "profile": {"id": "tabpid"}, "sync": {"code": CODE, "role": "teacher", "at": now - 100000}}))
     T.goto(URL + "#/students")
+    check(wait_until(lambda: T.evaluate("location.hash") == "#/teacher"), "old tablet is sent to account setup")
+    T.wait_for_selector(".teacher-page")
+    check("設定老師帳號" in txt(T, ".teacher-page"), "setup page (not plain login)")
+    T.fill("#t-email", f"m2{now}@example.com")
+    T.fill("#t-pw", "secret123")
+    T.click("[data-t-ok]")
     check(wait_until(lambda: st(T) == "owner"), "old tablet becomes owner")
-    check(wait_until(lambda: T.locator(".stu-row").count() == 1, 12), "migration created a student for old links")
+    check(sync_of(T)["code"] == CODE, "keeps the old backend")
+    check(wait_until(lambda: T.locator(".sc").count() == 1, 12), "migration created a student for old links")
     D = http("GET", f"/classes/{CODE}.json")[1]
     sid = list(D["students"])[0]
     check(D.get("legacy") == sid and not D.get("live"), "legacy set, old presence cleared")

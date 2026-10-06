@@ -5,7 +5,8 @@ from synchelp import *
 
 with sync_playwright() as p:
     b = p.chromium.launch(channel="msedge")
-    T, code = make_teacher(b)
+    EM = f"multi{time.time_ns()}@example.com"
+    T, code = make_teacher(b, email=EM)
     check(T.locator('.tabbar a[href="#/students"]').count() == 1, "teacher has 學生 tab")
     amy = add_student(T, "Amy")
     ben = add_student(T, "Ben")
@@ -111,26 +112,31 @@ with sync_playwright() as p:
 
     # 老師後台：學生列表、各自的作答
     T.goto(URL + "#/students")
-    check(wait_until(lambda: T.locator(".stu-row").count() == 2), "teacher lists 2 students")
+    check(wait_until(lambda: T.locator(".sc").count() == 2), "teacher lists 2 students")
     time.sleep(0.4)
     T.screenshot(path=str(OUT / "c3-students.png"))
-    T.click(f'.stu-row[data-stu="{ben}"]')
+    T.click(f'.sc[data-card="{ben}"]')
     check(wait_until(lambda: T.locator(".live-row").count() >= 1), "teacher sees Ben's answer")
     T.goto(URL + "#/manage")
     T.wait_for_selector(".manage-page")
     mg = txt(T, ".manage-page")
     check("Amy（2）" in mg and "Ben（2）" in mg, "manage groups devices by student")
 
-    # 老師的手機：老師連結 → 看得到所有學生
-    tkey = T.evaluate("window.__app.Sync.D.tkey")
+    # 老師的手機：用同一個老師帳號登入 → 看得到所有學生
     TP = page(b, 390, 844, "TP", seed=DBSEED)
-    TP.goto(link(code, "teacher", tkey))
-    check(wait_until(lambda: TP.evaluate("window.__app.Sync.isAdmin()")), "teacher phone is admin via teacher link")
-    TP.goto(URL + "#/students")
-    check(wait_until(lambda: TP.locator(".stu-row").count() == 2), "teacher phone lists 2 students")
+    teacher_login(TP, EM)
+    check(sync_of(TP)["code"] == code, "teacher phone finds the same backend after login")
+    check(wait_until(lambda: TP.locator(".sc").count() == 2), "teacher phone lists 2 students")
+    # 舊的老師連結：停用，帶去登入頁
     X = page(b, 390, 844, "X", seed=DBSEED)
     X.goto(link(code, "teacher", "wrongkey1234567890ab"))
-    check(wait_until(lambda: st(X) == "invalid"), "wrong teacher key -> invalid")
+    check(wait_until(lambda: X.evaluate("location.hash") == "#/teacher"), "old teacher link -> login page")
+    # 密碼錯：登入不了
+    X.fill("#t-email", EM)
+    X.fill("#t-pw", "wrongpass")
+    X.click("[data-t-ok]")
+    check(wait_until(lambda: "密碼不對" in txt(X, ".t-err")), "wrong password rejected")
+    check(not X.evaluate("window.__app.Sync.isAdmin()"), "wrong password: no access")
 
     # 上課模式：平板給 Amy 用 → 作答同步到 Amy，Amy 的家長看得到；Ben 的家長看不到
     T.goto(URL + "#/student/" + amy)
@@ -175,6 +181,6 @@ with sync_playwright() as p:
     check(wait_until(lambda: st(B) in ("removed", "invalid"), 12), "Ben's device removed")
     check(wait_until(lambda: st(PB) in ("removed", "invalid"), 12), "Ben's parent removed")
     check(http("GET", f"/classes/{code}/a/{ben}.json")[1] is None, "Ben's data deleted")
-    check(wait_until(lambda: T.locator(".stu-row").count() == 1), "one student left")
+    check(wait_until(lambda: T.locator(".sc").count() == 1), "one student left")
     b.close()
 report()

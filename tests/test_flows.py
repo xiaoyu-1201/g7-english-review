@@ -23,7 +23,7 @@ with sync_playwright() as p:
     # 設定名字
     pg.goto(URL + "#/settings")
     pg.fill("#f-name", "Amy")
-    pg.click('[data-seg="role"] button[data-v="teacher"]')
+    pg.click('[data-seg="role"] button[data-v="parent"]')
     pg.fill("#f-exam", "2026-10-15")
     pg.goto(URL + "#/")
     pg.wait_for_selector(".home")

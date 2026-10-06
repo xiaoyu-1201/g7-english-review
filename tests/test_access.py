@@ -37,17 +37,19 @@ with sync_playwright() as p:
     stok, suid = tok_of(S), uid_of(S)
     check(http("GET", f"/classes/{code}/members.json?auth={stok}")[0] == 401, "student cannot list members")
     check(http("PUT", f"/classes/{code}/members/{suid}/admin.json?auth={stok}", True)[0] == 401, "student cannot self-promote")
-    # 老師的手機：老師連結 → 直接可以管理；取消管理 → 看不到；再設為可管理 → 恢復
-    TP = page(b, 390, 844, "TP", seed=DBSEED)
-    TP.goto(link(code, "teacher", T.evaluate("window.__app.Sync.D.tkey")))
-    check(wait_until(lambda: TP.evaluate("window.__app.Sync.isAdmin()")), "teacher phone is admin")
+    # 沒有老師帳號（匿名）：不能用老師身分加入、不能建立後台
+    xuid = X.evaluate("window.__app.Auth.uid()")
+    check(http("PUT", f"/classes/{code}/members/{xuid}.json?auth={xtok}", {"role": "teacher", "at": 1})[0] == 401, "anonymous cannot join as teacher")
+    check(http("PUT", f"/classes/x{code}/owner.json?auth={xtok}", xuid)[0] == 401, "anonymous cannot create a backend")
+    check(http("GET", f"/teachers/{uid_of(T)}.json?auth={xtok}")[0] == 401, "cannot read another teacher's account")
+    # 學生、家長的畫面沒有老師入口
+    X.goto(URL + "#/settings")
+    X.wait_for_selector("#sync-sec")
+    check("老師後台" not in txt(X, ".page") and X.locator('[data-v="teacher"]').count() == 0, "no teacher entry for students")
+    # 成員管理：顯示老師帳號，沒有老師連結
     T.goto(URL + "#/manage")
-    check(wait_until(lambda: T.locator("[data-admin]").count() == 1), "admin toggle only on teacher row")
-    T.click("[data-admin]")
-    check(wait_until(lambda: st(TP) == "wait"), "teacher phone loses access when 取消管理")
-    check(wait_until(lambda: T.locator('[data-admin][data-v="1"]').count() == 1), "toggle now says 設為可管理")
-    T.click("[data-admin]")
-    check(wait_until(lambda: TP.evaluate("window.__app.Sync.isAdmin()")), "teacher phone admin again")
+    T.wait_for_selector(".manage-page")
+    check("@example.com" in txt(T, ".manage-page") and "老師連結" not in txt(T, ".manage-page"), "manage shows account, no teacher link")
     # 暫停加入 → 新裝置被擋 → 打開後按再試一次就加入
     T.wait_for_selector("#open-seg")
     T.click('#open-seg [data-open="0"]')
@@ -63,7 +65,7 @@ with sync_playwright() as p:
     check(wait_until(lambda: Y.locator(".sheet .join-status").count() == 0), "status sheet closes after joining")
     # 移除學生 → 學生立刻看不到；重新整理也不會自己加回來
     T.goto(URL + "#/manage")
-    wait_until(lambda: T.locator("[data-remove]").count() == 3)
+    wait_until(lambda: T.locator("[data-remove]").count() == 2)
     time.sleep(0.5)
     rows = T.locator(".mg-row:has([data-remove])")
     for i in range(rows.count()):

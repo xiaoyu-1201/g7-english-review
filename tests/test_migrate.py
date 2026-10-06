@@ -36,7 +36,16 @@ with sync_playwright() as p:
     # 舊的老師平板（1.9 建立配對碼：sync 存在主紀錄裡、沒有 owner 欄位）
     T = page(b, 820, 1180, "T", seed=DBSEED + auth("tuid") + store({"seen": {"intro": 1}, "profile": {"id": "tab", "name": ""}, "attempts": [a2], "sync": {"code": CODE, "role": "teacher", "at": now - 100000}}))
     T.goto(URL)
-    check(wait_until(lambda: st(T) == "owner"), "old tablet becomes owner")
+    # 匿名建立的後台：要先設定老師帳號（同一個身分升級，資料不用搬）
+    check(wait_until(lambda: st(T) == "upgrade"), "old anonymous tablet must set up an account")
+    check(wait_until(lambda: "設定老師帳號" in txt(T, ".stu-card")), "home asks to set up account")
+    T.click('.stu-card [data-go="#/teacher"]')
+    T.wait_for_selector(".teacher-page")
+    T.fill("#t-email", "mig@example.com")
+    T.fill("#t-pw", "secret123")
+    T.click("[data-t-ok]")
+    check(wait_until(lambda: st(T) == "owner"), "old tablet becomes owner after account setup")
+    check(T.evaluate("window.__app.Auth.uid()") == "tuid", "same identity after upgrade")
     check(wait_until(lambda: len((http("GET", f"/classes/{CODE}/students.json")[1] or {})) == 1, 12), "migration created one student")
     D = http("GET", f"/classes/{CODE}.json")[1]
     sid = list(D["students"])[0]
@@ -47,8 +56,9 @@ with sync_playwright() as p:
     check(list(http("GET", f"/classes/{CODE}/s.json")[1]) == [sid], "sessions moved")
     M = http("GET", f"/classes/{CODE}/members.json")[1]
     check(M["suid"].get("sid") == sid and M["puid"].get("sid") == sid, "old members assigned to student")
-    check(M["tpuid"].get("admin") is True, "old teacher phone keeps access")
-    check(bool(D.get("tkey")), "teacher key created")
+    check(wait_until(lambda: "tpuid" not in (http("GET", f"/classes/{CODE}/members.json")[1] or {})), "old teacher-link device removed (must log in)")
+    check(not http("GET", f"/classes/{CODE}/tkey.json")[1], "no teacher key")
+    check((http("GET", "/teachers/tuid.json")[1] or {}).get("c") == CODE, "account mapped to backend")
     check(sync_of(T).get("code") == CODE, "sync moved to its own storage key")
     # 1 分鐘後自動重試（測試直接叫）→ 用 legacy 加入，等待期間的作答補傳
     E.evaluate("window.__app.Sync.start()")
@@ -56,8 +66,8 @@ with sync_playwright() as p:
     check(wait_until(lambda: E.evaluate("window.__app.S.syncQ.length") == 0), "queued answers uploaded")
     check(wait_until(lambda: len(http("GET", f"/classes/{CODE}/a/{sid}.json")[1]) == 4), "student's waiting answers saved under student")
     T.goto(URL + "#/students")
-    check(wait_until(lambda: T.locator(".stu-row").count() == 1), "teacher sees Amy")
-    T.click(".stu-row")
+    check(wait_until(lambda: T.locator(".sc").count() == 1), "teacher sees Amy")
+    T.click(".sc")
     check(wait_until(lambda: T.locator(".live-row").count() >= 2), "teacher sees Amy's answers")
     # 舊的學生手機（2.0 已加入）：不用重新點連結
     S = page(b, 390, 844, "S", seed=DBSEED + auth("suid") + store({"seen": {"intro": 1}, "profile": {"id": "p1", "name": "Amy"}, "attempts": [a1], "sync": {"code": CODE, "role": "student", "at": now - 90000, "member": True}}))

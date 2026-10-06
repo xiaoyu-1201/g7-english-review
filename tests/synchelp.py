@@ -57,13 +57,24 @@ def http(method, path, body=None):
         return e.code, None
 
 
-def make_teacher(b, w=820, h=1180, name="T"):
-    """老師平板：設定 → 開始使用老師後台 → 到學生列表"""
-    T = page(b, w, h, name)
-    T.goto(URL + "#/settings")
-    T.click('[data-x="newpair"]')
+def teacher_login(T, email, pw="secret123", signup=False):
+    """#/teacher：登入（或建立老師帳號）→ 到學生列表"""
+    T.goto(URL + "#/teacher")
+    T.wait_for_selector(".teacher-page")
+    if signup:
+        T.click('[data-t-mode="signup"]')
+        T.wait_for_selector('[data-t-mode="login"]')
+    T.fill("#t-email", email)
+    T.fill("#t-pw", pw)
+    T.click("[data-t-ok]")
     wait_until(lambda: st(T) == "owner")
     T.wait_for_selector(".stu-page")
+
+
+def make_teacher(b, w=820, h=1180, name="T", email=None):
+    """老師平板：#/teacher → 建立老師帳號 → 到學生列表"""
+    T = page(b, w, h, name)
+    teacher_login(T, email or f"t{time.time_ns()}@example.com", signup=True)
     return T, sync_of(T)["code"]
 
 

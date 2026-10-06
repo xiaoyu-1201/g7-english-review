@@ -4415,3 +4415,232 @@ ul.plain b {
 .rec-row .row-t {
   font-family: var(--en);
 }
+/* 2.9 老師登入（#/teacher） */
+.teacher-page {
+  max-width: 520px;
+}
+.teacher-page .list.form {
+  margin-top: 8px;
+}
+.teacher-page input {
+  font-size: 17px;
+}
+.t-err {
+  min-height: 22px;
+  margin: 10px 4px 0;
+  color: var(--red);
+  font-size: 15px;
+}
+.t-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 14px 4px 0;
+}
+.locked-note {
+  margin: -4px 4px 20px;
+  color: var(--label2);
+  font-size: 15px;
+}
+
+/* 2.9 學生總覽：一個學生一張卡片、要處理的事、選取多個學生 */
+.hd-r {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.todo-card {
+  margin-bottom: 16px;
+}
+.todo-row {
+  gap: 12px;
+}
+.todo-ic {
+  font-size: 20px;
+  width: 28px;
+  text-align: center;
+  flex: none;
+}
+.todo-x {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--fill2);
+  color: var(--label2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.todo-x svg {
+  width: 14px;
+  height: 14px;
+}
+.sc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.sc {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  margin: 0;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.sc:active {
+  transform: scale(0.99);
+}
+.sc.live {
+  box-shadow: var(--shadow), inset 0 0 0 1px rgba(52, 199, 89, 0.35);
+}
+.sc.sel {
+  border-color: var(--blue);
+  background: var(--sel-bg);
+}
+.sc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sc-head > svg {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  color: var(--label3);
+  flex: none;
+}
+.sc-name {
+  font-size: 21px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-chk {
+  display: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--label3);
+  flex: none;
+  place-items: center;
+  color: #fff;
+}
+.picking .sc-chk {
+  display: grid;
+}
+.sc.sel .sc-chk {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+.sc-chk svg {
+  width: 14px;
+  height: 14px;
+}
+.sc-status {
+  margin: 0;
+  color: var(--label2);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.sc-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.sc-stats > div {
+  background: var(--fill2);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.sc-stats b {
+  font-family: var(--round);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sc-stats span {
+  font-size: 12px;
+  color: var(--label2);
+}
+.sc-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.sc-acts .btn svg {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+}
+.sc-units {
+  margin-left: auto;
+  font-size: 14px;
+}
+.picking .sc-acts {
+  display: none;
+}
+.pick-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px);
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: min(640px, calc(100% - 24px));
+  padding: 10px 12px;
+  border-radius: var(--r-lg);
+  background: var(--bar-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
+}
+.pick-n {
+  font-weight: 600;
+  margin-right: auto;
+  padding-left: 4px;
+}
+.picking .sc-grid {
+  margin-bottom: 110px;
+}
+.unit-row .u-chk {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--label3);
+  flex: none;
+}
+.unit-row.on .u-chk {
+  background: var(--blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 16px no-repeat;
+  border-color: var(--blue);
+}
+.units-list .row-t small {
+  white-space: normal;
+}
+@media (max-width: 420px) {
+  .sc-grid {
+    grid-template-columns: 1fr;
+  }
+  .sc-acts .btn {
+    flex: 1 1 auto;
+  }
+}

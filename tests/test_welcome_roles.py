@@ -1,4 +1,4 @@
-"""第一次進網站：「你是誰」點一下 → 學生直接開始；家長：貼連結或輸入代碼；老師：設定 → 開始使用老師後台"""
+"""第一次進網站：「你是誰」點一下 → 學生直接開始；家長：貼連結或輸入代碼；老師：#/teacher 建立老師帳號"""
 import time
 from playwright.sync_api import sync_playwright
 from synchelp import *
@@ -27,9 +27,12 @@ with sync_playwright() as p:
     T.keyboard.press("Escape")
     time.sleep(0.4)
     T.goto(URL + "#/settings")
-    T.click('[data-x="newpair"]')
-    check(wait_until(lambda: st(T) == "owner"), "teacher backend started in one tap")
+    T.wait_for_selector("#sync-sec")
+    check(T.locator('[data-x="newpair"]').count() == 0, "settings has no teacher entry")
+    teacher_login(T, f"w{time.time_ns()}@example.com", signup=True)
+    check(st(T) == "owner", "teacher backend created after sign-up")
     check(role_of(T) == "teacher", "teacher role saved")
+    time.sleep(0.4)
     code = sync_of(T)["code"]
     amy = add_student(T, "Amy")
     T.goto(URL)
