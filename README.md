@@ -58,4 +58,11 @@
 | `styles.css` | Apple 風格版面（含深色模式） |
 | `sw.js` | 離線快取；改版時 `app.js` 的 `VERSION` 和 `sw.js` 的 `CACHE` 都要改 |
 
+| `audio/` | 自然語音音檔（Kokoro 產生）和 `index.json`（文字 → 檔名） |
+| `tests/` | 自動測試（Playwright＋模擬 Firebase）；全部跑：`.\tests\run_tests.ps1`，跑一個：`.\tests\run_tests.ps1 -Tests test_speak.py` |
+| `tools/tts/` | 產生音檔：`node tools/tts/collect.mjs` 再 `python tools/tts/synth.py`；模型檔放 `tools/tts/models/`（不上傳） |
+| `tools/extract_text.py` | 把教材 PDF 轉成文字，給編題目時查閱 |
+
 純 HTML／CSS／JavaScript，沒有任何套件，不需要建置。本機預覽：`python -m http.server 5181`。
+
+**教材有版權**：翰林備課用書、卷類資源放在這個資料夾旁邊的 `英文教材\`（依段考分資料夾），不放進這個 repo。
