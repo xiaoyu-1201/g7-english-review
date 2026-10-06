@@ -1,4 +1,4 @@
-# 把「英文教材」資料夾的 PDF（備課用書、卷類資源 zip 裡的 PDF）轉成純文字，給編題目時查閱。
+# 把「英文教材」資料夾的 PDF（含 zip 裡的 PDF）轉成純文字，給編題目時查閱。
 # 教材有版權：PDF 和轉出的文字都只放在 英文教材\，不要放進這個 repo。
 # 需要：pip install pymupdf
 import pymupdf, pathlib, zipfile
