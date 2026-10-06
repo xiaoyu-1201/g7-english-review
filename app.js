@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.8.1（10/6）'
+const VERSION = '2.8.2（10/6）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3090,7 +3090,12 @@ async function listen(onInterim, target) {
   })
   const timer = setTimeout(() => r.stop(), 12000)
   done.then(() => clearTimeout(timer))
-  r.start()
+  try {
+    r.start()
+  } catch {
+    err = 'error'
+    r.onend() // 開不起來也要放掉麥克風
+  }
   return {
     stop: () => {
       manual = true
@@ -3238,11 +3243,15 @@ function speakRun() {
       mic.classList.add('on')
       $('.sp-mic-label').textContent = '正在聽…說完會自動停'
       tell({ said: '', listening: 1 })
+      const idx = SP.i
+      const live = $('.sp-live')
       L = { stop() {} }
-      L = await listen((t) => ($('.sp-live').textContent = t), s.en)
+      L = await listen((t) => (live.textContent = t), s.en)
       const { alts, err, blob, clash } = await L.done
       L = null
       mic.classList.remove('on')
+      // 念到一半就離開、換下一句：這次不算（不然分數會記到別句，或把畫面拉回口說）
+      if (SP.over || SP.i !== idx || !mic.isConnected) return
       if (!alts.length) {
         $('.sp-mic-label').textContent = SP.res[SP.i] ? '再說一次' : '點一下，跟著說'
         $('.sp-live').textContent = ''
