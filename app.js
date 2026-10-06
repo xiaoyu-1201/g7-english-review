@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.8（10/5）'
+const VERSION = '2.8.1（10/6）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3000,12 +3000,29 @@ async function listen(onInterim, target) {
   if (NO_REC === null) NO_REC = lsGet('g7review:norec') === '1'
   let rec = null
   let chunks = []
+  // 錄音的音量（有些裝置麥克風被錄音搶走，辨識收不到聲音卻不報錯：錄到聲音但辨識不到＝搶麥克風）
+  let loud = 0
+  let manual = false // 自己按停
+  let ac = null
+  let meter = 0
   if (!NO_REC && window.MediaRecorder && navigator.mediaDevices?.getUserMedia) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       rec = new MediaRecorder(stream)
       rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
       rec.start()
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)()
+        ac.resume?.().catch(() => {})
+        const an = ac.createAnalyser()
+        an.fftSize = 512
+        ac.createMediaStreamSource(stream).connect(an)
+        const buf = new Uint8Array(an.fftSize)
+        meter = setInterval(() => {
+          an.getByteTimeDomainData(buf)
+          for (const v of buf) loud = Math.max(loud, Math.abs(v - 128))
+        }, 50)
+      } catch {}
     } catch {
       rec = null
     }
@@ -3044,6 +3061,9 @@ async function listen(onInterim, target) {
     r.onend = async () => {
       clearTimeout(quiet)
       let blob = null
+      let clash = false
+      clearInterval(meter)
+      ac?.close?.().catch(() => {})
       if (rec) {
         await new Promise((ok) => {
           rec.onstop = ok
@@ -3055,21 +3075,29 @@ async function listen(onInterim, target) {
         })
         rec.stream.getTracks().forEach((t) => t.stop()) // 放掉麥克風（不然 iPhone 的聲音會變小）
         if (chunks.length) blob = new Blob(chunks, { type: rec.mimeType || chunks[0].type })
-        // 有錄音卻辨識不到（兩個搶麥克風）：這台以後只辨識、不錄音
-        if (err === 'audio-capture' || (!alts.length && !interim && err && err !== 'no-speech')) {
+        // 有錄音卻辨識不到（兩個搶麥克風）：以後只辨識、不錄音
+        // 搶麥克風的樣子：報錯、沒報錯就結束（iPhone、iPad）、或錄到聲音卻說「沒聽到聲音」（Android）
+        if (!alts.length && !interim) clash = err === 'audio-capture' || (['', 'aborted'].includes(err) && !manual) || (err === 'no-speech' && loud > 16)
+        if (clash) {
           NO_REC = true
           try {
             localStorage.setItem('g7review:norec', '1')
           } catch {}
         }
       }
-      res({ alts: alts.length ? alts : interim ? [interim] : [], err, blob })
+      res({ alts: alts.length ? alts : interim ? [interim] : [], err, blob, clash })
     }
   })
   const timer = setTimeout(() => r.stop(), 12000)
   done.then(() => clearTimeout(timer))
   r.start()
-  return { stop: () => r.stop(), done }
+  return {
+    stop: () => {
+      manual = true
+      r.stop()
+    },
+    done,
+  }
 }
 
 let SP = null // { list, i, res: [{best, tries}], unit, over }
@@ -3212,12 +3240,13 @@ function speakRun() {
       tell({ said: '', listening: 1 })
       L = { stop() {} }
       L = await listen((t) => ($('.sp-live').textContent = t), s.en)
-      const { alts, err, blob } = await L.done
+      const { alts, err, blob, clash } = await L.done
       L = null
       mic.classList.remove('on')
       if (!alts.length) {
         $('.sp-mic-label').textContent = SP.res[SP.i] ? '再說一次' : '點一下，跟著說'
         $('.sp-live').textContent = ''
+        if (clash) return toast('已經調整好，請再按一次麥克風說一次', '🎤')
         return toast(SPEAK_ERR[err] || '沒聽清楚，請再說一次', '🎤')
       }
       const res = speakScore(s.en, alts)
