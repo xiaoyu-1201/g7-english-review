@@ -52,17 +52,19 @@
 
 | 檔案 | 內容 |
 |---|---|
-| `content.js` | 題庫、觀念卡、文章、聽力稿（全部自編，不含課本原文） |
-| `app.js` | 練習引擎、批改、錯題本、考試、紀錄 |
-| `art.js` | 家族樹、介系詞場景、字母樓層等插圖（SVG） |
+| `content.js` | 第一次段考的題庫、觀念卡、文章、聽力稿（全部自編，不含課本原文）；最下面把 `content2.js`、`content3.js` 合併進來 |
+| `content2.js` | 第二、三次段考的範圍（Unit 3～6、Review 2～3）和 `EXAMS`（每次段考的範圍、文章；含「第一冊會考模擬」） |
+| `content3.js` | 會考題型 Ⅱ、Ⅲ：情境單題、圖表題組、會考聽力（言談理解的問題最後才念） |
+| `app.js` | 練習引擎、批改、錯題本、模擬段考、聽力練習卷、紀錄 |
+| `art.js` | 家族樹、介系詞場景、時鐘、月曆、標誌、人物、場景等插圖 |
 | `styles.css` | Apple 風格版面（含深色模式） |
 | `sw.js` | 離線快取；改版時 `app.js` 的 `VERSION` 和 `sw.js` 的 `CACHE` 都要改 |
-
 | `audio/` | 自然語音音檔（Kokoro 產生）和 `index.json`（文字 → 檔名） |
 | `asr.js` | 口說練習的網頁辨識（Moonshine tiny，MIT 授權；transformers.js）：沒有手機辨識的提示音，模型約 28MB，第一次使用時下載 |
 | `tests/` | 自動測試（Playwright＋模擬 Firebase）；全部跑：`.\tests\run_tests.ps1`，跑一個：`.\tests\run_tests.ps1 -Tests test_speak.py` |
 | `tools/tts/` | 產生音檔：`node tools/tts/collect.mjs` 再 `python tools/tts/synth.py`；模型檔放 `tools/tts/models/`（不上傳） |
-| `tools/extract_text.py` | 把教材 PDF 轉成文字，給編題目時查閱 |
+| `tools/extract_text.py`、`tools/extract_kaokao.py` | 把教材 PDF 轉成文字，給編題目時查閱（教材本身不在 repo 裡） |
+| `tools/check_content.mjs` | 檢查題庫格式（答案位置、空格數、文章、插圖）；`node tools/check_content.mjs` |
 
 純 HTML／CSS／JavaScript，沒有任何套件，不需要建置。本機預覽：`python -m http.server 5181`。
 

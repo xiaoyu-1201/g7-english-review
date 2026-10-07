@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.11（10/7）'
+const VERSION = '2.12（10/7）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -127,7 +127,7 @@ const openExams = () => {
 }
 // 首頁副標：一次段考 →「第二次段考：Unit 3～Review 2」；好幾次 →「第一、二次段考：Starter～Review 2」
 function examLabel() {
-  const ex = openExams()
+  const ex = openExams().filter((e) => !e.kind)
   if (!ex.length) return `${EXAMS[0].title}：${EXAMS[0].range}`
   if (ex.length === 1) return `${ex[0].title}：${ex[0].range}`
   const nums = ex.map((e) => e.title.replace('第', '').replace('次段考', ''))
@@ -156,7 +156,7 @@ const nextUnit = (sid) => {
 }
 const lastOpenUnit = (sid) => {
   const u = unitsOfStu(Sync.students[sid])
-  return [...UNITS].reverse().find((x) => u.has(x) && x !== '會考導向') || ''
+  return [...UNITS].reverse().find((x) => u.has(x) && !x.startsWith('會考')) || ''
 }
 
 // ───────────────────────── 紀錄統計 ─────────────────────────
@@ -193,6 +193,25 @@ function bookState(attempts = S.attempts) {
 function bookIds(attempts = S.attempts) {
   const b = bookState(attempts)
   return Object.keys(b).filter((q) => b[q].inBook)
+}
+// 錯題重練一次最多 12 題：打散單元（交錯練習），再由易到難排（先暖身，再挑戰）
+const bookPick = (ids) => shuffle(ids).slice(0, 12).sort((a, b) => lvOf(ITEM[a] || {}) - lvOf(ITEM[b] || {}))
+// 依難度算答對率（會考依通過率分易、中、難）
+function lvStats(list) {
+  const r = { 1: [0, 0], 2: [0, 0], 3: [0, 0] }
+  for (const a of list) {
+    const it = ITEM[a.q]
+    if (!it) continue
+    const l = lvOf(it)
+    r[l][1]++
+    if (a.r === 'ok') r[l][0]++
+  }
+  return [1, 2, 3].map((l) => ({ l, name: ['', '易', '中', '難'][l], ok: r[l][0], n: r[l][1] })).filter((x) => x.n)
+}
+const lvBarsHTML = (list) => {
+  const rows = lvStats(list)
+  if (!rows.length) return ''
+  return `<div class="bars lv-bars">${rows.map((x) => `<div class="bar-row static"><span class="bar-k"><span class="chip ${x.l === 3 ? 'lv3' : x.l === 2 ? 'lv2' : ''}">${x.name}</span></span><span class="bar-track"><i style="width:${Math.round((x.ok / x.n) * 100)}%"></i></span><span class="bar-v">${Math.round((x.ok / x.n) * 100)}%</span><span class="bar-n">${x.ok}／${x.n}</span></div>`).join('')}</div>`
 }
 function moduleStats(mid) {
   const last = lastByItem()
@@ -815,7 +834,7 @@ function secOf(it) {
 function audioHTML(it) {
   if (!it.audio) return ''
   const lines = typeof it.audio === 'string' ? [['', it.audio]] : it.audio
-  const SP = { M: '男', W: '女', B: '男孩', G: '女孩', A: '' }
+  const SP = { M: '男', W: '女', B: '男孩', G: '女孩', A: '', Q: '問題' } // Q＝會考言談理解最後念出來的問題
   return `<div class="audio">
     <button type="button" class="btn play" data-play>${ICON.play}<span>播放</span></button>
     <button type="button" class="btn ghost slow" data-play="slow">慢速</button>
@@ -2355,7 +2374,7 @@ function viewBook() {
   $('.page').addEventListener('click', (e) => {
     const r = e.target.closest('[data-review]')
     if (r) return reviewSheet(r.dataset.review, { onDone: () => setTimeout(() => location.hash === '#/book' && !$('.sheet-wrap') && viewBook(), 300) })
-    if (e.target.closest('[data-act=all]')) return startRun('book', '錯題重練', shuffle(ids).slice(0, 12))
+    if (e.target.closest('[data-act=all]')) return startRun('book', '錯題重練', bookPick(ids))
     const g = e.target.closest('[data-go]')
     if (g) go(g.dataset.go)
   })
@@ -2364,78 +2383,157 @@ function viewBook() {
 // ───────────────────────── 模擬段考 ─────────────────────────
 let EXAM = null
 // exId：第幾次段考（EXAMS）；題目只從那次段考的範圍、而且已經開放的課出
-function buildExam(exId) {
-  const ex = EXAMS.find((e) => e.id === exId) || EXAMS[0]
-  const units = new Set(ex.units)
+const lvOf = (it) => (it.lv === 3 ? 3 : it.lv === 2 ? 2 : 1)
+// 照難度配比抽題（易 55%、中 30%、難 15%，像會考依通過率分級）；每一級裡先挑還沒精熟的，某一級不夠就用其他級補
+function takeMix(list, n) {
+  const q = { 3: Math.round(n * 0.15), 2: Math.round(n * 0.3) }
+  q[1] = n - q[3] - q[2]
+  const by = { 1: [], 2: [], 3: [] }
+  for (const it of list) by[lvOf(it)].push(it)
+  const out = []
+  for (const l of [1, 2, 3]) out.push(...by[l].splice(0, q[l]))
+  for (const l of [1, 2, 3]) if (out.length < n) out.push(...by[l].splice(0, n - out.length))
+  return out
+}
+// 出題用的工具：pool＝可以出的題目；weak 先挑還沒精熟的；take 再照難度配比
+function examTools(pool) {
   const last = lastByItem()
   const weak = (list) => shuffle(list).sort((a, b) => (last[a.id]?.r === 'ok') - (last[b.id]?.r === 'ok'))
-  const pool = openScored().filter((i) => units.has(MODULES[i.mid]?.unit))
-  const has = (p) => pool.some((i) => i.passage === p)
-  const take = (list, n) => weak(list).slice(0, n)
+  const take = (list, n) => takeMix(weak(list), n)
   // 同一篇文章挑幾題，但照原本的順序排
   const inOrder = (list, n) => take(list, n).sort((a, b) => list.indexOf(a) - list.indexOf(b))
-  // 會考聽力三部分：辨識句意、基本問答、言談理解（不夠就用字音辨識補）
+  const has = (p) => pool.some((i) => i.passage === p)
+  const P = (id) => (id ? pool.filter((i) => i.passage === id) : [])
+  // 會考聽力三部分：辨識句意、基本問答、言談理解（不夠就用其他聽力題補）
   const L = pool.filter((i) => i.audio && i.t === 'mcq')
-  let listen = ['辨識句意', '基本問答', '言談理解'].flatMap((s) => take(L.filter((i) => secOf(i) === s), 3))
-  if (listen.length < 9) listen = listen.concat(take(L.filter((i) => !listen.includes(i)), 9 - listen.length))
+  const listen = (ns) => {
+    let out = ['辨識句意', '基本問答', '言談理解'].flatMap((s, k) => take(L.filter((i) => secOf(i) === s), ns[k]))
+    const n = ns.reduce((a, b) => a + b, 0)
+    if (out.length < n) out = out.concat(take(L.filter((i) => !out.includes(i)), n - out.length))
+    return out
+  }
+  return { take, inOrder, has, P, listen }
+}
+// 哪些課算在這次段考的範圍（ef：所有開放的課）
+const examPool = (ex) => (ex.all ? openScored() : openScored().filter((i) => new Set(ex.units).has(MODULES[i.mid]?.unit)))
+const numbered = (secs) => secs.filter((s) => s.items.length).map((s, k) => ({ ...s, h: `${'一二三四五六七'[k]}、${s.h}` }))
+function buildExam(exId) {
+  const ex = EXAMS.find((e) => e.id === exId) || EXAMS[0]
+  if (ex.kind === 'final') return buildFinal(ex)
+  const pool = examPool(ex)
+  const { take, inOrder, has, P, listen } = examTools(pool)
   const vocab = take(pool.filter((i) => i.t === 'fill' && !i.audio && !i.passage && !i.fig), 4)
   const single = [...take(pool.filter((i) => i.sec === '情境單題'), 3), ...take(pool.filter((i) => i.t === 'mcq' && !i.audio && !i.passage && !i.sec && !i.pic), 5)]
   const clozeId = pick(ex.cloze.filter(has))
   const textId = pick(ex.text.filter(has))
   const chartId = pick(ex.chart.filter(has))
   const write = [...take(pool.filter((i) => i.t === 'write' && !i.fig), 3), ...take(pool.filter((i) => i.t === 'spot' || (i.t === 'order' && !i.lines)), 2)]
-  const P = (id) => (id ? pool.filter((i) => i.passage === id) : [])
   // 配分合計 100（會考聽力＋閱讀的結構，加上段考的非選擇題）；某一大題沒有題目（例如還沒開放）就拿掉，分數照比例算
-  const secs = [
-    { h: '聽力測驗', sub: '辨識句意・基本問答・言談理解（每題可以重聽）', pts: 27, items: listen },
+  return numbered([
+    { h: '聽力測驗', sub: '辨識句意・基本問答・言談理解（每題可以重聽）', pts: 27, items: listen([3, 3, 3]) },
     { h: '字彙', sub: '注意大小寫和拼字', pts: 8, items: vocab },
     { h: '單題', sub: '情境對話與文法', pts: 16, items: single },
     { h: '克漏字', sub: PASSAGES[clozeId]?.title || '', pts: 10, items: P(clozeId), passage: clozeId },
     { h: '閱讀題組', sub: PASSAGES[textId]?.title || '', pts: 12, items: inOrder(P(textId), 4), passage: textId },
     { h: '圖表題組', sub: PASSAGES[chartId]?.title || '', pts: 12, items: P(chartId), passage: chartId },
     { h: '非選擇題', sub: '句型改寫・挑錯・重組：大寫、標點都算分', pts: 15, items: write },
-  ].filter((s) => s.items.length)
-  return secs.map((s, k) => ({ ...s, h: `${'一二三四五六七'[k]}、${s.h}` }))
+  ])
+}
+// 第一冊會考模擬：整冊混合、全部選擇題；大題比照會考（聽力三部分、單題、克漏字、閱讀、圖表）
+function buildFinal(ex) {
+  const pool = examPool(ex)
+  const { take, inOrder, has, P, listen } = examTools(pool)
+  const all = (k) => EXAMS.filter((e) => !e.kind).flatMap((e) => e[k]).filter(has)
+  const clozeId = pick(all('cloze'))
+  const textId = pick(all('text'))
+  const charts = shuffle(all('chart')).slice(0, 2)
+  const single = [...take(pool.filter((i) => i.sec === '情境單題'), 5), ...take(pool.filter((i) => i.t === 'mcq' && !i.audio && !i.passage && !i.sec && !i.pic), 5)]
+  const chartSecs = charts.map((id) => ({ h: '圖表題組', sub: PASSAGES[id]?.title || '', pts: 10, items: inOrder(P(id), 4), passage: id }))
+  return numbered([
+    { h: '聽力測驗', sub: '辨識句意・基本問答・言談理解（每題可以重聽）', pts: 30, items: listen([3, 4, 5]) },
+    { h: '單題', sub: '情境對話與文法', pts: 25, items: single },
+    { h: '克漏字', sub: PASSAGES[clozeId]?.title || '', pts: 10, items: P(clozeId), passage: clozeId },
+    { h: '閱讀題組', sub: PASSAGES[textId]?.title || '', pts: 15, items: inOrder(P(textId), 4), passage: textId },
+    ...chartSecs,
+  ])
+}
+// 聽力練習卷：10 題（辨識句意 3、基本問答 3、言談理解 4），範圍＝選的那次段考和之前的段考
+function buildListen(exId) {
+  const upTo = EXAMS.filter((e) => !e.kind)
+  const k = Math.max(0, upTo.findIndex((e) => e.id === exId))
+  const units = new Set(upTo.slice(0, k + 1).flatMap((e) => e.units))
+  const pool = openScored().filter((i) => units.has(MODULES[i.mid]?.unit))
+  const { listen } = examTools(pool)
+  const items = listen([3, 3, 4])
+  const grp = (s, pts) => ({ h: s, sub: { 辨識句意: '選出和聽到的句子意思一樣的', 基本問答: '選出最適合的回應', 言談理解: '聽完對話，回答問題' }[s], pts, items: items.filter((i) => secOf(i) === s) })
+  const secs = [grp('辨識句意', 30), grp('基本問答', 30), grp('言談理解', 40)]
+  const rest = items.filter((i) => !secs.some((s) => s.items.includes(i)))
+  if (rest.length) secs.push({ h: '其他聽力', sub: '', pts: rest.length * 5, items: rest })
+  return numbered(secs)
 }
 function viewExam() {
   if (!EXAM || EXAM.graded) {
     // 選第幾次段考（只列出看得到的）；預設最新的那一次
     const exs = openExams()
-    let pickId = exs.find((e) => e.id === S.profile.examPick)?.id || exs[exs.length - 1]?.id || 'e1'
+    const pickId = exs.find((e) => e.id === S.profile.examPick)?.id || exs.filter((e) => !e.kind).pop()?.id || 'e1'
+    const ex = EXAMS.find((e) => e.id === pickId) || EXAMS[0]
+    const final = ex.kind === 'final'
     setView(
       `<div class="page narrow">
         ${header('模擬段考', '', '', true)}
         <div class="card exam-intro">
           <div class="exam-ic">${ICON.doc}</div>
-          ${exs.length > 1 ? `<div class="seg" id="ex-pick">${exs.map((e) => `<button data-ex="${e.id}" class="${e.id === pickId ? 'on' : ''}">${esc(e.title)}</button>`).join('')}</div>` : ''}
-          <p class="muted ex-range">範圍：${esc(EXAMS.find((e) => e.id === pickId)?.range || '')}</p>
-          <h2>約 40 題，滿分 100，比照段考＋會考題型</h2>
+          ${exs.length > 1 ? `<div class="seg" id="ex-pick">${exs.map((e) => `<button data-ex="${e.id}" class="${e.id === pickId ? 'on' : ''}">${esc(e.kind ? '會考模擬' : e.title)}</button>`).join('')}</div>` : ''}
+          <p class="muted ex-range">範圍：${esc(ex.range)}</p>
+          ${
+            final
+              ? `<h2>約 35 題，全部選擇題，比照會考</h2>
+          <ul class="plain">
+            <li>聽力（辨識句意、基本問答、言談理解）、單題、克漏字、閱讀題組、兩組圖表題組；整冊混在一起出。</li>
+            <li>交卷後除了分數，還會分開算<b>聽力</b>和<b>閱讀</b>的答對題數（會考就是這樣分）。</li>
+            <li>題目有易、中、難的配比，先挑你還沒精熟的。</li>
+          </ul>`
+              : `<h2>約 40 題，滿分 100，比照段考＋會考題型</h2>
           <ul class="plain">
             <li>聽力（辨識句意、基本問答、言談理解）、字彙、單題、克漏字、閱讀題組、圖表題組、非選擇題，每大題都有配分。</li>
             <li>寫的時候<b>不會</b>馬上告訴你對錯，交卷後才一起批改。</li>
             <li>交卷前會出現「30 秒檢查清單」，養成檢查習慣。</li>
-            <li>題目會優先挑你還沒精熟的。</li>
-          </ul>
+            <li>題目有易、中、難的配比，先挑你還沒精熟的。</li>
+          </ul>`
+          }
           <button class="btn primary big" data-act="start">開始考試</button>
         </div>
+        ${
+          final
+            ? ''
+            : `<div class="card exam-intro listen-intro">
+          <h2>🎧 聽力練習卷</h2>
+          <p class="muted">10 題：辨識句意 3、基本問答 3、言談理解 4，比照會考聽力的三部分。範圍到${esc(ex.title)}，每題可以重聽。</p>
+          <button class="btn ghost big" data-act="listen">開始聽力練習卷</button>
+        </div>`
+        }
         ${examHistory()}
       </div>`,
     )
     $('#ex-pick')?.addEventListener('click', (e) => {
       const b = e.target.closest('[data-ex]')
       if (!b) return
-      pickId = b.dataset.ex
-      S.profile.examPick = pickId
+      S.profile.examPick = b.dataset.ex
       save()
-      $$('#ex-pick button').forEach((x) => x.classList.toggle('on', x === b))
-      $('.ex-range').textContent = `範圍：${EXAMS.find((x) => x.id === pickId)?.range || ''}`
+      viewExam()
     })
-    $('[data-act=start]').onclick = () => {
-      const ex = EXAMS.find((e) => e.id === pickId) || EXAMS[0]
-      EXAM = { secs: buildExam(ex.id), ex: ex.id, title: ex.title, t0: Date.now(), ctrls: [], graded: false }
+    $('.page').addEventListener('click', (e) => {
+      const a = e.target.closest('[data-act]')?.dataset.act
+      if (a === 'start') EXAM = { secs: buildExam(ex.id), ex: ex.id, title: ex.title, final, t0: Date.now(), ctrls: [], graded: false }
+      else if (a === 'listen') EXAM = { secs: buildListen(ex.id), ex: ex.id, title: `聽力練習卷・${ex.title}範圍`, listen: true, t0: Date.now(), ctrls: [], graded: false }
+      else return
+      if (!EXAM.secs.length) {
+        EXAM = null
+        return toast('這個範圍還沒有可以出的題目', '📭')
+      }
       Sync.presence({ view: 'exam' })
       viewExam()
-    }
+    })
     return
   }
   let n = 0
@@ -2443,7 +2541,7 @@ function viewExam() {
     `<div class="exam">
       <header class="run-bar">
         <button class="icon-btn" data-act="quit" aria-label="放棄考試">${ICON.x}</button>
-        <div class="run-mid"><div class="run-title">模擬段考${EXAM.title ? `・${esc(EXAM.title)}` : ''}</div><div class="exam-meta"><span class="exam-done">0</span>／<span class="exam-total"></span> 題・<span class="exam-time">0:00</span></div></div>
+        <div class="run-mid"><div class="run-title">${EXAM.listen ? esc(EXAM.title) : `模擬段考${EXAM.title ? `・${esc(EXAM.title)}` : ''}`}</div><div class="exam-meta"><span class="exam-done">0</span>／<span class="exam-total"></span> 題・<span class="exam-time">0:00</span></div></div>
         <span class="icon-btn ghost-space"></span>
       </header>
       <div class="page narrow exam-paper"></div>
@@ -2493,6 +2591,8 @@ function updateExamCount() {
 }
 function submitSheet() {
   const left = EXAM.ctrls.filter((c) => !c.answered())
+  // 聽力練習卷全部是選擇題：不用走格式檢查清單
+  if (EXAM.listen) return confirmSheet('要交卷了嗎？', left.length ? `還有 ${left.length} 題沒寫（第 ${left.slice(0, 6).map((c) => c.n).join('、')} 題）。` : '全部寫完了。', '交卷', gradeExam)
   const b = sheet(
     `<h2 class="sheet-title">交卷前 30 秒檢查</h2><p class="sheet-p">真的段考也這樣做：每一項看過，就點一下打勾。</p>
     <div class="list checks">${CHECKLIST.map((c, i) => `<button class="row chk" data-c="${i}" role="checkbox" aria-checked="false"><span class="chk-box">${ICON.check}</span><span class="row-t">${esc(c)}</span></button>`).join('')}</div>
@@ -2559,7 +2659,13 @@ function gradeExam() {
   const score = Math.round((got / full) * 100)
   const ifCare = Math.round((gotCare / full) * 100)
   const dur = Date.now() - EXAM.t0
-  addSession({ k: 'exam', m: 'exam', title: EXAM.title ? `模擬段考（${EXAM.title}）` : '模擬段考', ex: EXAM.ex || 'e1', s: score, n: total, ok, care, bad: total - ok - care, ifCare, stars: score >= 90 ? 3 : score >= 70 ? 2 : 1, ts: Date.now(), dur, d: S.profile.id })
+  // 會考模擬：聽力、閱讀分開算答對題數（會考的成績單就是分開的）
+  const part = (f) => {
+    const cs = EXAM.ctrls.filter((c) => f(c.it))
+    return `${cs.filter((c) => c.res?.r === 'ok').length}／${cs.length}`
+  }
+  const split = EXAM.final ? `聽力 ${part((it) => it.audio)}・閱讀 ${part((it) => !it.audio)}` : ''
+  addSession({ k: EXAM.listen ? 'listen' : 'exam', m: EXAM.listen ? 'listen' : 'exam', title: EXAM.listen ? EXAM.title : EXAM.title ? `模擬段考（${EXAM.title}）` : '模擬段考', ex: EXAM.ex || 'e1', s: score, n: total, ok, care, bad: total - ok - care, ifCare, ...(split ? { split } : {}), stars: score >= 90 ? 3 : score >= 70 ? 2 : 1, ts: Date.now(), dur, d: S.profile.id })
   save()
   checkBadges()
   EXAM.graded = true
@@ -2568,6 +2674,7 @@ function gradeExam() {
   head.className = 'exam-result card'
   head.innerHTML = `<div class="er-score"><b>${score}</b><span>分</span></div>
     <div class="er-txt"><div>答對 ${ok}・格式粗心 ${care}・答錯 ${total - ok - care}・${fmtDur(dur)}</div>
+    ${split ? `<div class="er-split">${split}<small>會考的英語成績分「聽力」和「閱讀」；這裡只是練習，不代表會考等級。</small></div>` : ''}
     ${care ? `<div class="er-care">如果沒有粗心：<b>${ifCare} 分</b>（差 ${ifCare - score} 分）</div>` : ok >= total * 0.6 ? '<div class="er-care ok">零粗心，太讚了！</div>' : ''}
     ${tagList.length ? `<div class="chips">${tagList.slice(0, 6).map(([t, n]) => `<span class="chip ${FORMAT_TAGS.includes(t) ? 'care' : ''}">${TAGS[t] || t} × ${n}</span>`).join('')}</div>` : ''}</div>
     <div class="er-btns"><button class="btn primary" data-act="book">去錯題本</button><button class="btn ghost" data-act="again">再考一次</button></div>`
@@ -2591,10 +2698,11 @@ function gradeExam() {
   if (score >= 90) setTimeout(celebrate, 300)
 }
 function examHistory() {
-  const list = S.sessions.filter((s) => s.k === 'exam').slice(-8).reverse()
+  const list = S.sessions.filter((s) => s.k === 'exam' || s.k === 'listen').slice(-8).reverse()
   if (!list.length) return ''
+  const label = (s) => (s.k === 'listen' ? `聽力練習卷・${EXAMS.find((e) => e.id === s.ex)?.title || ''}` : s.ex && s.ex !== 'e1' ? EXAMS.find((e) => e.id === s.ex)?.title || '' : '')
   return `<div class="group"><div class="group-h">考試紀錄</div><div class="list">${list
-    .map((s) => `<div class="row static"><span class="row-t">${fmtTime(s.ts)}${s.ex && s.ex !== 'e1' ? `<small>${esc(EXAMS.find((e) => e.id === s.ex)?.title || '')}</small>` : ''}</span><span class="row-r">${s.s} 分${s.care ? `<small>（沒粗心 ${s.ifCare}）</small>` : ''}</span></div>`)
+    .map((s) => `<div class="row static"><span class="row-t">${fmtTime(s.ts)}${label(s) ? `<small>${esc(label(s))}${s.split ? `・${esc(s.split)}` : ''}</small>` : ''}</span><span class="row-r">${s.s} 分${s.care ? `<small>（沒粗心 ${s.ifCare}）</small>` : ''}</span></div>`)
     .join('')}</div></div>`
 }
 
@@ -2781,6 +2889,8 @@ function viewStats() {
         }
         ${whyHTML(list)}
       </section>
+
+      ${lvStats(list).length > 1 ? `<section class="card"><div class="sec-h"><div><h2>易・中・難</h2><p>會考題依通過率分三級。難題的答對率，是看得出進步的地方。</p></div></div>${lvBarsHTML(list)}</section>` : ''}
 
       ${badgesHTML()}
 
@@ -5196,7 +5306,7 @@ function viewStudent(sid, keepScroll = false) {
         tc.length
           ? `<section class="card"><div class="sec-h"><div><h2>最近兩週常錯的地方</h2><p>上課可以從這裡開始講。</p></div></div><div class="bars">${tc
               .map(([t, n]) => `<div class="bar-row static"><span class="bar-k">${TAGS[t] || t}${FORMAT_TAGS.includes(t) ? '<em>格式</em>' : ''}</span><span class="bar-track"><i style="width:${(n / max) * 100}%"></i></span><span class="bar-v">${n}</span></div>`)
-              .join('')}</div></section>`
+              .join('')}</div>${lvStats(list).length > 1 ? `<div class="lv-h">易・中・難的答對率</div>${lvBarsHTML(list)}` : ''}</section>`
           : ''
       }
       ${selfRecHTML(list, sess)}
@@ -5391,7 +5501,7 @@ function startHwTask(t) {
   if (t.k === 'book') {
     const ids = bookIds()
     if (!ids.length) return toast('錯題本已經清空了，這項算完成 👍', '📕')
-    return startRun('book', '錯題重練', shuffle(ids).slice(0, 12))
+    return startRun('book', '錯題重練', bookPick(ids))
   }
 }
 document.addEventListener('click', (e) => {
@@ -6054,4 +6164,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine }
+window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, takeMix, bookPick }

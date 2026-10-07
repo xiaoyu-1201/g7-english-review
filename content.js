@@ -2775,4 +2775,9 @@ Object.assign(MODULES, MODULES2)
 for (const L of LESSONS) L.exam ||= 'e1'
 LESSONS.push(...LESSONS2)
 Object.assign(SPEAK, SPEAK2)
+// 會考題型 Ⅱ、Ⅲ（content3.js）：插在 Review 2、Review 3 後面
+import { PASSAGES3, MODULES3, LESSONS3 } from './content3.js'
+Object.assign(PASSAGES, PASSAGES3)
+Object.assign(MODULES, MODULES3)
+for (const L of LESSONS3) LESSONS.splice(LESSONS.findIndex((x) => x.id === L.after) + 1, 0, L)
 export { EXAMS }

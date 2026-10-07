@@ -2892,6 +2892,8 @@ export const SPEAK2 = {
 // ── 三次段考：範圍、模擬段考用的文章（克漏字、閱讀、圖表） ──
 export const EXAMS = [
   { id: 'e1', title: '第一次段考', range: 'Starter～Review 1', units: ['Starter', 'Unit 1', 'Unit 2', 'Review 1', '會考導向'], cloze: ['nina'], text: ['leo', 'rita'], chart: ['ruby', 'lost', 'chat'] },
-  { id: 'e2', title: '第二次段考', range: 'Unit 3～Review 2', units: ['Unit 3', 'Unit 4', 'Review 2'], cloze: ['cloze2'], text: ['report'], chart: ['museumRules', 'abilities', 'poster', 'weekend2'] },
-  { id: 'e3', title: '第三次段考', range: 'Unit 5～Review 3', units: ['Unit 5', 'Unit 6', 'Review 3'], cloze: ['cloze3'], text: ['thanks', 'zooDay'], chart: ['calendar', 'zooMap', 'tour'] },
+  { id: 'e2', title: '第二次段考', range: 'Unit 3～Review 2', units: ['Unit 3', 'Unit 4', 'Review 2', '會考導向 Ⅱ'], cloze: ['cloze2'], text: ['report'], chart: ['museumRules', 'abilities', 'poster', 'weekend2', 'poolRules', 'timetable', 'groupChat'] },
+  { id: 'e3', title: '第三次段考', range: 'Unit 5～Review 3', units: ['Unit 5', 'Unit 6', 'Review 3', '會考導向 Ⅲ'], cloze: ['cloze3'], text: ['thanks', 'zooDay'], chart: ['calendar', 'zooMap', 'tour', 'festival', 'petShop', 'partyChat'] },
+  // 第一冊會考模擬：全冊混合、全部選擇題、比照會考的大題（第三次段考的課開放後才看得到；units 只用來決定看不看得到，題目從所有開放的課出）
+  { id: 'ef', title: '第一冊會考模擬', range: 'Starter～Review 3（整冊）', kind: 'final', all: true, units: ['Unit 5', 'Unit 6', 'Review 3'], cloze: [], text: [], chart: [] },
 ]

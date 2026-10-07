@@ -8,7 +8,7 @@ HERE = pathlib.Path(__file__).parent
 OUT = HERE.parent.parent / "audio"
 MODELS = HERE / "models"  # 模型檔太大，不上傳（.gitignore）
 OUT.mkdir(exist_ok=True)
-VOICE = {"W": "af_heart", "M": "am_michael", "G": "af_bella", "B": "am_puck", "A": "af_heart", "w": "af_heart"}
+VOICE = {"W": "af_heart", "M": "am_michael", "G": "af_bella", "B": "am_puck", "A": "af_heart", "w": "af_heart", "Q": "af_sarah"}  # Q＝言談理解最後念的問題，用另一個聲音
 
 k = Kokoro(str(MODELS / "kokoro-v1.0.int8.onnx"), str(MODELS / "voices-v1.0.bin"))
 texts = json.loads((HERE / "texts.json").read_text(encoding="utf-8"))

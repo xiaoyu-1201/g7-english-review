@@ -1,0 +1,104 @@
+"""2.12 會考資源：聽力練習卷、第一冊會考模擬（整冊、全選擇題、聽力／閱讀分開算）、易中難配比與統計、錯題重練由易到難"""
+import time, pathlib
+from playwright.sync_api import sync_playwright
+from synchelp import *
+
+with sync_playwright() as p:
+    b = p.chromium.launch(channel="msedge")
+    T, code = make_teacher(b)
+    T.on("console", lambda m: errors.append("console: " + m.text) if m.type == "error" else None)
+    # 老師裝置：全部的課都開 → 模擬段考的選單有三次段考＋會考模擬
+    T.goto(URL + "#/exam")
+    T.wait_for_selector("#ex-pick")
+    check(T.locator("#ex-pick button").count() == 4 and "會考模擬" in txt(T, "#ex-pick"), "picker lists three exams and the final mock")
+    check(T.locator(".listen-intro").count() == 1, "listening paper card shows for a term exam")
+    # 聽力練習卷：10 題、三部分、交卷不用檢查清單
+    T.click('#ex-pick [data-ex="e2"]')
+    T.wait_for_selector('#ex-pick [data-ex="e2"].on')
+    T.click("[data-act=listen]")
+    T.wait_for_selector(".exam-paper .qcard")
+    n = T.locator(".exam-paper .qcard").count()
+    heads = T.evaluate("[...document.querySelectorAll('.exam-group .exam-h h2')].map(e => e.textContent)")
+    check(n == 10 and all(T.locator(".exam-paper .qcard .audio").count() == n for _ in [0]), f"listening paper has 10 audio items ({n})")
+    check(any("辨識句意" in h for h in heads) and any("言談理解" in h for h in heads), f"listening paper has the three parts {heads}")
+    check("聽力練習卷" in txt(T, ".run-title"), "listening paper title")
+    ids = T.evaluate("[...document.querySelectorAll('.exam-paper .qcard')].map(e => e.dataset.id)")
+    check(all(i.split("-")[0][:2] in ("s1", "s2", "s3", "u1", "u2", "r1", "k1", "k2", "k3", "u3", "u4", "r2", "k4", "k5", "k6") for i in ids), f"listening paper range is up to the second exam {ids}")
+    # 會考式的言談理解：問題最後才念（Q），原文裡標「問題」
+    qn = T.evaluate("Object.values(window.__app.ITEM).filter(i => Array.isArray(i.audio) && i.audio.some(l => l[0] === 'Q')).length")
+    check(qn >= 6, f"{qn} items read the question aloud at the end")
+    T.locator(".exam-paper .qcard .opt").first.click()
+    T.click("[data-act=submit]")
+    T.wait_for_selector(".sheet [data-ok]")
+    check(T.locator(".sheet .chk").count() == 0, "listening paper skips the format checklist")
+    T.click(".sheet [data-ok]")
+    T.wait_for_selector(".exam-result")
+    sess = T.evaluate("window.__app.S.sessions.at(-1)")
+    check(sess["k"] == "listen" and "聽力練習卷" in sess["title"], f"listening session recorded {sess['k']} {sess['title']}")
+    T.click("[data-act=home]")
+    T.wait_for_selector(".home")
+    # 會考模擬：整冊混合、全部選擇題、兩組圖表、聽力／閱讀分開
+    T.goto(URL + "#/exam")
+    T.wait_for_selector("#ex-pick")
+    check("聽力練習卷" in txt(T, ".page") and T.locator(".group .row").count() >= 1, "exam history lists the listening paper")
+    T.click('#ex-pick [data-ex="ef"]')
+    T.wait_for_selector('#ex-pick [data-ex="ef"].on')
+    check("整冊" in txt(T, ".ex-range") and "比照會考" in txt(T, ".exam-intro h2"), "final mock intro")
+    check(T.locator(".listen-intro").count() == 0, "no listening card on the final mock")
+    T.click("[data-act=start]")
+    T.wait_for_selector(".exam-paper .qcard")
+    heads = T.evaluate("[...document.querySelectorAll('.exam-group .exam-h h2')].map(e => e.textContent)")
+    ids = T.evaluate("[...document.querySelectorAll('.exam-paper .qcard')].map(e => e.dataset.id)")
+    kinds = T.evaluate("[...document.querySelectorAll('.exam-paper .qcard')].map(e => window.__app.ITEM[e.dataset.id].t)")
+    units = {i.split("-")[0][:2] for i in ids}
+    check(len(heads) == 6 and sum("圖表題組" in h for h in heads) == 2, f"final mock has 6 sections with two chart groups {heads}")
+    check(all(k == "mcq" for k in kinds), "final mock is all multiple choice")
+    check(len(units & {"s1", "s2", "s3", "u1", "u2", "k1", "k2", "k3", "r1"}) and len(units & {"u5", "u6", "r3"}), f"final mock mixes the whole book {sorted(units)}")
+    check(len(ids) >= 30, f"final mock has {len(ids)} items")
+    check("第一冊會考模擬" in txt(T, ".run-title"), "final mock title")
+    for o in T.locator(".exam-paper .qcard").all():
+        o.locator(".opt").first.click()
+    T.click("[data-act=submit]")
+    T.wait_for_selector(".sheet .chk")
+    for c in T.locator(".sheet .chk").all():
+        c.click()
+    T.click(".sheet [data-go]")
+    T.wait_for_selector(".exam-result")
+    check("聽力" in txt(T, ".er-split") and "閱讀" in txt(T, ".er-split"), f"final result splits listening and reading: {txt(T, '.er-split')[:40]}")
+    sess = T.evaluate("window.__app.S.sessions.at(-1)")
+    check(sess["k"] == "exam" and sess["ex"] == "ef" and "split" in sess, "final session keeps the split")
+    T.screenshot(path=str(OUT / "h1-final-result.png"))
+    # 新的會考題型課：課表卡片、圖片選項、月曆都畫得出來
+    for mid, sel, name in [("k5", ".t-learn", "k5-learn"), ("k6", ".opts.pic", "k6-pic"), ("k8", ".t-learn", "k8-learn")]:
+        T.goto(URL)
+        T.wait_for_selector(".home")
+        T.click(f'.mod[data-mod="{mid}"]')
+        T.wait_for_selector(sel if mid != "k6" else ".qcard")
+        if mid == "k6":
+            T.click('.opt[data-i="1"]')
+            T.click("[data-act=check]")
+            T.wait_for_selector(".opts.pic")
+        check(T.locator(sel).count() >= 1, f"{name} renders")
+        T.screenshot(path=str(OUT / f"h3-{name}.png"))
+        T.locator("[data-act=close]").click()
+    check(T.locator(".home .exam-h").count() == 3 and T.locator('.mod[data-mod="k9"]').count() == 1, "teacher home shows the new lessons")
+    # 易中難統計（學習紀錄）：做過的題目有不同難度
+    T.goto(URL + "#/stats")
+    T.wait_for_selector(".page")
+    check(T.locator(".lv-bars .bar-row").count() >= 2, "stats page shows easy/medium/hard accuracy")
+    T.screenshot(path=str(OUT / "h2-lv-stats.png"))
+    # 難度配比：抽 20 題，難題不超過 1/4、至少 1 題
+    mix = T.evaluate("""() => {
+      const pool = Object.values(window.__app.ITEM).filter(i => i.t === 'mcq' && !i.audio && !i.passage)
+      const out = window.__app.takeMix(pool, 20)
+      return out.map(i => i.lv || 1)
+    }""")
+    check(len(mix) == 20 and 1 <= mix.count(3) <= 5 and mix.count(2) >= 3, f"takeMix keeps the level mix {mix}")
+    # 錯題重練由易到難
+    order = T.evaluate("""() => {
+      const ids = Object.values(window.__app.ITEM).filter(i => i.t === 'mcq').slice(0, 40).map(i => i.id)
+      return window.__app.bookPick(ids).map(i => window.__app.ITEM[i].lv || 1)
+    }""")
+    check(order == sorted(order) and len(order) == 12, f"book retry goes easy to hard {order}")
+    b.close()
+report()
