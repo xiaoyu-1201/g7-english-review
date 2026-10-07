@@ -4970,6 +4970,196 @@ ul.plain b {
     print-color-adjust: exact;
   }
 }
+/* 2.13 跟隨學生、重點總整理手機版 */
+.sc-ava {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font: 700 18px var(--round);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.sc-ava .ld-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--card);
+  box-sizing: content-box;
+}
+.sc-ava:active {
+  transform: scale(0.94);
+}
+.follow-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 4px 12px;
+  margin: 0 -4px 6px;
+  scrollbar-width: none;
+}
+.follow-row::-webkit-scrollbar {
+  display: none;
+}
+.follow-row .ava {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 64px;
+  color: var(--label2);
+  font-size: 12px;
+}
+.follow-row .ava span {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--fill2);
+  color: var(--label);
+  font: 700 20px var(--round);
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 3px solid transparent;
+}
+.follow-row .ava.live span {
+  background: var(--blue);
+  color: #fff;
+}
+.follow-row .ava.on span {
+  border-color: var(--green-v);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-v) 30%, transparent);
+}
+.follow-row .ava small {
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.follow-tag {
+  margin-left: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--label2);
+  white-space: nowrap;
+}
+.follow-tag svg {
+  width: 16px;
+  height: 16px;
+  color: var(--green);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.watch-q .opt.sel {
+  box-shadow: inset 0 0 0 2px var(--blue);
+}
+.notes-units {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 6px 4px 10px;
+  margin: -4px -4px 8px;
+  background: var(--bg);
+  scrollbar-width: none;
+}
+.notes-units::-webkit-scrollbar {
+  display: none;
+}
+.notes-units button {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  background: var(--fill);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--label);
+  white-space: nowrap;
+}
+.notes-units button.on {
+  background: var(--blue);
+  color: #fff;
+}
+.notes-mod.hide {
+  display: none;
+}
+.note-pts {
+  margin: 0 0 10px;
+  padding-left: 22px;
+  font-size: 17px;
+  line-height: 1.75;
+}
+.note-pts li {
+  margin: 4px 0;
+  padding-left: 2px;
+}
+.note-pts li::marker {
+  color: var(--blue);
+  font-weight: 700;
+}
+.note-pts b,
+.note-show b {
+  color: var(--blue);
+}
+.note-show table th:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--card);
+}
+.sheet .note-show table th:first-child {
+  background: var(--card2);
+}
+.notes-check {
+  margin-top: 8px;
+}
+.notes-check summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+.notes-check[open] summary {
+  margin-bottom: 6px;
+}
+@media (max-width: 480px) {
+  .note {
+    padding: 16px;
+  }
+  .note h3 {
+    font-size: 18px;
+  }
+  .notes-h h2 {
+    font-size: 21px;
+  }
+  .note-show,
+  .note-rule,
+  .note-pts {
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  .note-rule {
+    padding: 10px 12px;
+  }
+}
+@media print {
+  .notes-units,
+  .follow-row {
+    display: none;
+  }
+  .notes-mod.hide {
+    display: block;
+  }
+}
 /* 2.12 聽力練習卷、會考模擬、易中難 */
 .listen-intro {
   padding: 22px 24px;

@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.12.1（10/7）'
+const VERSION = '2.13（10/7）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -1452,6 +1452,12 @@ function runShell(pr, it, at, reviewing) {
   )
   Sync.presence({ view: 'run', title: pr.title, n: Math.min(nBefore + 1, scored.length), of: scored.length, q: it.id })
 }
+// 學生選了選項還沒按檢查：老師的課堂檢視先看到「已選 X」（2.13）
+function tellSel(C) {
+  if (!Sync.last || Sync.last.view !== 'run') return
+  const sel = $('.opt.sel .opt-text', C.el)?.textContent || ''
+  if ((Sync.last.sel || '') !== sel) Sync.presence({ ...Sync.last, sel })
+}
 
 function viewRun(key, at) {
   const pr = S.progress[key]
@@ -1478,7 +1484,10 @@ function viewRun(key, at) {
   $('.run-card').append(C.el)
   RUN = { key, at, C, it, hints: 0, guess: false, checked: false, streak }
   const btn = $('[data-act=check]')
-  C.onAnswer = () => (btn.disabled = !C.answered())
+  C.onAnswer = () => {
+    btn.disabled = !C.answered()
+    tellSel(C)
+  }
   C.onEnter = () => C.answered() && btn.click()
   restoreDraft(key, it, C)
   if (C.focus && matchMedia('(pointer: fine)').matches) setTimeout(() => C.focus(), 60)
@@ -1683,7 +1692,10 @@ function retryItem() {
   const btn = $('[data-act=check]')
   btn.textContent = '檢查'
   btn.disabled = true
-  C.onAnswer = () => (btn.disabled = !C.answered())
+  C.onAnswer = () => {
+    btn.disabled = !C.answered()
+    tellSel(C)
+  }
   C.onEnter = () => C.answered() && btn.click()
   const scored = pr.ids.filter((id) => ITEM[id]?.t !== 'learn')
   const n = pr.ids.slice(0, RUN.at).filter((id) => ITEM[id]?.t !== 'learn').length + 1
@@ -1876,24 +1888,58 @@ function celebrate() {
 }
 
 // ───────────────────────── 重點 ─────────────────────────
-function notesHTML(mid) {
+// 觀念卡的重點：有 ①②③ 或換行就拆成一條一條（手機上好讀）；表格、只有一句的照原樣
+function notePoints(show) {
+  const s = String(show ?? '')
+  if (/<table/i.test(s)) return `<div class="note-show">${rich(s)}</div>`
+  const parts = s
+    .split(/<br\s*\/?>/i)
+    .flatMap((p) => p.split(/(?=[①②③④⑤⑥⑦⑧⑨⑩])/))
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (parts.length < 2) return `<div class="note-show">${rich(s)}</div>`
+  return `<ul class="note-pts">${parts.map((p) => `<li>${rich(p)}</li>`).join('')}</ul>`
+}
+function notesHTML(mid, hidden = false) {
   const m = MODULES[mid]
   const cards = m.items.filter((i) => i.t === 'learn')
-  return `<div class="notes-mod"><div class="notes-h"><span class="mod-ic">${m.icon}</span><div><div class="eyebrow">${esc(m.unit)}</div><h2>${esc(m.title)}</h2></div></div>
-    ${cards.map((c) => `<section class="note"><h3>${esc(c.title)}</h3>${c.fig && c.fig.k !== 'preps' ? figure(c.fig) : ''}<div class="note-show">${rich(c.show)}</div><div class="note-rule">${rich(c.rule)}</div>${c.tip ? `<div class="tip"><b>易錯提醒</b>${rich(c.tip)}</div>` : ''}</section>`).join('')}</div>`
+  return `<div class="notes-mod${hidden ? ' hide' : ''}" data-unit="${esc(m.unit)}"><div class="notes-h"><span class="mod-ic">${m.icon}</span><div><div class="eyebrow">${esc(m.unit)}</div><h2>${esc(m.title)}</h2></div></div>
+    ${cards.map((c) => `<section class="note"><h3>${esc(c.title)}</h3>${c.fig && c.fig.k !== 'preps' ? figure(c.fig) : ''}${notePoints(c.show)}<div class="note-rule">${rich(c.rule)}</div>${c.tip ? `<div class="tip"><b>易錯提醒</b>${rich(c.tip)}</div>` : ''}</section>`).join('')}</div>`
 }
 function showNotes(mid) {
   sheet(notesHTML(mid), { wide: true })
 }
+// 重點總整理：一次看一課（上面一排課名可以切換，記住上次看的）；列印時全部印出來
 function viewAllNotes() {
+  const mods = openMods()
+  const units = [...new Set(mods.map((m) => MODULES[m].unit))]
+  const cur = units.includes(S.profile.notesUnit) ? S.profile.notesUnit : units[0]
+  Sync.presence({ view: 'notes' })
   setView(
     `<div class="page notes-page">
-      ${header('重點總整理', '考前一天從頭看一遍；可以列印成講義。', `<button class="btn ghost" data-print>${ICON.doc}<span>列印</span></button>`, true)}
-      <div class="callout"><b>交卷前 30 秒檢查清單</b><ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol></div>
-      ${openMods().map(notesHTML).join('')}
+      ${header('重點總整理', '一次看一課，點上面切換；考前一天從頭看一遍。', `<button class="btn ghost" data-print>${ICON.doc}<span>列印</span></button>`, true)}
+      <div class="notes-units" role="tablist">${units.map((u) => `<button role="tab" class="${u === cur ? 'on' : ''}" data-u="${esc(u)}" aria-selected="${u === cur}">${esc(u)}</button>`).join('')}</div>
+      ${mods.map((m) => notesHTML(m, MODULES[m].unit !== cur)).join('')}
+      <details class="callout notes-check"><summary>交卷前 30 秒檢查清單</summary><ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol></details>
     </div>`,
   )
-  $('[data-print]').onclick = () => window.print()
+  $('[data-print]').onclick = () => {
+    $$('.notes-page details').forEach((d) => (d.open = true))
+    window.print()
+  }
+  $('.notes-units').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-u]')
+    if (!b) return
+    S.profile.notesUnit = b.dataset.u
+    save()
+    $$('.notes-units button').forEach((x) => {
+      x.classList.toggle('on', x === b)
+      x.setAttribute('aria-selected', x === b)
+    })
+    $$('.notes-mod').forEach((m) => m.classList.toggle('hide', m.dataset.unit !== b.dataset.u))
+    b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' })
+    window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' })
+  })
 }
 
 // ───────────────────────── 首頁 ─────────────────────────
@@ -2347,6 +2393,7 @@ function viewPrint(key) {
 
 // ───────────────────────── 錯題本 ─────────────────────────
 function viewBook() {
+  Sync.presence({ view: 'book' })
   const st = bookState()
   const ids = Object.keys(st).filter((q) => st[q].inBook)
   const grads = Object.keys(st).filter((q) => !st[q].inBook)
@@ -2584,6 +2631,8 @@ function viewExam() {
 function updateExamCount() {
   const done = EXAM.ctrls.filter((c) => c.answered()).length
   const left = EXAM.ctrls.length - done
+  // 老師的課堂檢視看得到寫到第幾題（交卷前看不到答案）
+  if (!EXAM.graded && (Sync.last?.view !== 'exam' || Sync.last.n !== done)) Sync.presence({ view: 'exam', title: EXAM.title || '', n: done, of: EXAM.ctrls.length, listen: !!EXAM.listen })
   const d = $('.exam-done')
   if (d) d.textContent = done
   const l = $('.exam-left')
@@ -4810,7 +4859,9 @@ function liveText(l) {
   const fresh = Date.now() - l.ts < 10 * 60000
   const where = l.dev === '老師的裝置' || l.dev === '上課平板' ? '（在老師的裝置上）' : ''
   if (l.view === 'run' && fresh) return `正在做：${l.title}・第 ${l.n}／${l.of} 題${where}`
-  if (l.view === 'exam' && fresh) return `正在寫模擬段考${where}`
+  if (l.view === 'exam' && fresh) return `正在寫${l.listen ? '聽力練習卷' : '模擬段考'}${l.of ? `・已寫 ${l.n}／${l.of} 題` : ''}${where}`
+  if (l.view === 'notes' && fresh) return `在看重點總整理${where}`
+  if (l.view === 'book' && fresh) return `在看錯題本${where}`
   if (l.view === 'flash' && fresh) return `正在玩閃電挑戰${where}`
   if (l.view === 'speak' && fresh) return `正在練口說・第 ${l.n}／${l.of} 句${where}`
   if (l.view === 'away' || !fresh) return `離開 App（${agoText(l.ts)}）`
@@ -5156,7 +5207,7 @@ function stuCardHTML(sid) {
   const lu = lastOpenUnit(sid)
   const on = SEL.has(sid)
   return `<section class="card sc${isActive(l) ? ' live' : ''}${on ? ' sel' : ''}" data-card="${sid}">
-    <div class="sc-head"><span class="sc-chk" aria-hidden="true">${on ? ICON.check : ''}</span><span class="ld-dot${isActive(l) ? ' on' : ''}"></span><b class="sc-name">${esc(st.name || '學生')}</b></div>
+    <div class="sc-head"><span class="sc-chk" aria-hidden="true">${on ? ICON.check : ''}</span><button class="sc-ava" data-act="watch" aria-label="跟隨 ${esc(st.name || '學生')}"><span>${esc((st.name || '學')[0])}</span><i class="ld-dot${isActive(l) ? ' on' : ''}"></i></button><b class="sc-name">${esc(st.name || '學生')}</b></div>
     <p class="sc-status">${esc(isActive(l) ? liveText(l) : last ? `最後練習：${agoText(last.ts)}` : '還沒有練習紀錄')}</p>
     <div class="sc-stats">
       <div><b>${today.length} 題</b><span>今天${today.length ? `・對 ${Math.round((ok / today.length) * 100)}%` : ''}</span></div>
@@ -5400,7 +5451,26 @@ function viewWatch(sid, keepScroll = false) {
   const today = list.filter((a) => a.ts >= t0)
   const ok = today.filter((a) => a.r === 'ok').length
   const name = st.name || '學生'
-  const statusTxt = !l ? `${name} 還沒有上線` : !isActive(l) ? `${name} 現在沒有在練習（${agoText(l.ts)}）` : l.view === 'run' ? '' : l.view === 'exam' ? `${name} 正在寫模擬段考（交卷後看得到作答）` : l.view === 'flash' ? `${name} 正在玩閃電挑戰` : `${name} 在 App 的首頁`
+  const statusTxt = !l
+    ? `${name} 還沒有上線`
+    : !isActive(l)
+      ? `${name} 現在沒有在練習（${agoText(l.ts)}）`
+      : l.view === 'run'
+        ? ''
+        : l.view === 'exam'
+          ? `${name} 正在寫${l.listen ? '聽力練習卷' : '模擬段考'}${l.title ? `（${l.title}）` : ''}${l.of ? `，已寫 ${l.n}／${l.of} 題` : ''}。交卷後看得到作答。`
+          : l.view === 'flash'
+            ? `${name} 正在玩閃電挑戰`
+            : l.view === 'notes'
+              ? `${name} 在看重點總整理`
+              : l.view === 'book'
+                ? `${name} 在看錯題本`
+                : `${name} 在 App 的首頁`
+  // 跟隨列：正在線上的學生，點頭像切換（目前跟隨的有綠框）
+  const online = [...new Set([sid, ...studentIds().filter((s) => isActive(latestLive(s)))])]
+  const followRow = `<div class="follow-row">${online
+    .map((s) => `<button class="ava${s === sid ? ' on' : ''}${isActive(latestLive(s)) ? ' live' : ''}" data-follow="${s}" aria-label="跟隨 ${esc(Sync.students[s]?.name || '學生')}"><span>${esc((Sync.students[s]?.name || '學')[0])}</span><small>${esc(Sync.students[s]?.name || '學生')}</small></button>`)
+    .join('')}<span class="follow-tag">${ICON.eye}<span>跟隨中：學生在哪一頁，這裡就顯示哪一頁</span></span></div>`
   // 口說：正在念哪一句、念完的分數與漏掉的字
   const sp = isActive(l) && l.view === 'speak' && l.text
   const spKey = sp && l.said ? `sp${l.ts}` : ''
@@ -5408,6 +5478,7 @@ function viewWatch(sid, keepScroll = false) {
   setView(
     `<div class="page narrow watch-page">
       ${header(name, it ? `${l.title}・第 ${l.n}／${l.of} 題` : sp ? `${l.title}・第 ${l.n}／${l.of} 句` : '課堂檢視', syncPill(), true)}
+      ${followRow}
       ${
         sp
           ? `<section class="card watch-q watch-sp${spCls ? ' answered ' + spCls : ''}${spKey && spKey !== watchFresh ? ' fresh' : ''}">
@@ -5418,7 +5489,7 @@ function viewWatch(sid, keepScroll = false) {
           : it
           ? `<div class="watch-run">${run.map((a) => `<i class="wr ${a.r}" title="${esc(snippet(ITEM[a.q] || {}))}"></i>`).join('')}<span>今天 ${today.length} 題・對 ${today.length ? Math.round((ok / today.length) * 100) : 0}%</span></div>
             <section class="card watch-q${ans ? ' answered ' + ans.r : ''}${ans && Sync.akey(ans) !== watchFresh ? ' fresh' : ''}">
-              <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '不太確定・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : '正在作答…'}</div>
+              <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '不太確定・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : it.t === 'learn' ? '正在看觀念卡' : l.sel ? `已選「${esc(l.sel)}」，還沒檢查` : '正在作答…'}</div>
               <div class="watch-slot"></div>
             </section>`
           : `<div class="empty card"><div class="empty-ic">${isActive(l) ? '📱' : '💤'}</div><h2>${esc(statusTxt)}</h2><p class="muted">${name} 開始做題目時，這裡會自動顯示那一題。</p></div>`
@@ -5435,12 +5506,18 @@ function viewWatch(sid, keepScroll = false) {
         if (i === it.a) o.classList.add('ok')
         else if (it.opts[i] === ans.a) o.classList.add('bad')
       })
+    // 還沒檢查：學生目前選的那個先用藍框標出來
+    if (!ans && l.sel && it.t === 'mcq') $$('.opt', card).forEach((o) => it.opts[+o.dataset.i] === l.sel && o.classList.add('sel'))
     $('.watch-slot').append(card)
   }
   if (ans) watchFresh = Sync.akey(ans)
   if (spKey) watchFresh = spKey
   if (keepScroll) window.scrollTo(0, y)
-  $('.watch-page').addEventListener('click', (e) => feedClick(e, list, sid))
+  $('.watch-page').addEventListener('click', (e) => {
+    const f = e.target.closest('[data-follow]')
+    if (f) return f.dataset.follow === sid ? go('#/students') : go('#/watch/' + f.dataset.follow)
+    feedClick(e, list, sid)
+  })
 }
 
 // ───────────────────────── 派作業 ─────────────────────────

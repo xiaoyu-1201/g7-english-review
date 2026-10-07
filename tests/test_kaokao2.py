@@ -56,8 +56,10 @@ with sync_playwright() as p:
     check(len(units & {"s1", "s2", "s3", "u1", "u2", "k1", "k2", "k3", "r1"}) and len(units & {"u5", "u6", "r3"}), f"final mock mixes the whole book {sorted(units)}")
     check(len(ids) >= 30, f"final mock has {len(ids)} items")
     check("第一冊會考模擬" in txt(T, ".run-title"), "final mock title")
-    for o in T.locator(".exam-paper .qcard").all():
-        o.locator(".opt").first.click()
+    noopt = T.evaluate("[...document.querySelectorAll('.exam-paper .qcard')].filter(c => !c.querySelector('.opt')).map(c => c.dataset.id + ':' + c.className)")
+    check(not noopt, f"every final-mock card has options {noopt}")
+    T.evaluate("[...document.querySelectorAll('.exam-paper .qcard')].forEach(c => c.querySelector('.opt')?.click())")
+    time.sleep(0.3)
     T.click("[data-act=submit]")
     T.wait_for_selector(".sheet .chk")
     for c in T.locator(".sheet .chk").all():
@@ -81,6 +83,8 @@ with sync_playwright() as p:
         check(T.locator(sel).count() >= 1, f"{name} renders")
         T.screenshot(path=str(OUT / f"h3-{name}.png"))
         T.locator("[data-act=close]").click()
+    T.goto(URL)
+    T.wait_for_selector(".home .exam-h")
     check(T.locator(".home .exam-h").count() == 3 and T.locator('.mod[data-mod="k9"]').count() == 1, "teacher home shows the new lessons")
     # 易中難統計（學習紀錄）：做過的題目有不同難度
     T.goto(URL + "#/stats")

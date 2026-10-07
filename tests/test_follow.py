@@ -1,0 +1,76 @@
+"""2.13 跟隨學生（點頭像、已選未檢查、觀念卡、模擬段考進度、切換學生）＋重點總整理一次看一課"""
+import time
+from playwright.sync_api import sync_playwright
+from synchelp import *
+
+with sync_playwright() as p:
+    b = p.chromium.launch(channel="msedge")
+    T, code = make_teacher(b)
+    amy = add_student(T, "Amy")
+    ben = add_student(T, "Ben")
+    A = page(b, 390, 844, "A")
+    A.goto(link(code, "student", amy))
+    wait_until(lambda: st(A) == "member")
+    B = page(b, 390, 844, "B")
+    B.goto(link(code, "student", ben))
+    wait_until(lambda: st(B) == "member")
+    # 學生 Amy 開始做 u1a（第一張是觀念卡）
+    A.goto(URL)
+    A.wait_for_selector(".home")
+    A.click('.mod[data-mod="u2f"]')
+    A.wait_for_selector(".t-learn")
+    # 老師：學生卡片上有頭像，點頭像＝跟隨
+    T.goto(URL + "#/students")
+    T.wait_for_selector(".sc")
+    check(wait_until(lambda: T.locator(f'.sc[data-card="{amy}"] .sc-ava .ld-dot.on').count() == 1), "avatar shows the live dot")
+    T.click(f'.sc[data-card="{amy}"] .sc-ava')
+    T.wait_for_selector(".watch-page")
+    check(T.evaluate("location.hash") == f"#/watch/{amy}", "tapping the avatar opens follow view")
+    check(T.locator(".follow-row .ava.on").count() == 1 and "跟隨中" in txt(T, ".follow-tag"), "follow row marks the followed student")
+    check(wait_until(lambda: T.locator(".watch-q .t-learn").count() == 1 and "觀念卡" in txt(T, ".wq-h")), "teacher sees the learn card the student is reading")
+    T.screenshot(path=str(OUT / "f1-learn.png"))
+    # 學生答觀念卡的小問題、按「我懂了」到第一題，選一個選項但不檢查 → 老師看到「已選」
+    A.click('.t-learn .opt[data-i="0"]')
+    A.click("[data-act=check]")
+    A.wait_for_selector(".qcard .opt")
+    it = A.evaluate("window.__app.ITEM[document.querySelector('.qcard').dataset.id]")
+    wrong = next(i for i in range(len(it["opts"])) if i != it["a"]) if it["t"] == "mcq" else None
+    if wrong is not None:
+        A.click(f'.qcard .opt[data-i="{wrong}"]')
+        check(wait_until(lambda: "已選" in txt(T, ".wq-h")), f"teacher sees the pre-selection: {txt(T, '.wq-h')[:30]}")
+        check(T.locator(".watch-q .opt.sel").count() == 1, "the selected option is outlined")
+        T.screenshot(path=str(OUT / "f2-sel.png"))
+        A.click("[data-act=check]")
+        check(wait_until(lambda: "答錯了" in txt(T, ".wq-h")), "after checking, the teacher sees the result")
+    # 學生 Ben 去寫模擬段考 → 老師切換到 Ben，看到進度
+    B.goto(URL + "#/exam")
+    B.wait_for_selector("[data-act=start]")
+    B.click("[data-act=start]")
+    B.wait_for_selector(".exam-paper .qcard")
+    B.locator(".exam-paper .qcard .opt").first.click()
+    check(wait_until(lambda: T.locator(f'.follow-row .ava[data-follow="{ben}"]').count() == 1), "Ben appears in the follow row once online")
+    T.click(f'.follow-row .ava[data-follow="{ben}"]')
+    T.wait_for_selector(".watch-page")
+    check(wait_until(lambda: "模擬段考" in txt(T, ".watch-page .empty h2") and "已寫 1／" in txt(T, ".watch-page .empty h2")), f"teacher sees exam progress: {txt(T, '.watch-page .empty h2')[:40]}")
+    # 學生去看重點總整理 → 老師看到
+    B.goto(URL + "#/notes")
+    B.wait_for_selector(".notes-page")
+    check(wait_until(lambda: "重點總整理" in txt(T, ".watch-page .empty h2")), "teacher sees the student reading the notes")
+    # 重點總整理：一次看一課、切換、記住、列印時全部
+    units = B.locator(".notes-units button").count()
+    shown = B.evaluate("[...document.querySelectorAll('.notes-mod:not(.hide)')].map(m => m.dataset.unit)")
+    check(units >= 3 and len(set(shown)) == 1, f"notes show one unit at a time ({units} units, showing {set(shown)})")
+    check(B.locator(".note-pts").count() >= 3, "learn cards are split into bullet points")
+    B.locator(".notes-units button").nth(2).click()
+    time.sleep(0.3)
+    u2 = B.locator(".notes-units button").nth(2).inner_text()
+    shown2 = set(B.evaluate("[...document.querySelectorAll('.notes-mod:not(.hide)')].map(m => m.dataset.unit)"))
+    check(shown2 == {u2}, f"switching unit shows only {u2}")
+    B.screenshot(path=str(OUT / "f3-notes.png"))
+    B.reload()
+    B.wait_for_selector(".notes-units")
+    check(B.locator(".notes-units button.on").inner_text() == u2, "remembers the last unit")
+    ow = B.evaluate("document.documentElement.scrollWidth - window.innerWidth")
+    check(ow <= 1, f"no horizontal overflow on phone ({ow}px)")
+    b.close()
+report()
