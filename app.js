@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.9.4（10/7）'
+const VERSION = '2.10（10/7）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3167,6 +3167,8 @@ function speakScore(target, heards) {
 }
 const speakWordsHTML = (words) => words.map(({ t, ok, name }) => `<span class="spw ${name ? 'name' : ok ? 'ok' : 'miss'}">${esc(t)}</span>`).join(' ')
 const SPEAK_ERR = {
+  'mic-denied': '沒有麥克風權限：請允許這個網站使用麥克風（iPhone、iPad：設定 → Safari → 麥克風）',
+  'asr-load': '辨識模型下載失敗，請檢查網路再試一次',
   'not-allowed': '沒有麥克風權限：請允許這個網站使用麥克風（iPhone、iPad：設定 → Safari → 麥克風；也要打開「設定 → 一般 → 鍵盤 → 聽寫」）',
   'service-not-allowed': '語音辨識沒有開：iPhone、iPad 請打開「設定 → 一般 → 鍵盤 → 聽寫」',
   'no-speech': '沒有聽到聲音，請靠近一點再說一次',
@@ -3285,6 +3287,143 @@ async function listen(onInterim, target) {
   }
 }
 
+// ── 網頁裡的語音辨識（預設）：錄下整句 → 在網頁裡辨識（asr.js）。沒有手機辨識的提示音、不會跟錄音搶麥克風、主畫面 App 也能用 ──
+// 辨識方式：local＝網頁裡辨識；sr＝手機內建語音辨識（設定在口說練習的開始畫面）
+const LOCAL_OK = !!(navigator.mediaDevices?.getUserMedia && window.WebAssembly && (window.AudioContext || window.webkitAudioContext))
+let LOCAL_FAILED = false // 模型下載失敗：這次開 App 期間改用手機內建
+const speakEngine = () => (LOCAL_OK && !(LOCAL_FAILED && SR) && (S.profile.speakEngine !== 'sr' || !SR) ? 'local' : SR ? 'sr' : '')
+let ASR_MOD = null
+const getASR = async () => (ASR_MOD ||= (await import('./asr.js')).ASR)
+// 48k／44.1k → 16k（先平均再取樣，等於簡單的低通）
+function to16k(x, sr) {
+  if (sr === 16000) return x
+  const r = sr / 16000
+  const n = Math.floor(x.length / r)
+  const y = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * r)
+    const b = Math.min(x.length, Math.max(a + 1, Math.floor((i + 1) * r)))
+    let s = 0
+    for (let j = a; j < b; j++) s += x[j]
+    y[i] = s / (b - a)
+  }
+  return y
+}
+// 開始聽：講完停 0.8 秒就結束（或再按一次麥克風）；最多 12 秒；7 秒都沒講話＝沒聽到
+// 同一條麥克風也錄音（念完可以聽自己的聲音），不會互搶
+async function listenLocal(onInterim) {
+  const AC = window.AudioContext || window.webkitAudioContext
+  const ctx = new AC() // 要在按下去的那一刻建立（iPhone 才會開聲音）
+  ctx.resume?.().catch(() => {})
+  // 模型同時開始準備（第一次要下載）
+  const asr = getASR().then((A) => {
+    A.load().catch(() => {})
+    return A
+  })
+  asr.catch(() => {})
+  let stream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+  } catch (e) {
+    ctx.close?.().catch(() => {})
+    const err = e?.name === 'NotAllowedError' || e?.name === 'SecurityError' ? 'mic-denied' : 'audio-capture'
+    return { stop() {}, done: Promise.resolve({ alts: [], err, blob: null }) }
+  }
+  let rec = null
+  const chunks = []
+  if (window.MediaRecorder)
+    try {
+      rec = new MediaRecorder(stream)
+      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
+      rec.start()
+    } catch {
+      rec = null
+    }
+  const src = ctx.createMediaStreamSource(stream)
+  const proc = ctx.createScriptProcessor(2048, 1, 1)
+  const pcm = []
+  let total = 0
+  let floor = 1
+  let run = 0 // 連續有聲音的段數
+  let first = -1 // 第一段講話的位置（樣本）
+  let last = -1
+  let quiet = 0 // 講完之後安靜了多久（秒）
+  let finish
+  const ended = new Promise((ok) => (finish = ok))
+  proc.onaudioprocess = (e) => {
+    const x = new Float32Array(e.inputBuffer.getChannelData(0))
+    pcm.push(x)
+    let s = 0
+    for (let i = 0; i < x.length; i++) s += x[i] * x[i]
+    const rms = Math.sqrt(s / x.length)
+    floor = Math.min(floor, Math.max(rms, 0.002))
+    const loud = rms > Math.max(0.012, floor * 3)
+    run = loud ? run + 1 : 0
+    if (run >= 2) {
+      if (first < 0) first = Math.max(0, total - x.length)
+      last = total + x.length
+      quiet = 0
+    } else if (first >= 0) quiet += x.length / ctx.sampleRate
+    total += x.length
+    const sec = total / ctx.sampleRate
+    if ((first >= 0 && quiet > 0.8) || sec > 12 || (first < 0 && sec > 7)) finish()
+  }
+  src.connect(proc)
+  proc.connect(ctx.destination) // 輸出是靜音（不會從喇叭出聲）
+  const done = ended.then(async () => {
+    proc.onaudioprocess = null
+    try {
+      src.disconnect()
+      proc.disconnect()
+    } catch {}
+    const sr = ctx.sampleRate
+    ctx.close?.().catch(() => {})
+    let blob = null
+    if (rec) {
+      await new Promise((ok) => {
+        rec.onstop = ok
+        try {
+          rec.stop()
+        } catch {
+          ok()
+        }
+      })
+      if (chunks.length) blob = new Blob(chunks, { type: rec.mimeType || chunks[0].type })
+    }
+    stream.getTracks().forEach((t) => t.stop()) // 放掉麥克風
+    if (first < 0) return { alts: [], err: 'no-speech', blob }
+    // 只留講話那一段（前後各多留一點）
+    const all = new Float32Array(total)
+    let o = 0
+    for (const c of pcm) {
+      all.set(c, o)
+      o += c.length
+    }
+    const seg = all.subarray(Math.max(0, first - Math.round(sr * 0.25)), Math.min(total, last + Math.round(sr * 0.35)))
+    let text = ''
+    try {
+      const A = await asr
+      if (!A.ready) {
+        // 第一次用：等模型下載完
+        const f = (p) => onInterim?.(`第一次使用，下載辨識模型中 ${Math.round(p * 100)}%`)
+        A.listeners.add(f)
+        f(A.progress)
+        try {
+          await A.load()
+        } finally {
+          A.listeners.delete(f)
+        }
+      }
+      onInterim?.('辨識中…')
+      text = await A.transcribe(to16k(seg, sr))
+    } catch {
+      return { alts: [], err: 'asr-load', blob }
+    }
+    return { alts: text ? [text] : [], err: text ? '' : 'no-speech', blob }
+  })
+  return { stop: () => finish(), done }
+}
+
 let SP = null // { list, i, res: [{best, tries}], unit, over }
 const speakUnits = () => Object.keys(SPEAK).filter((u) => myUnits().has(u))
 function speakPool(unit) {
@@ -3302,14 +3441,16 @@ function viewSpeak() {
   setView(
     `<div class="page narrow speak-intro">
       ${header('口說練習', '先聽，再跟著說。練口說，也練段考聽力。', '', true)}
-      ${SR ? '' : '<div class="callout care"><b>這個瀏覽器不能用語音辨識。</b>iPhone、iPad 請用 Safari 打開；電腦和 Android 請用 Chrome。</div>'}
+      ${speakEngine() ? '' : '<div class="callout care"><b>這個瀏覽器不能用麥克風。</b>iPhone、iPad 請用 Safari 打開；電腦和 Android 請用 Chrome。</div>'}
       <div class="card sp-intro">
         <div class="sp-big-ic">${ICON.mic}</div>
+        ${LOCAL_OK && SR ? `<div class="seg small" id="sp-eng"><button data-eng="local" class="${speakEngine() === 'local' ? 'on' : ''}">沒有提示音</button><button data-eng="sr" class="${speakEngine() === 'sr' ? 'on' : ''}">手機內建辨識</button></div>` : ''}
+        ${speakEngine() === 'local' ? '<p class="muted sp-eng-desc">準備辨識模型…</p>' : speakEngine() === 'sr' ? '<p class="muted sp-eng-desc">用手機內建的語音辨識：反應比較快，但按麥克風時手機會發出提示音。</p>' : ''}
         <div class="seg" id="sp-mode"><button data-m="read" class="${mode === 'read' ? 'on' : ''}">看字跟讀</button><button data-m="blind" class="${mode === 'blind' ? 'on' : ''}">不看字（練聽力）</button></div>
         <p class="muted sp-mode-desc">${MODE_DESC[mode]}</p>
         <div class="seg" id="sp-unit">${[...speakUnits(), 'all'].map((u) => `<button data-u="${u}" class="${u === unit ? 'on' : ''}">${u === 'all' ? '全部' : u}</button>`).join('')}</div>
         <p class="muted">每回 8 句。${best ? `目前最高 ${best} 分。` : ''}</p>
-        <button class="btn primary big" data-act="go" ${SR ? '' : 'disabled'}>開始</button>
+        <button class="btn primary big" data-act="go" ${speakEngine() ? '' : 'disabled'}>開始</button>
       </div>
       <ul class="sp-how">
         <li>第一次會問能不能用麥克風，請按「允許」。</li>
@@ -3335,13 +3476,37 @@ function viewSpeak() {
       $$('#sp-mode button').forEach((b) => b.classList.toggle('on', b === m))
       $('.sp-mode-desc').textContent = MODE_DESC[mode]
     }
-    if (e.target.closest('[data-act=go]') && SR) {
+    const en = e.target.closest('[data-eng]')
+    if (en) {
+      S.profile.speakEngine = en.dataset.eng
+      save()
+      return viewSpeak()
+    }
+    if (e.target.closest('[data-act=go]') && speakEngine()) {
       SP = { list: shuffle(speakPool(unit)).slice(0, 8), i: 0, res: [], unit, blind: mode === 'blind', peek: [], played: [] }
       speakRun()
     }
     const g = e.target.closest('[data-go]')
     if (g) go(g.dataset.go)
   })
+  // 網頁辨識：一打開就開始準備模型（第一次要下載約 28MB），顯示進度
+  if (speakEngine() === 'local') {
+    const desc = (t) => {
+      const d = $('.speak-intro .sp-eng-desc')
+      if (d) d.textContent = t
+    }
+    getASR()
+      .then((A) => {
+        const f = (p) => desc(p >= 1 ? '辨識模型準備好了：按麥克風時不會有提示音。' : `第一次使用要下載辨識模型（約 28MB，只要一次，建議用 Wi‑Fi）：${Math.round(p * 100)}%`)
+        if (A.ready) return f(1)
+        A.listeners.add(f)
+        f(A.progress)
+        return A.load()
+          .then(() => f(1))
+          .finally(() => A.listeners.delete(f))
+      })
+      .catch(() => desc(SR ? '辨識模型下載失敗（請檢查網路）；先用「手機內建辨識」也可以。' : '辨識模型下載失敗，請檢查網路後再打開一次。'))
+  }
 }
 function speakRun() {
   const s = SP.list[SP.i]
@@ -3426,7 +3591,8 @@ function speakRun() {
       const idx = SP.i
       const live = $('.sp-live')
       L = { stop() {} }
-      L = await listen((t) => (live.textContent = t), s.en)
+      const engine = speakEngine()
+      L = await (engine === 'local' ? listenLocal : listen)((t) => (live.textContent = t), s.en)
       const { alts, err, blob, clash } = await L.done
       L = null
       mic.classList.remove('on')
@@ -3436,6 +3602,11 @@ function speakRun() {
         $('.sp-mic-label').textContent = SP.res[SP.i] ? '再說一次' : '點一下，跟著說'
         $('.sp-live').textContent = ''
         if (clash) return toast('已經調整好，請再按一次麥克風說一次', '🎤')
+        // 網頁辨識的模型載入失敗（例如沒網路）：這次先改用手機內建的語音辨識
+        if (err === 'asr-load' && SR) {
+          LOCAL_FAILED = true
+          return toast('辨識模型下載失敗，先改用手機內建的辨識，請再按一次麥克風', '🎤')
+        }
         return toast(SPEAK_ERR[err] || '沒聽清楚，請再說一次', '🎤')
       }
       const res = speakScore(s.en, alts)
@@ -5845,4 +6016,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, AudioLib, VOICE_SAMPLE }
+window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine }

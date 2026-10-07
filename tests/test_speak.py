@@ -24,6 +24,12 @@ MOCK_SR = """
   }
   window.SpeechRecognition = FakeSR
   window.webkitSpeechRecognition = FakeSR
+  // 這個測試測的是「手機內建辨識」那條路（網頁裡的辨識在 test_asr）
+  try {
+    const s = JSON.parse(localStorage.getItem('g7review:v1') || '{}')
+    s.profile = { ...(s.profile || {}), speakEngine: 'sr' }
+    localStorage.setItem('g7review:v1', JSON.stringify(s))
+  } catch {}
 })();
 """
 

@@ -1,8 +1,8 @@
 // 讓 App 沒有網路也能打開
 // 更新：每次都先問 GitHub 有沒有新版（跳過 10 分鐘暫存）；新版裝好會自動重新整理一次
 // 改版時：app.js 的 VERSION 和這裡的 CACHE 都要改
-const CACHE = 'g7review-v31'
-const SHELL = ['./', 'index.html', 'app.js', 'content.js', 'art.js', 'qrcode.js', 'styles.css', 'manifest.webmanifest', 'icon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png']
+const CACHE = 'g7review-v32'
+const SHELL = ['./', 'index.html', 'app.js', 'content.js', 'art.js', 'qrcode.js', 'asr.js', 'styles.css', 'manifest.webmanifest', 'icon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png']
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -16,7 +16,8 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     (async () => {
-      const keys = await caches.keys()
+      // 只清掉舊版 App 的暫存；網頁辨識的模型（transformers-cache，約 28MB）要留著，不然每次更新都要重新下載
+      const keys = (await caches.keys()).filter((k) => k.startsWith('g7review-'))
       const hadOld = keys.some((k) => k !== CACHE)
       await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
       await self.clients.claim()

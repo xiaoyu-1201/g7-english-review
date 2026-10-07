@@ -13,3 +13,4 @@ tools/tts/texts.json
 Thumbs.db
 .DS_Store
 tests/export.json
+tests/.cache/

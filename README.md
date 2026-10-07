@@ -59,6 +59,7 @@
 | `sw.js` | 離線快取；改版時 `app.js` 的 `VERSION` 和 `sw.js` 的 `CACHE` 都要改 |
 
 | `audio/` | 自然語音音檔（Kokoro 產生）和 `index.json`（文字 → 檔名） |
+| `asr.js` | 口說練習的網頁辨識（Moonshine tiny，MIT 授權；transformers.js）：沒有手機辨識的提示音，模型約 28MB，第一次使用時下載 |
 | `tests/` | 自動測試（Playwright＋模擬 Firebase）；全部跑：`.\tests\run_tests.ps1`，跑一個：`.\tests\run_tests.ps1 -Tests test_speak.py` |
 | `tools/tts/` | 產生音檔：`node tools/tts/collect.mjs` 再 `python tools/tts/synth.py`；模型檔放 `tools/tts/models/`（不上傳） |
 | `tools/extract_text.py` | 把教材 PDF 轉成文字，給編題目時查閱 |
