@@ -191,11 +191,73 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }
 
+// ───────── 2.11 第二、三次段考的插圖 ─────────
+// 時鐘（What time）：h 時、m 分；ap＝'am'／'pm' 會在角落放太陽／月亮；digital＝下面也寫數字
+export function clock({ h = 3, m = 0, ap = '', digital = false }) {
+  const C = 100
+  const pt = (deg, len) => [C + Math.sin((deg * Math.PI) / 180) * len, C - Math.cos((deg * Math.PI) / 180) * len]
+  const ticks = Array.from({ length: 60 }, (_, i) => {
+    const big = i % 5 === 0
+    const [x1, y1] = pt(i * 6, 80)
+    const [x2, y2] = pt(i * 6, big ? 68 : 74)
+    return `<line class="ck-tick${big ? ' big' : ''}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`
+  }).join('')
+  const nums = [12, 3, 6, 9].map((n) => {
+    const [x, y] = pt(n * 30, 54)
+    return `<text class="ck-num" x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">${n}</text>`
+  }).join('')
+  const [hx, hy] = pt(((h % 12) + m / 60) * 30, 40)
+  const [mx, my] = pt(m * 6, 62)
+  const hh = String(m).padStart(2, '0')
+  return `<svg class="fig fig-clock" viewBox="0 0 200 ${digital ? 236 : 200}" role="img" aria-label="時鐘">
+    <circle class="ck-face" cx="${C}" cy="${C}" r="88" />${ticks}${nums}
+    <line class="ck-hand hour" x1="${C}" y1="${C}" x2="${hx}" y2="${hy}" />
+    <line class="ck-hand min" x1="${C}" y1="${C}" x2="${mx}" y2="${my}" />
+    <circle class="ck-pin" cx="${C}" cy="${C}" r="6" />
+    ${ap ? emo(176, 24, ap === 'pm' ? '🌙' : '☀️', 28) : ''}
+    ${digital ? `<text class="ck-dig" x="${C}" y="222" text-anchor="middle">${h}:${hh}${ap ? ` ${ap === 'pm' ? 'p.m.' : 'a.m.'}` : ''}</text>` : ''}
+  </svg>`
+}
+
+// 月曆（日期）：mon 月份英文、first＝1 號是星期幾（0＝星期日）、days 天數、mark 圈起來的日子、emo {日: 表情}
+export function cal({ mon = 'November', first = 0, days = 30, mark = [], emo: em = {} }) {
+  const cells = []
+  for (let i = 0; i < first; i++) cells.push('<span class="cal-d off"></span>')
+  for (let d = 1; d <= days; d++) cells.push(`<span class="cal-d${mark.includes(d) ? ' mark' : ''}${em[d] ? ' has' : ''}"><b>${d}</b>${em[d] ? `<i>${em[d]}</i>` : ''}</span>`)
+  return `<div class="fig fig-cal" role="img" aria-label="${esc(mon)} 的月曆"><div class="cal-h">${esc(mon)}</div>
+    <div class="cal-g">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((w, i) => `<span class="cal-w${i === 0 || i === 6 ? ' we' : ''}">${w}</span>`).join('')}${cells.join('')}</div></div>`
+}
+
+// 標誌：list＝[[表情, 禁止?, 標籤]]；禁止＝紅圈加斜線，可以＝綠圈
+export function signs({ list = [] }) {
+  return `<div class="fig fig-signs">${list
+    .map(([e, no, label]) => `<figure class="sg ${no ? 'no' : 'ok'}"><span class="sg-c">${e}</span>${label ? `<figcaption>${esc(label)}</figcaption>` : ''}</figure>`)
+    .join('')}</div>`
+}
+
+// 人物在做什麼：list＝[[名字, 人, 動作]]
+export function people({ list = [] }) {
+  return `<div class="fig fig-people">${list
+    .map(([name, who, act]) => `<figure class="pp"><span class="pp-w">${who}${act ? `<i>${act}</i>` : ''}</span>${name ? `<figcaption>${esc(name)}</figcaption>` : ''}</figure>`)
+    .join('')}</div>`
+}
+
+// 場景（數動物、找東西）：rows＝每一行的表情；bg＝grass 草地／sky 天空／water 水邊／room 房間／plain
+export function pic({ rows = [], bg = 'plain', cap = '' }) {
+  return `<div class="fig fig-pic bg-${bg}" role="img"${cap ? ` aria-label="${esc(cap)}"` : ''}>${rows.map((r) => `<div class="pic-r">${r}</div>`).join('')}</div>`
+}
+
 export function figure(f) {
   if (!f) return ''
   if (f.k === 'tree') return tree(f.focus)
   if (f.k === 'scene') return scene(f)
   if (f.k === 'preps') return prepGrid()
   if (f.k === 'floors') return floors()
+  if (f.k === 'clock') return clock(f)
+  if (f.k === 'clocks') return `<div class="fig-row">${f.list.map((c, i) => `<figure>${clock(c)}<figcaption>${'ABCD'[i]}</figcaption></figure>`).join('')}</div>`
+  if (f.k === 'cal') return cal(f)
+  if (f.k === 'signs') return signs(f)
+  if (f.k === 'people') return people(f)
+  if (f.k === 'pic') return pic(f)
   return ''
 }

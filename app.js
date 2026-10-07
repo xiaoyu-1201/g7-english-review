@@ -1,9 +1,9 @@
 // 國一英文段考複習 App（翰林版七上 Starter～Review 1）
 // 純前端：紀錄存在這台裝置（localStorage），可以匯出／匯入合併。
-import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE } from './content.js'
+import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.10（10/7）'
+const VERSION = '2.11（10/7）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -119,7 +119,20 @@ const ALL_SCORED = MOD_ORDER.flatMap((m) => MODULES[m].scored)
 // ── 一課一課開放：老師在學生總覽開放；還沒開放的課，學生畫面完全看不到 ──
 // 資料：classes/<後台>/students/<學生>/units ＝ { 'Unit 3': true, … }；沒設定過＝第一次段考的範圍都開
 const UNITS = [...new Set(MOD_ORDER.map((m) => MODULES[m].unit))]
-const FIRST_EXAM = ['Starter', 'Unit 1', 'Unit 2', 'Review 1', '會考導向']
+const FIRST_EXAM = EXAMS[0].units // 沒設定過的學生、沒連結老師的裝置：只看得到第一次段考的範圍
+// 看得到的段考（至少開放了一課）
+const openExams = () => {
+  const u = myUnits()
+  return EXAMS.filter((e) => e.units.some((x) => u.has(x)))
+}
+// 首頁副標：一次段考 →「第二次段考：Unit 3～Review 2」；好幾次 →「第一、二次段考：Starter～Review 2」
+function examLabel() {
+  const ex = openExams()
+  if (!ex.length) return `${EXAMS[0].title}：${EXAMS[0].range}`
+  if (ex.length === 1) return `${ex[0].title}：${ex[0].range}`
+  const nums = ex.map((e) => e.title.replace('第', '').replace('次段考', ''))
+  return `第${nums.join('、')}次段考：${ex[0].range.split('～')[0]}～${ex[ex.length - 1].range.split('～')[1]}`
+}
 const unitsOfStu = (st) => (st?.units ? new Set(Object.keys(st.units).filter((u) => st.units[u])) : new Set(FIRST_EXAM))
 // 這個裝置現在看得到哪些課：老師全部；學生模式、學生、家長照老師的設定；沒連結老師的照預設
 function myUnits() {
@@ -779,7 +792,9 @@ function passageBody(p, print = false) {
       .map((l) => `<p>${l}</p>`)
       .join('')}</div>`
   if (p.kind === 'chat') return `<div class="pv-chat">${p.msgs.map(([who, t]) => `<div class="pv-msg${who === p.me ? ' me' : ''}"><span class="pv-who">${esc(who)}</span><span class="pv-bubble">${esc(t)}</span></div>`).join('')}</div>`
-  return `<p class="en">${esc(p.text).replace(/__\((\d)\)__/g, print ? '<u>　($1)　</u>' : '<span class="cloze">($1)</span>')}</p>`
+  return `<p class="en">${esc(p.text)
+    .replace(/__\((\d)\)__/g, print ? '<u>　($1)　</u>' : '<span class="cloze">($1)</span>')
+    .replace(/\n/g, '<br>')}</p>`
 }
 function passageHTML(pid, mode) {
   const p = PASSAGES[pid]
@@ -885,14 +900,16 @@ const CTRL = {
 
   mcq(it, mode) {
     const n = it.opts.length
-    let order = shuffle([...Array(n).keys()])
+    // 選項就是上面插圖的 A／B／C：不打亂（不然會出現「B. C」），排成一列大按鈕
+    const abc = it.opts.every((o, i) => o === 'ABCDEFGH'[i])
+    let order = abc ? [...Array(n).keys()] : shuffle([...Array(n).keys()])
     const fixed = it.opts.findIndex((o) => o.startsWith('（'))
     if (fixed >= 0) order = order.filter((x) => x !== fixed).concat(fixed)
     let sel = null
     // 上課模式：先遮住選項，讓學生「先說出答案」（生成效應：自己想出來的記得比較牢）
     const cover = mode === 'practice' && S.profile.oral === 'on' && !it.audio
     const C = {
-      html: `<div class="q-text">${qtext(it.q)}</div><div class="opts-wrap${cover ? ' covered' : ''}">${cover ? '<button type="button" class="cover-btn"><span>🗣️ 先說出你的答案</span><small>想好了再點這裡看選項</small></button>' : ''}<div class="opts" role="radiogroup">${order
+      html: `<div class="q-text">${qtext(it.q)}</div><div class="opts-wrap${cover ? ' covered' : ''}">${cover ? '<button type="button" class="cover-btn"><span>🗣️ 先說出你的答案</span><small>想好了再點這裡看選項</small></button>' : ''}<div class="opts${it.pic ? ' pic' : ''}${abc ? ' abc' : ''}" role="radiogroup">${order
         .map((i, k) => `<button type="button" class="opt" role="radio" aria-checked="false" data-i="${i}"><span class="opt-key">${'ABCDEFGH'[k]}</span><span class="opt-text">${esc(it.opts[i])}</span></button>`)
         .join('')}</div></div>`,
       answered: () => sel !== null,
@@ -1887,7 +1904,7 @@ function viewHome() {
     `<div class="page home">
       <header class="lg-head"><div class="eyebrow">${new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</div>
         <div class="lg-row"><h1>${hello}</h1>${sd ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
-        <p class="lg-sub">翰林版七上｜第一次段考：Starter～Review 1${cd ? '　·　' + cd : ''}</p>
+        <p class="lg-sub">翰林版七上｜${esc(examLabel())}${cd ? '　·　' + cd : ''}</p>
       </header>
       ${hwCardHTML(myRole() === 'parent') || '<section class="hw-card" hidden></section>'}
       ${studentsCardHTML()}
@@ -1921,7 +1938,7 @@ function viewHome() {
       </section>
 
       ${LESSONS.filter((L) => L.modules.some(modOpen)).map(
-        (L) => `<section class="lesson">
+        (L, i, arr) => `${openExams().length > 1 && L.exam !== arr[i - 1]?.exam ? `<h2 class="exam-h">${esc(EXAMS.find((e) => e.id === L.exam)?.title || '')}</h2>` : ''}<section class="lesson">
           <div class="sec-h"><div><h2>${esc(L.title)}</h2><p>${esc(lessonSub(L))}</p></div>${L.modules.every(modOpen) ? `<button class="link" data-plan="${L.id}">上課流程</button>` : ''}</div>
           <div class="mods">${L.modules
             .filter(modOpen)
@@ -2346,10 +2363,14 @@ function viewBook() {
 
 // ───────────────────────── 模擬段考 ─────────────────────────
 let EXAM = null
-function buildExam() {
+// exId：第幾次段考（EXAMS）；題目只從那次段考的範圍、而且已經開放的課出
+function buildExam(exId) {
+  const ex = EXAMS.find((e) => e.id === exId) || EXAMS[0]
+  const units = new Set(ex.units)
   const last = lastByItem()
   const weak = (list) => shuffle(list).sort((a, b) => (last[a.id]?.r === 'ok') - (last[b.id]?.r === 'ok'))
-  const pool = openScored()
+  const pool = openScored().filter((i) => units.has(MODULES[i.mid]?.unit))
+  const has = (p) => pool.some((i) => i.passage === p)
   const take = (list, n) => weak(list).slice(0, n)
   // 同一篇文章挑幾題，但照原本的順序排
   const inOrder = (list, n) => take(list, n).sort((a, b) => list.indexOf(a) - list.indexOf(b))
@@ -2358,29 +2379,36 @@ function buildExam() {
   let listen = ['辨識句意', '基本問答', '言談理解'].flatMap((s) => take(L.filter((i) => secOf(i) === s), 3))
   if (listen.length < 9) listen = listen.concat(take(L.filter((i) => !listen.includes(i)), 9 - listen.length))
   const vocab = take(pool.filter((i) => i.t === 'fill' && !i.audio && !i.passage && !i.fig), 4)
-  const single = [...take(pool.filter((i) => i.sec === '情境單題'), 3), ...take(pool.filter((i) => i.t === 'mcq' && !i.audio && !i.passage && !i.fig && !i.sec), 5)]
-  const cloze = pool.filter((i) => i.passage === 'nina')
-  const textId = pick(['leo', 'rita'])
-  const chartId = pick(['ruby', 'lost', 'chat'])
+  const single = [...take(pool.filter((i) => i.sec === '情境單題'), 3), ...take(pool.filter((i) => i.t === 'mcq' && !i.audio && !i.passage && !i.sec && !i.pic), 5)]
+  const clozeId = pick(ex.cloze.filter(has))
+  const textId = pick(ex.text.filter(has))
+  const chartId = pick(ex.chart.filter(has))
   const write = [...take(pool.filter((i) => i.t === 'write' && !i.fig), 3), ...take(pool.filter((i) => i.t === 'spot' || (i.t === 'order' && !i.lines)), 2)]
-  // 配分合計 100（會考聽力＋閱讀的結構，加上段考的非選擇題）
-  return [
-    { h: '一、聽力測驗', sub: '辨識句意・基本問答・言談理解（每題可以重聽）', pts: 27, items: listen },
-    { h: '二、字彙', sub: '注意大小寫和拼字', pts: 8, items: vocab },
-    { h: '三、單題', sub: '情境對話與文法', pts: 16, items: single },
-    { h: '四、克漏字', sub: PASSAGES.nina.title, pts: 10, items: cloze, passage: 'nina' },
-    { h: '五、閱讀題組', sub: PASSAGES[textId].title, pts: 12, items: inOrder(pool.filter((i) => i.passage === textId), 4), passage: textId },
-    { h: '六、圖表題組', sub: PASSAGES[chartId].title, pts: 12, items: pool.filter((i) => i.passage === chartId), passage: chartId },
-    { h: '七、非選擇題', sub: '句型改寫・挑錯・重組：大寫、標點都算分', pts: 15, items: write },
-  ]
+  const P = (id) => (id ? pool.filter((i) => i.passage === id) : [])
+  // 配分合計 100（會考聽力＋閱讀的結構，加上段考的非選擇題）；某一大題沒有題目（例如還沒開放）就拿掉，分數照比例算
+  const secs = [
+    { h: '聽力測驗', sub: '辨識句意・基本問答・言談理解（每題可以重聽）', pts: 27, items: listen },
+    { h: '字彙', sub: '注意大小寫和拼字', pts: 8, items: vocab },
+    { h: '單題', sub: '情境對話與文法', pts: 16, items: single },
+    { h: '克漏字', sub: PASSAGES[clozeId]?.title || '', pts: 10, items: P(clozeId), passage: clozeId },
+    { h: '閱讀題組', sub: PASSAGES[textId]?.title || '', pts: 12, items: inOrder(P(textId), 4), passage: textId },
+    { h: '圖表題組', sub: PASSAGES[chartId]?.title || '', pts: 12, items: P(chartId), passage: chartId },
+    { h: '非選擇題', sub: '句型改寫・挑錯・重組：大寫、標點都算分', pts: 15, items: write },
+  ].filter((s) => s.items.length)
+  return secs.map((s, k) => ({ ...s, h: `${'一二三四五六七'[k]}、${s.h}` }))
 }
 function viewExam() {
   if (!EXAM || EXAM.graded) {
+    // 選第幾次段考（只列出看得到的）；預設最新的那一次
+    const exs = openExams()
+    let pickId = exs.find((e) => e.id === S.profile.examPick)?.id || exs[exs.length - 1]?.id || 'e1'
     setView(
       `<div class="page narrow">
         ${header('模擬段考', '', '', true)}
         <div class="card exam-intro">
           <div class="exam-ic">${ICON.doc}</div>
+          ${exs.length > 1 ? `<div class="seg" id="ex-pick">${exs.map((e) => `<button data-ex="${e.id}" class="${e.id === pickId ? 'on' : ''}">${esc(e.title)}</button>`).join('')}</div>` : ''}
+          <p class="muted ex-range">範圍：${esc(EXAMS.find((e) => e.id === pickId)?.range || '')}</p>
           <h2>約 40 題，滿分 100，比照段考＋會考題型</h2>
           <ul class="plain">
             <li>聽力（辨識句意、基本問答、言談理解）、字彙、單題、克漏字、閱讀題組、圖表題組、非選擇題，每大題都有配分。</li>
@@ -2393,8 +2421,18 @@ function viewExam() {
         ${examHistory()}
       </div>`,
     )
+    $('#ex-pick')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ex]')
+      if (!b) return
+      pickId = b.dataset.ex
+      S.profile.examPick = pickId
+      save()
+      $$('#ex-pick button').forEach((x) => x.classList.toggle('on', x === b))
+      $('.ex-range').textContent = `範圍：${EXAMS.find((x) => x.id === pickId)?.range || ''}`
+    })
     $('[data-act=start]').onclick = () => {
-      EXAM = { secs: buildExam(), t0: Date.now(), ctrls: [], graded: false }
+      const ex = EXAMS.find((e) => e.id === pickId) || EXAMS[0]
+      EXAM = { secs: buildExam(ex.id), ex: ex.id, title: ex.title, t0: Date.now(), ctrls: [], graded: false }
       Sync.presence({ view: 'exam' })
       viewExam()
     }
@@ -2405,7 +2443,7 @@ function viewExam() {
     `<div class="exam">
       <header class="run-bar">
         <button class="icon-btn" data-act="quit" aria-label="放棄考試">${ICON.x}</button>
-        <div class="run-mid"><div class="run-title">模擬段考</div><div class="exam-meta"><span class="exam-done">0</span>／<span class="exam-total"></span> 題・<span class="exam-time">0:00</span></div></div>
+        <div class="run-mid"><div class="run-title">模擬段考${EXAM.title ? `・${esc(EXAM.title)}` : ''}</div><div class="exam-meta"><span class="exam-done">0</span>／<span class="exam-total"></span> 題・<span class="exam-time">0:00</span></div></div>
         <span class="icon-btn ghost-space"></span>
       </header>
       <div class="page narrow exam-paper"></div>
@@ -2433,12 +2471,12 @@ function viewExam() {
   $('.exam-total').textContent = n
   updateExamCount()
   clearInterval(EXAM.timer)
-  EXAM.timer = setInterval(() => {
+  const tm = (EXAM.timer = setInterval(() => {
     const el = $('.exam-time')
-    if (!el) return clearInterval(EXAM.timer)
+    if (!el || !EXAM) return clearInterval(tm) // 放棄考試（EXAM＝null）或離開畫面：停掉計時
     const s = Math.floor((Date.now() - EXAM.t0) / 1000)
     el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-  }, 1000)
+  }, 1000))
   $('.exam').addEventListener('click', (e) => {
     const a = e.target.closest('[data-act]')?.dataset.act
     if (a === 'quit') confirmSheet('要放棄這次考試嗎？', '寫到一半的答案不會留下紀錄。', '放棄', () => ((EXAM = null), go('#/')), true)
@@ -2521,7 +2559,7 @@ function gradeExam() {
   const score = Math.round((got / full) * 100)
   const ifCare = Math.round((gotCare / full) * 100)
   const dur = Date.now() - EXAM.t0
-  addSession({ k: 'exam', m: 'exam', title: '模擬段考', s: score, n: total, ok, care, bad: total - ok - care, ifCare, stars: score >= 90 ? 3 : score >= 70 ? 2 : 1, ts: Date.now(), dur, d: S.profile.id })
+  addSession({ k: 'exam', m: 'exam', title: EXAM.title ? `模擬段考（${EXAM.title}）` : '模擬段考', ex: EXAM.ex || 'e1', s: score, n: total, ok, care, bad: total - ok - care, ifCare, stars: score >= 90 ? 3 : score >= 70 ? 2 : 1, ts: Date.now(), dur, d: S.profile.id })
   save()
   checkBadges()
   EXAM.graded = true
@@ -2556,7 +2594,7 @@ function examHistory() {
   const list = S.sessions.filter((s) => s.k === 'exam').slice(-8).reverse()
   if (!list.length) return ''
   return `<div class="group"><div class="group-h">考試紀錄</div><div class="list">${list
-    .map((s) => `<div class="row static"><span class="row-t">${fmtTime(s.ts)}</span><span class="row-r">${s.s} 分${s.care ? `<small>（沒粗心 ${s.ifCare}）</small>` : ''}</span></div>`)
+    .map((s) => `<div class="row static"><span class="row-t">${fmtTime(s.ts)}${s.ex && s.ex !== 'e1' ? `<small>${esc(EXAMS.find((e) => e.id === s.ex)?.title || '')}</small>` : ''}</span><span class="row-r">${s.s} 分${s.care ? `<small>（沒粗心 ${s.ifCare}）</small>` : ''}</span></div>`)
     .join('')}</div></div>`
 }
 

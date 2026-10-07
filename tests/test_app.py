@@ -1,7 +1,8 @@
 """自動作答所有題目（全部答對）＋批改器反例＋截圖"""
 import json, pathlib, sys, time
 from playwright.sync_api import sync_playwright
-SEED = "if (!localStorage.getItem('g7review:v1')) localStorage.setItem('g7review:v1', JSON.stringify({seen:{intro:1}}))"
+from synchelp import make_teacher
+SEED ="if (!localStorage.getItem('g7review:v1')) localStorage.setItem('g7review:v1', JSON.stringify({seen:{intro:1}}))"
 
 URL = "http://127.0.0.1:5181/"
 SCR = pathlib.Path(__file__).parent
@@ -55,45 +56,54 @@ with sync_playwright() as p:
     pg.screenshot(path=str(OUT / "01-home-empty.png"), full_page=True)
     mods = pg.evaluate("() => Object.fromEntries(Object.entries(window.__app.MODULES).map(([k,m]) => [k, m.items]))")
     order = [m for m in mods if not only or m in only]
+    # 沒連結老師的裝置只看得到第一次段考；其他的課用老師的裝置做（全部的課都看得到）
+    shown = set(pg.evaluate("[...document.querySelectorAll('[data-mod]')].map(e => e.dataset.mod)"))
+    T = None
+    if any(m not in shown for m in order):
+        T, _ = make_teacher(b)
+        T.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        T.on("pageerror", lambda e: errors.append("T pageerror: " + str(e)))
     shot_types = {}
     for mid in order:
-        pg.goto(URL + "#/")
-        pg.wait_for_selector(".home")
-        pg.click(f'[data-mod="{mid}"]')
+        P = pg if mid in shown else T
+        P.goto(URL + "#/")
+        P.wait_for_selector(".home")
+        P.click(f'[data-mod="{mid}"]')
         for it in mods[mid]:
-            pg.wait_for_selector(".qcard")
-            cur = pg.locator(".qcard").first.get_attribute("data-id")
+            P.wait_for_selector(".qcard")
+            cur = P.locator(".qcard").first.get_attribute("data-id")
             if cur != it["id"]:
                 fails.append((it["id"], f"expected card, got {cur}"))
                 break
-            answer(pg, it)
-            btn = pg.locator("[data-act=check]")
+            answer(P, it)
+            btn = P.locator("[data-act=check]")
             if btn.is_disabled():
                 fails.append((it["id"], "check button still disabled"))
                 break
             key = it["t"] + ("-fig" if it.get("fig") else "") + ("-audio" if it.get("audio") else "") + ("-passage" if it.get("passage") else "")
             if key not in shot_types:
                 shot_types[key] = it["id"]; time.sleep(0.6)
-                pg.screenshot(path=str(OUT / f"q-{key}-before.png"))
+                P.screenshot(path=str(OUT / f"q-{key}-before.png"))
             btn.click()
             if it["t"] != "learn":
-                cls = pg.locator(".qcard").first.get_attribute("class")
+                cls = P.locator(".qcard").first.get_attribute("class")
                 if "r-ok" not in cls:
-                    fb = pg.locator(".q-feedback").first.inner_text()
+                    fb = P.locator(".q-feedback").first.inner_text()
                     fails.append((it["id"], fb.replace("\n", " | ")[:300]))
                 if shot_types.get(key) == it["id"]:
                     time.sleep(0.7)
-                    pg.screenshot(path=str(OUT / f"q-{key}-after.png"), full_page=True)
-                pg.locator("[data-act=check]").click()
+                    P.screenshot(path=str(OUT / f"q-{key}-after.png"), full_page=True)
+                P.locator("[data-act=check]").click()
         try:
-            pg.wait_for_selector(".summary", timeout=5000)
-            pct = pg.locator(".sum-pct b").inner_text()
+            P.wait_for_selector(".summary", timeout=5000)
+            pct = P.locator(".sum-pct b").inner_text()
             if pct != "100":
                 fails.append((mid, f"summary {pct}%"))
         except Exception:
             fails.append((mid, "no summary"))
-            pg.screenshot(path=str(OUT / f"fail-{mid}.png"), full_page=True)
+            P.screenshot(path=str(OUT / f"fail-{mid}.png"), full_page=True)
             print("FAILS so far", fails, errors)
+    print("modules", len(order), "on teacher device", sum(m not in shown for m in order))
     pg.screenshot(path=str(OUT / "02-summary.png"), full_page=True)
 
     # 批改器反例

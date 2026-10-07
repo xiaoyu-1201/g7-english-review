@@ -1,4 +1,4 @@
-// 題庫與觀念卡（翰林版七上 Starter～Review 1；第一次段考範圍）
+// 題庫與觀念卡（翰林版七上）：這個檔是第一次段考範圍（Starter～Review 1）；第二、三次段考在 content2.js，最下面合併
 // 文章、聽力稿、題目都是依課本字彙與句型自編，不是照抄課本。
 // 題型：learn 觀念卡｜mcq 單選｜multi 複選｜fill 填空｜write 整句書寫｜order 重組｜spot 抓錯｜sort 分類｜place 放位置
 // [[word]] ＝ 可以點來聽的單字；\n ＝ 換行；___ ＝ 填空格
@@ -2765,3 +2765,14 @@ export const EXPLAIN = {
   'r1-12': { kp: '克漏字：A and B → are', why: { 0: 'Bella and Coco 是兩隻貓，不能用 is。', 1: 'am 只跟 I 一起用。', 3: 'be 要變成 is／am／are 才能用。' } },
   'r1-13': { kp: "所有格：複數 s 結尾只加 '" },
 }
+
+// ───────────────────────── 第二、三次段考（content2.js）合併進來 ─────────────────────────
+import { TAGS2, TAG_HINTS2, PASSAGES2, MODULES2, LESSONS2, SPEAK2, EXAMS } from './content2.js'
+Object.assign(TAGS, TAGS2)
+Object.assign(TAG_HINTS, TAG_HINTS2)
+Object.assign(PASSAGES, PASSAGES2)
+Object.assign(MODULES, MODULES2)
+for (const L of LESSONS) L.exam ||= 'e1'
+LESSONS.push(...LESSONS2)
+Object.assign(SPEAK, SPEAK2)
+export { EXAMS }
