@@ -98,6 +98,11 @@ try:
     expect(False, db("PUT", f"{C}/hw/{amy}/h2", S1, hwb), "student cannot assign homework")
     expect(True, db("GET", f"{C}/hw/{amy}", P1), "parent reads own child's homework")
     expect(False, db("GET", f"{C}/hw/{ben}", P1), "parent cannot read other child's homework")
+    # 已刪除清單：只有老師能寫；學生、家長讀得到自己孩子的
+    expect(True, db("PATCH", C, T, {f"a/{amy}/k1": None, f"del/{amy}/a/k1": now}), "teacher deletes an answer (multi-path)")
+    expect(False, db("PUT", f"{C}/del/{amy}/a/k9", S1, now), "student cannot write deleted list")
+    expect(True, db("GET", f"{C}/del/{amy}", P1), "parent reads own child's deleted list")
+    expect(False, db("GET", f"{C}/del/{ben}", P1), "parent cannot read other child's deleted list")
     # 錄音：學生寫自己的、家長讀自己孩子的、別人讀不到
     R = f"recs/{C.split('/')[1]}"
     rec = {"d": "data:audio/mp4;base64,AAAA", "ts": now}
@@ -119,7 +124,7 @@ try:
     expect(False, db("DELETE", f"{C}/owner", T), "owner cannot drop ownership while class has data")
 finally:
     # 清理：代碼、資料、名單、學生，最後 owner；匿名帳號全部刪掉
-    paths = [f"codes/{k6}", f"teachers/{tu}"] + [f"{C}/{k}" for k in ("a", "s", "live", "hw", "blocked", "open")]
+    paths = [f"codes/{k6}", f"teachers/{tu}"] + [f"{C}/{k}" for k in ("a", "s", "live", "hw", "del", "blocked", "open")]
     paths += [f"{C}/members/{u}" for u in (s1u, p1u)] + [f"{C}/students/{s}" for s in (amy, ben)]
     for path in paths:
         expect(True, db("DELETE", path, T), "cleanup: " + path.split("/")[-1])

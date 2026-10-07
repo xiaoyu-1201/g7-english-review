@@ -96,6 +96,12 @@
             }
           }
         },
+        "del": {
+          ".write": "auth != null && auth.provider === 'password' && root.child('classes/' + $code + '/owner').val() === auth.uid",
+          "$sid": {
+            ".read": "auth != null && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid"
+          }
+        },
         "hw": {
           ".write": "auth != null && auth.provider === 'password' && root.child('classes/' + $code + '/owner').val() === auth.uid",
           "$sid": {

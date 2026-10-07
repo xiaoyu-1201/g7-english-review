@@ -1,9 +1,9 @@
 // 國一英文段考複習 App（翰林版七上 Starter～Review 1）
 // 純前端：紀錄存在這台裝置（localStorage），可以匯出／匯入合併。
-import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN } from './content.js'
+import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.9.1（10/6）'
+const VERSION = '2.9.2（10/7）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -667,8 +667,32 @@ function buzz(ms = 12) {
 }
 
 let sheetClose = null
+// 手機的「上一頁」（Safari 左下角、邊緣滑動、Android 返回鍵）：視窗開著時先關視窗，不要離開這一頁
+// 做法：開視窗時多放一筆同網址的瀏覽紀錄（state.sheet）；按上一頁＝退掉那一筆＝關視窗
+let POP_PENDING = false // 自己按關閉時退掉那一筆，等瀏覽器回報（期間要換頁先排隊）
+let PENDING_GO = ''
+function popSheetEntry() {
+  if (!history.state?.sheet || POP_PENDING) return
+  POP_PENDING = true
+  history.back()
+  setTimeout(() => POP_PENDING && popDone(), 700) // 保險：瀏覽器沒回報也不要卡住
+}
+function popDone() {
+  POP_PENDING = false
+  if (sheetClose && !history.state?.sheet) history.pushState({ ...(history.state || {}), sheet: 1 }, '') // 退的期間又開了新視窗
+  if (PENDING_GO) {
+    const h = PENDING_GO
+    PENDING_GO = ''
+    go(h)
+  }
+}
+window.addEventListener('popstate', (e) => {
+  if (POP_PENDING) return popDone()
+  if (sheetClose && !e.state?.sheet) closeSheet('nav') // 使用者按上一頁：關掉視窗
+})
 function sheet(html, { onClose, wide } = {}) {
-  closeSheet()
+  closeSheet('swap') // 換成另一個視窗：沿用同一筆瀏覽紀錄
+  if (!history.state?.sheet && !POP_PENDING) history.pushState({ ...(history.state || {}), sheet: 1 }, '')
   const wrap = document.createElement('div')
   wrap.className = 'sheet-wrap'
   wrap.innerHTML = `<div class="sheet-bg" data-close></div><section class="sheet${wide ? ' wide' : ''}" role="dialog" aria-modal="true"><div class="grabber" aria-hidden="true"></div><button class="sheet-x" data-close aria-label="關閉">${ICON.x}</button><div class="sheet-body">${html}</div></section>`
@@ -680,18 +704,21 @@ function sheet(html, { onClose, wide } = {}) {
   wrap.addEventListener('click', (e) => {
     if (e.target.closest('[data-close]')) closeSheet()
   })
-  sheetClose = () => {
+  sheetClose = (how) => {
     document.removeEventListener('keydown', onKey)
     wrap.classList.remove('open')
     document.body.classList.remove('locked')
     setTimeout(() => wrap.remove(), reduceMotion() ? 0 : 280)
     sheetClose = null
+    // 自己關掉（✕、按旁邊、取消、按鈕）：把開視窗時多放的那一筆瀏覽紀錄退掉
+    if (!how) popSheetEntry()
     onClose?.()
   }
   return $('.sheet-body', wrap)
 }
-function closeSheet() {
-  sheetClose?.()
+// how：'swap'＝馬上換另一個視窗；'nav'＝已經在換頁（上一頁、重畫畫面），不要再動瀏覽紀錄
+function closeSheet(how) {
+  sheetClose?.(how)
 }
 function confirmSheet(title, body, okText, onOk, danger = false) {
   const b = sheet(`<h2 class="sheet-title">${esc(title)}</h2><p class="sheet-p">${body}</p><div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn ${danger ? 'danger' : 'primary'}" data-ok>${esc(okText)}</button></div>`)
@@ -1978,7 +2005,7 @@ function welcome() {
         <button data-role="parent"><span class="rp-ic">👪</span><b>我是家長</b><small>看孩子的練習</small></button>
       </div>
       <button class="link w-code" data-code>有老師給的代碼？點這裡輸入</button>
-      <p class="w-note">選錯了沒關係，之後到「設定 → 身分」就能改。</p>
+      <p class="w-note">選錯了沒關係，之後到「設定 → 身分」就能改。老師請按 <button class="link w-teacher" data-teacher>老師登入</button></p>
     </div>`,
     { onClose: markSeen },
   )
@@ -1986,6 +2013,10 @@ function welcome() {
     if (e.target.closest('[data-code]')) {
       closeSheet()
       return setTimeout(() => codeSheet(), 350)
+    }
+    if (e.target.closest('[data-teacher]')) {
+      closeSheet()
+      return go('#/teacher')
     }
     const r = e.target.closest('[data-role]')?.dataset.role
     if (!r) return
@@ -2004,7 +2035,7 @@ function setRole(r) {
   save()
   Sync.presence(Sync.last || { view: 'home' })
 }
-// 老師登入（#/teacher）：Email＋密碼。學生、家長的畫面沒有這個入口
+// 老師登入（#/teacher）：Email＋密碼。入口在「設定 → 老師登入」和歡迎畫面
 function viewTeacher(mode) {
   if (teacherMode() && Auth.isTeacher() && Sync.state === 'owner') return go('#/students')
   const upgrade = !!S.sync?.owner && myRole() === 'teacher' && !Auth.isTeacher()
@@ -2017,12 +2048,13 @@ function viewTeacher(mode) {
   }[mode]
   setView(
     `<div class="page narrow teacher-page">
-      ${header(T[0], T[1], '', !upgrade)}
+      ${header(T[0], T[1], '', true)}
       ${other ? `<p class="callout care">這個裝置現在連結的是${ROLES[myRole()]}。登入老師帳號之後，就會換成老師後台。</p>` : ''}
       <form class="list form" id="t-form" novalidate>
         <label class="row field"><span class="row-t">Email</span><input id="t-email" type="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="name@example.com" required></label>
         <label class="row field"><span class="row-t">密碼${mode === 'login' ? '' : '<small>至少 6 個字</small>'}</span><input id="t-pw" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" minlength="6" required></label>
       </form>
+      ${mode === 'upgrade' ? '<p class="t-hint">已經在別的手機或平板設定過老師帳號？輸入同一組 Email 和密碼就會直接登入。</p>' : ''}
       <p class="t-err" role="alert"></p>
       <div class="sheet-actions"><button class="btn primary big" data-t-ok>${T[2]}</button></div>
       <div class="t-links">
@@ -2030,7 +2062,6 @@ function viewTeacher(mode) {
         ${mode === 'signup' ? '<button class="link" data-t-mode="login">已經有帳號了？登入</button>' : ''}
       </div>
     </div>`,
-    { tabs: !!teacherMode() && !upgrade },
   )
   const page = $('.teacher-page')
   const email = $('#t-email')
@@ -2046,14 +2077,21 @@ function viewTeacher(mode) {
     btn.disabled = true
     err('')
     try {
-      if (mode === 'upgrade') {
-        await Auth.signUp(e, p, true)
-        toast('老師帳號設定好了', '🔑')
-        await Sync.start()
-        return go('#/students')
-      }
-      if (mode === 'signup') await Auth.signUp(e, p)
-      else await Auth.signIn(e, p)
+      if (mode === 'login') await Auth.signIn(e, p)
+      else
+        try {
+          await Auth.signUp(e, p, mode === 'upgrade')
+          if (mode === 'upgrade') {
+            toast('老師帳號設定好了', '🔑')
+            await Sync.start()
+            return go('#/students')
+          }
+        } catch (x) {
+          // 這個 Email 已經有帳號（例如已經在手機設定過）：直接用同一組密碼登入，改看那個帳號的後台
+          if (x.message !== 'EMAIL_EXISTS') throw x
+          await Auth.signIn(e, p)
+          mode = 'login'
+        }
       // 找這個帳號的後台；沒有就建立一個新的
       let c = ''
       try {
@@ -2101,7 +2139,7 @@ function teacherSignOut() {
     S.profile.role = 'student'
     S.profile.device = ''
     save()
-    toast('已登出', '👋')
+    toast('已登出。要再登入：設定 → 老師登入', '👋')
     go('#/')
   })
 }
@@ -2905,7 +2943,7 @@ function viewSettings() {
         <div class="row field"><span class="row-t">每日目標</span><div class="seg small" data-seg="goal">${[20, 30, 50].map((g) => `<button class="${+p.goal === g ? 'on' : ''}" data-v="${g}">${g} 題</button>`).join('')}</div></div>
         <div class="row field"><span class="row-t">語音速度</span><div class="seg small" data-seg="rate"><button class="${p.rate === 'slow' ? 'on' : ''}" data-v="slow">慢</button><button class="${p.rate !== 'slow' ? 'on' : ''}" data-v="normal">標準</button></div></div>
         <button class="row" data-x="voice"><span class="row-ic">${ICON.speaker}</span><span class="row-t">試聽語音</span>${ICON.chev}</button>
-      </div><p class="group-f">聽力用裝置內建的英文語音。iPad 可以到「設定 → 輔助使用 → 朗讀內容 → 聲音」下載更自然的英文語音（例如 Samantha 加強版）。</p></div>
+      </div><p class="group-f">聽力、口說、單字都用事先做好的自然語音播放，iPhone 開著靜音模式也聽得到（音量照媒體音量）。</p></div>
 
       <div class="group"><div class="group-h">上課</div><div class="list form">
         <div class="row field"><span class="row-t">先說答案，再看選項<small>選擇題的選項先遮住，學生先口頭回答</small></span><div class="seg small" data-seg="oral"><button class="${p.oral === 'on' ? 'on' : ''}" data-v="on">開</button><button class="${p.oral !== 'on' ? 'on' : ''}" data-v="off">關</button></div></div>
@@ -2917,7 +2955,8 @@ function viewSettings() {
       <div class="group"><div class="group-h">App</div><div class="list">
         <button class="row" data-x="update"><span class="row-t">檢查更新</span><span class="row-r">${VERSION}</span>${ICON.chev}</button>
         <button class="row" data-x="install"><span class="row-t">加到主畫面（像 App 一樣打開）</span>${ICON.chev}</button>
-      </div></div>
+        ${teacherMode() || !S.sync?.code ? '<button class="row danger" data-x="wipe"><span class="row-t">清除這個裝置的練習紀錄</span></button>' : ''}
+      </div>${teacherMode() ? '<p class="group-f">「清除」只會清掉在這個裝置上自己練習的紀錄（例如測試時做的題目）；學生的紀錄在雲端，不受影響。</p>' : ''}</div>
       <p class="foot">題目、文章、聽力稿都是依翰林版七上 Starter～Review 1 的字彙與句型自編，不含課本原文。<br>紀錄存在這個瀏覽器裡；清除瀏覽器資料會一起刪除，記得定期匯出備份。</p>
     </div>`,
   )
@@ -2960,6 +2999,15 @@ function viewSettings() {
     if (g) return go(g.dataset.go)
     const x = e.target.closest('[data-x]')?.dataset.x
     if (x === 'signout') return teacherSignOut()
+    if (x === 'wipe')
+      return confirmSheet('清除這個裝置的練習紀錄？', '這個裝置上的作答、錯題本、練習紀錄、徽章都會刪掉，沒辦法復原。', '清除', () => {
+        Object.assign(S, { attempts: [], sessions: [], progress: {}, flash: { best: 0, runs: 0 }, badges: {}, hwDone: [] })
+        for (const k of Object.keys(SNAPS)) delete SNAPS[k]
+        for (const k of Object.keys(DRAFTS)) delete DRAFTS[k]
+        save()
+        toast('已清除這個裝置的練習紀錄', '🧹')
+        viewSettings()
+      }, true)
     if (x === 'code') return codeSheet()
     if (x === 'students') return go('#/students')
     if (x === 'live') return go('#/live')
@@ -2976,7 +3024,7 @@ function viewSettings() {
         },
         true,
       )
-    if (x === 'voice') Voice.speak([['W', 'Hi, I am Jamie. Nice to meet you.'], ['M', 'Nice to meet you, too.']])
+    if (x === 'voice') Voice.speak(VOICE_SAMPLE)
     if (x === 'update') checkUpdate()
     if (x === 'install')
       sheet(`<h2 class="sheet-title">加到主畫面</h2><ol class="plan"><li>用 <b>Safari</b> 打開這個網址。</li><li>點上方或下方的「分享」按鈕 ${ICON.share}。</li><li>選「加入主畫面」，再按「新增」。</li></ol><p class="sheet-p">之後從主畫面打開，就像一般 App 一樣全螢幕，沒有網路也能練習（聽力需要裝置語音）。Android 的 Chrome：右上角選單 →「加到主畫面」。</p>`)
@@ -3016,7 +3064,9 @@ function syncSettingsHTML(role) {
       ${role === 'parent' ? `<button class="row" data-x="live"><span class="row-ic">📡</span><span class="row-t">即時作答<small>看孩子正在做哪一題、每題答了什麼</small></span>${ICON.chev}</button>` : ''}
       <button class="row danger" data-x="unpair"><span class="row-t">退出同步</span></button>`
   }
-  return `<div class="group"><div class="group-h">${teacherMode() ? '老師後台' : S.sync?.code ? '即時同步' : '連結老師'}</div><div class="list">${rows}</div><p class="group-f">每個學生、每個家庭都只看得到自己的紀錄。學生名字建議用暱稱。</p></div>`
+  // 老師的入口：沒登入的裝置都看得到（要帳號密碼才進得去）
+  const teacher = teacherMode() ? '' : `<div class="group"><div class="group-h">老師</div><div class="list"><button class="row" data-go="#/teacher"><span class="row-ic">📚</span><span class="row-t">老師登入<small>用老師帳號登入，管理學生、派作業、看即時作答</small></span>${ICON.chev}</button></div></div>`
+  return `<div class="group"><div class="group-h">${teacherMode() ? '老師後台' : S.sync?.code ? '即時同步' : '連結老師'}</div><div class="list">${rows}</div><p class="group-f">每個學生、每個家庭都只看得到自己的紀錄。學生名字建議用暱稱。</p></div>${teacher}`
 }
 async function checkUpdate() {
   toast('檢查中…', '⏳')
@@ -3463,9 +3513,13 @@ document.addEventListener('click', async (e) => {
     box.innerHTML = '<p class="muted pad">載入中…</p>'
     try {
       const all = Object.entries(await Rec.list(card.dataset.recsid)).sort((a, b) => b[1].ts - a[1].ts)
+      const del = Sync.isAdmin() && !ACTIVE // 老師可以刪（例如自己測試的錄音）
       box.innerHTML = all.length
         ? `<div class="list flat">${all
-            .map(([k, r]) => `<button class="row rec-row" data-rec="${card.dataset.recsid}|${k}"><span class="rec-play">${ICON.play}</span><span class="row-t" lang="en">${speakWordsHTML(speakScore(r.en || '', [r.said || '']).words)}<small>${fmtTime(r.ts)}</small></span><span class="row-r">${r.sc ?? ''} 分</span></button>`)
+            .map(
+              ([k, r]) =>
+                `<div class="row rec-row"><button class="rec-main" data-rec="${card.dataset.recsid}|${k}"><span class="rec-play">${ICON.play}</span><span class="row-t" lang="en">${speakWordsHTML(speakScore(r.en || '', [r.said || '']).words)}<small>${fmtTime(r.ts)}</small></span><span class="row-r">${r.sc ?? ''} 分</span></button>${del ? `<button class="rec-del" data-delrec="${card.dataset.recsid}|${k}" aria-label="刪除這段錄音">${ICON.x}</button>` : ''}</div>`,
+            )
             .join('')}</div>`
         : '<p class="muted pad">還沒有口說錄音。</p>'
     } catch {
@@ -3478,6 +3532,19 @@ document.addEventListener('click', async (e) => {
   if (rp) {
     const [sid, k] = rp.dataset.rec.split('|')
     Rec.play(sid, k)
+  }
+  const rd = e.target.closest('[data-delrec]')
+  if (rd) {
+    const [sid, k] = rd.dataset.delrec.split('|')
+    confirmSheet('刪除這段錄音？', '學生和家長也聽不到了，沒辦法復原。', '刪除', async () => {
+      try {
+        await Sync.req('DELETE', Rec.path(sid, k), undefined, true)
+        rd.closest('.rec-row')?.remove()
+        toast('已刪除', '🗑️')
+      } catch {
+        toast('沒有成功，請檢查網路再試一次', '⚠️')
+      }
+    }, true)
   }
 })
 function speakResultHTML(r) {
@@ -3681,8 +3748,11 @@ const authErr = (e) => AUTH_ERR[e?.message] || (e?.message === 'Failed to fetch'
 function applyAt(root, segs, data, ev) {
   if (!segs.length) {
     if (ev !== 'patch') return data
-    const o = root && typeof root === 'object' ? root : {}
-    for (const [k, v] of Object.entries(data || {})) v == null ? delete o[k] : (o[k] = v)
+    let o = root && typeof root === 'object' ? root : {}
+    for (const [k, v] of Object.entries(data || {})) {
+      if (k.includes('/')) o = applyAt(o, k.split('/').filter(Boolean), v, 'put') || {} // 一次改很多地方（例如刪除紀錄）
+      else v == null ? delete o[k] : (o[k] = v)
+    }
     return o
   }
   const o = root && typeof root === 'object' ? root : {}
@@ -3997,12 +4067,12 @@ const Sync = {
     clearTimeout(this.rc)
     this.setStatus('off')
   },
+  // 串流事件 → [key, 資料]；資料是 null＝那一筆被刪掉了
   rows(p, data) {
-    if (!data) return []
     const seg = p.split('/').filter(Boolean)
-    if (!seg.length) return Object.entries(data)
     if (seg.length === 1) return [[seg[0], data]]
-    return []
+    if (!data || seg.length) return []
+    return Object.entries(data)
   },
   // 管理裝置：整個班級的串流
   mergeAll(p, data, ev) {
@@ -4021,6 +4091,7 @@ const Sync = {
     // 上課模式：把這個學生在其他裝置的紀錄也合併進這台
     if (ACTIVE && (!top || top === 'a')) this.mergeAttempts('/', this.D.a?.[ACTIVE])
     if (ACTIVE && (!top || top === 's')) this.mergeSessions('/', this.D.s?.[ACTIVE])
+    if (ACTIVE && (!top || top === 'del')) applyDel(this.D.del?.[ACTIVE])
     if (!top || ['a', 's', 'members', 'tkey'].includes(top)) this.migrateSoon()
     if (!top || top === 's' || top === 'hw' || top === 'a') hwNotify(!top)
     onSyncChange(!top ? 'all' : top === 'a' || top === 's' ? 'a' : top === 'live' ? 'live' : 'members')
@@ -4092,7 +4163,9 @@ const Sync = {
   mergeAttempts(p, data) {
     let add = 0
     let upd = 0
+    const gone = []
     for (const [k, a] of this.rows(p, data)) {
+      if (a === null) gone.push(k) // 老師刪掉了
       if (!a || typeof a.q !== 'string' || !a.ts || !a.d) continue
       if (this.keys.has(k)) {
         if (a.w) {
@@ -4109,6 +4182,7 @@ const Sync = {
       add++
     }
     if (add) S.attempts.sort((x, y) => x.ts - y.ts)
+    if (gone.length) applyDel({ a: Object.fromEntries(gone.map((k) => [k, 1])) })
     if (add || upd) {
       save()
       onSyncChange('a', add)
@@ -4117,6 +4191,10 @@ const Sync = {
   mergeSessions(p, data) {
     const have = new Set(S.sessions.map((s) => this.skey(s)))
     let add = 0
+    const gone = this.rows(p, data)
+      .filter(([, s]) => s === null)
+      .map(([k]) => k)
+    if (gone.length) applyDel({ s: Object.fromEntries(gone.map((k) => [k, 1])) })
     for (const [k, s] of this.rows(p, data)) {
       if (!s || !s.ts || !s.d || have.has(k)) continue
       have.add(k)
@@ -4199,9 +4277,34 @@ const Sync = {
     const st = this.students[sid] || {}
     for (const [uid, m] of Object.entries(this.members)) if (m?.sid === sid) await this.req('DELETE', 'members/' + uid)
     if (st.code) await this.req('DELETE', 'codes/' + st.code, undefined, true).catch(() => {})
-    for (const k of ['a', 's', 'live']) await this.req('DELETE', `${k}/${sid}`)
+    for (const k of ['a', 's', 'live', 'hw', 'del']) await this.req('DELETE', `${k}/${sid}`)
     await this.req('DELETE', `recs/${this.code()}/${sid}`, undefined, true).catch(() => {})
     await this.req('DELETE', 'students/' + sid)
+  },
+  // 刪除作答／練習紀錄（例如老師自己測試的）：雲端刪掉，並留下「已刪除」清單（del/<學生>），學生、家長的裝置回到 App 時也會刪掉
+  async delRecords(sid, akeys, skeys = []) {
+    const now = Date.now()
+    const keys = [...akeys.map((k) => ['a', k]), ...skeys.map((k) => ['s', k])]
+    for (let i = 0; i < keys.length; i += 200) {
+      const upd = {}
+      for (const [t, k] of keys.slice(i, i + 200)) {
+        upd[`${t}/${sid}/${k}`] = null
+        upd[`del/${sid}/${t}/${k}`] = now
+      }
+      await this.req('PATCH', '', upd)
+    }
+  },
+  // 清除一個學生的練習紀錄：since＝這個時間之後的（今天）；0＝全部（連口說錄音、上線狀態）
+  async clearStudent(sid, since = 0) {
+    const pick = (o) => Object.entries(o || {}).filter(([, x]) => x && (x.ts || 0) >= since).map(([k]) => k)
+    const ak = pick(this.D.a?.[sid])
+    const sk = pick(this.D.s?.[sid])
+    await this.delRecords(sid, ak, sk)
+    if (!since) {
+      await this.req('DELETE', `live/${sid}`)
+      await this.req('DELETE', `recs/${this.code()}/${sid}`, undefined, true).catch(() => {})
+    }
+    return ak.length
   },
   // 6 碼代碼（學生、家長共用）：7 天有效，過期或按「重新產生」就換一組
   async ensureCode(sid, force = false) {
@@ -4247,6 +4350,10 @@ const Sync = {
     const sid = this.sid()
     if (!sid || this.isAdmin() || !this.ready()) return
     try {
+      // 老師刪掉的紀錄：這個裝置上的也一起刪
+      this.req('GET', 'del/' + sid)
+        .then(applyDel)
+        .catch(() => {})
       const st = await this.req('GET', 'students/' + sid)
       const had = !!(this.stu || S.stuCache)
       const prev = [...unitsOfStu(this.stu || S.stuCache)]
@@ -4280,6 +4387,23 @@ const Sync = {
 function addSession(s) {
   S.sessions.push(s)
   Sync.queue('s', s)
+}
+// 老師刪掉的紀錄（del/<學生> ＝ { a: {作答key: 時間}, s: {練習key: 時間} }）：從這個裝置的紀錄、待上傳清單拿掉
+function applyDel(del) {
+  if (!del) return
+  const A = new Set(Object.keys(del.a || {}))
+  const P = new Set(Object.keys(del.s || {}))
+  if (!A.size && !P.size) return
+  const keep = (k, o) => !(k === 'a' ? A.has(Sync.akey(o)) : P.has(Sync.skey(o)))
+  const na = S.attempts.filter((a) => keep('a', a))
+  const ns = S.sessions.filter((s) => keep('s', s))
+  const nq = (S.syncQ || []).filter(([k, o]) => !o || keep(k === 'a' ? 'a' : 's', o))
+  if (na.length === S.attempts.length && ns.length === S.sessions.length && nq.length === (S.syncQ || []).length) return
+  S.attempts = na
+  S.sessions = ns
+  S.syncQ = nq
+  save()
+  onSyncChange('a')
 }
 // 代碼 → 班級、學生
 async function lookupCode(raw) {
@@ -4479,13 +4603,25 @@ function feedHTML(list) {
         .join('')}</div>`
     : '<p class="muted pad">還沒有作答紀錄。</p>'
 }
-function feedClick(e, list) {
+// sid：老師看某個學生時才有，可以刪掉這一筆（例如自己測試的）
+function feedClick(e, list, sid = '') {
   const r = e.target.closest('[data-att]')
   if (!r) return
   const a = list.find((x) => Sync.akey(x) === r.dataset.att)
   if (!a) return
-  const b = sheet(`<h2 class="sheet-title">學生的作答</h2><p class="sheet-p">${esc(fmtTime(a.ts))}</p><div class="review-slot"></div>`, { wide: true })
+  const canDel = sid && Sync.isAdmin() && !ACTIVE
+  const b = sheet(`<h2 class="sheet-title">學生的作答</h2><p class="sheet-p">${esc(fmtTime(a.ts))}</p><div class="review-slot"></div>${canDel ? '<div class="sheet-actions"><button class="btn ghost danger-t" data-delatt>刪除這筆作答</button></div>' : ''}`, { wide: true })
   $('.review-slot', b).append(reviewCard(ITEM[a.q], a, '學生的答案'))
+  if (canDel)
+    $('[data-delatt]', b).onclick = () =>
+      confirmSheet('刪除這筆作答？', '學生和家長那邊也會一起刪掉，沒辦法復原。', '刪除', async () => {
+        try {
+          await Sync.delRecords(sid, [Sync.akey(a)])
+          toast('已刪除', '🗑️')
+        } catch {
+          toast('沒有成功，請檢查網路再試一次', '⚠️')
+        }
+      }, true)
 }
 const syncPill = () => `<span class="sync-pill"><i class="sync-dot" data-s="${Sync.status}"></i>${{ on: '已連線', connecting: '連線中', error: '重新連線中', off: '未連線' }[Sync.status] || ''}</span>`
 
@@ -4560,7 +4696,7 @@ function viewStudents(keepScroll = false) {
       }
       ${
         picking
-          ? `<div class="pick-bar" role="toolbar"><span class="pick-n">${SEL.size ? `已選 ${SEL.size} 位` : '點學生來選取'}</span><button class="btn ghost small-btn" data-pick-all>${SEL.size === ids.length ? '全不選' : '全選'}</button><button class="btn primary small-btn" data-pick-units ${SEL.size ? '' : 'disabled'}>開放課程</button><button class="btn primary small-btn" data-pick-hw ${SEL.size ? '' : 'disabled'}>派作業</button></div>`
+          ? `<div class="pick-bar" role="toolbar"><span class="pick-n">${SEL.size ? `已選 ${SEL.size} 位` : '點學生來選取'}</span><button class="btn ghost small-btn" data-pick-all>${SEL.size === ids.length ? '全不選' : '全選'}</button><button class="btn primary small-btn" data-pick-units ${SEL.size ? '' : 'disabled'}>開放課程</button><button class="btn primary small-btn" data-pick-hw ${SEL.size ? '' : 'disabled'}>派作業</button><button class="btn danger small-btn" data-pick-del ${SEL.size ? '' : 'disabled'}>刪除</button></div>`
           : `<div class="sheet-actions"><button class="btn primary big" data-add>＋ 新增學生</button></div>
       <div class="group"><div class="list">
         <button class="row" data-go="#/manage"><span class="row-ic">👥</span><span class="row-t">成員管理<small>看哪些裝置加入了、移除裝置、暫停加入</small></span>${pendingCount() ? `<b class="row-badge">${pendingCount()}</b>` : ''}${ICON.chev}</button>
@@ -4583,6 +4719,21 @@ function viewStudents(keepScroll = false) {
     }
     if (q('[data-pick-units]')) return unitsSheet([...SEL])
     if (q('[data-pick-hw]')) return assignSheet([...SEL])
+    if (q('[data-pick-del]')) {
+      const sids = [...SEL]
+      const names = sids.map((s) => Sync.students[s]?.name || '學生').join('、')
+      return confirmSheet(`刪除 ${sids.length} 位學生？`, `${esc(names)}：學生和家長的裝置都會被移出，雲端的練習紀錄也會刪掉，沒辦法復原。`, '刪除', async () => {
+        try {
+          for (const s of sids) await Sync.deleteStudent(s)
+          SEL.clear()
+          SEL_MODE = false
+          toast(`已刪除 ${sids.length} 位學生`, '🗑️')
+          viewStudents(true)
+        } catch {
+          toast('沒有成功，請檢查網路再試一次', '⚠️')
+        }
+      }, true)
+    }
     const card = q('[data-card]')
     const sid = card?.dataset.card
     if (card && picking) {
@@ -4609,6 +4760,31 @@ function viewStudents(keepScroll = false) {
     }
     const g = q('[data-go]')
     if (g) go(g.dataset.go)
+  })
+}
+// 清除一個學生的練習紀錄（今天的／全部）：雲端刪掉，學生、家長的裝置回到 App 時也會刪掉
+function clearSheet(sid) {
+  const name = Sync.students[sid]?.name || '學生'
+  const list = Sync.attemptsOf(sid)
+  const t0 = dayStart()
+  const nToday = list.filter((a) => a.ts >= t0).length
+  const b = sheet(`<h2 class="sheet-title">清除 ${esc(name)} 的練習紀錄</h2>
+    <p class="sheet-p">例如自己測試時做的題目。${esc(name)} 還會留在名單上，可以繼續練習；作業、開放的課不會變。</p>
+    <div class="list">
+      <button class="row" data-c="today" ${nToday ? '' : 'disabled'}><span class="row-t">刪除今天的練習<small>今天 ${nToday} 題</small></span>${ICON.chev}</button>
+      <button class="row danger" data-c="all" ${list.length || Sync.sessionsOf(sid).length ? '' : 'disabled'}><span class="row-t">刪除全部練習紀錄<small>${list.length} 題、${Sync.sessionsOf(sid).length} 次練習，連口說錄音</small></span></button>
+    </div>`)
+  b.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-c]')?.dataset.c
+    if (!c) return
+    confirmSheet(c === 'all' ? `刪除 ${name} 的全部練習紀錄？` : `刪除 ${name} 今天的練習？`, '學生和家長那邊也會一起刪掉，沒辦法復原。', '刪除', async () => {
+      try {
+        const n = await Sync.clearStudent(sid, c === 'all' ? 0 : t0)
+        toast(`已刪除 ${n} 題`, '🧹')
+      } catch {
+        toast('沒有成功，請檢查網路再試一次', '⚠️')
+      }
+    }, true)
   })
 }
 // 學生總覽的選取（一次處理很多學生）
@@ -4789,18 +4965,20 @@ function viewStudent(sid, keepScroll = false) {
         <button class="row" data-units><span class="row-ic">🔓</span><span class="row-t">開放的課<small>${esc([...unitsOfStu(st)].filter((u) => UNITS.includes(u)).join('、') || '還沒有開放')}</small></span>${ICON.chev}</button>
         <button class="row" data-rename><span class="row-ic">✏️</span><span class="row-t">改暱稱</span>${ICON.chev}</button>
         <button class="row" data-go="#/manage"><span class="row-ic">👥</span><span class="row-t">裝置管理<small>看這個學生、家長有哪些裝置，可以移除</small></span>${ICON.chev}</button>
+        <button class="row" data-clear><span class="row-ic">🧹</span><span class="row-t">清除練習紀錄<small>例如自己測試時做的題目；學生還會留在名單上</small></span>${ICON.chev}</button>
         <button class="row danger" data-delstu><span class="row-t">刪除這個學生</span></button>
-      </div><p class="group-f">刪除後，這個學生和家長的裝置都會被移出，雲端的練習紀錄也會刪掉（各自裝置上的紀錄還在）。</p></div>
+      </div><p class="group-f">刪除學生：這個學生和家長的裝置都會被移出，雲端的練習紀錄也會刪掉。單一筆作答：點上面的作答，再按「刪除這筆作答」。</p></div>
     </div>`,
   )
   if (keepScroll) window.scrollTo(0, y)
   $('.stu-detail').addEventListener('click', (e) => {
-    feedClick(e, list)
+    feedClick(e, list, sid)
     const sh = e.target.closest('[data-share]')
     if (sh) return shareStudent(sid, sh.dataset.share)
     if (e.target.closest('[data-class]')) return enterClass(sid)
     if (e.target.closest('[data-assign]')) return assignSheet(sid)
     if (e.target.closest('[data-units]')) return unitsSheet([sid])
+    if (e.target.closest('[data-clear]')) return clearSheet(sid)
     const dh = e.target.closest('[data-delhw]')
     if (dh)
       return confirmSheet('刪除這份作業？', '學生那邊也會看不到這份作業（已經做的練習紀錄還在）。', '刪除', async () => {
@@ -4912,7 +5090,7 @@ function viewWatch(sid, keepScroll = false) {
   if (ans) watchFresh = Sync.akey(ans)
   if (spKey) watchFresh = spKey
   if (keepScroll) window.scrollTo(0, y)
-  $('.watch-page').addEventListener('click', (e) => feedClick(e, list))
+  $('.watch-page').addEventListener('click', (e) => feedClick(e, list, sid))
 }
 
 // ───────────────────────── 派作業 ─────────────────────────
@@ -5506,7 +5684,7 @@ const TABS = [
   ['#/settings', '設定', ICON.gear],
 ]
 function setView(html, { tabs = true } = {}) {
-  closeSheet()
+  closeSheet('nav')
   const root = $('#app')
   // 老師後台多一個「學生」分頁
   const list = teacherMode() ? [['#/students', '學生', ICON.people], ...TABS] : TABS
@@ -5520,11 +5698,18 @@ function setView(html, { tabs = true } = {}) {
         }).join('')}</nav>`
       : ''
   }`
-  $('[data-back]', root)?.addEventListener('click', () => (history.length > 1 ? history.back() : go('#/')))
+  $('[data-back]', root)?.addEventListener('click', navBack)
 }
 function go(h) {
+  if (POP_PENDING) return void (PENDING_GO = h) // 剛關掉視窗、瀏覽紀錄還在退：退完再換頁
   if (location.hash === h) route()
   else location.hash = h
+}
+// 「返回」：有上一頁（在這個 App 裡）就回上一頁；直接打開這一頁的（例如點連結進來），回到上一層
+const PARENT = (h) => (/^#\/watch\//.test(h) ? '#/student/' + h.split('/')[2] : /^#\/(student\/|manage)/.test(h) ? '#/students' : /^#\/teacher/.test(h) ? (teacherMode() ? '#/students' : '#/settings') : '#/')
+function navBack() {
+  if (history.state?.root || history.length <= 1) go(PARENT(location.hash || '#/'))
+  else history.back()
 }
 function route() {
   Voice.stop()
@@ -5600,6 +5785,8 @@ if (S.sync && S.sync.role === 'teacher' && S.sync.owner === undefined && !S.sync
   save()
 }
 Sync.start()
+// 打開 App 的第一頁：之後的「返回」如果退到這裡之前（離開 App），改成回上一層
+history.replaceState({ ...(history.state || {}), root: true, sheet: 0 }, '')
 route()
 // 同步：有網路就把排隊的紀錄送出；離開 App 時告訴老師「離開」，回來時再更新
 window.addEventListener('online', () => (Sync.ready() ? Sync.flushSoon(100) : Sync.paired() && Sync.start()))
@@ -5627,4 +5814,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, AudioLib }
+window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, AudioLib, VOICE_SAMPLE }

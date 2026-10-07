@@ -1,0 +1,118 @@
+"""2.9.2 使用者回饋：刪掉測試的紀錄（單筆、今天、全部、錄音、學生、這個裝置）、上一頁先關視窗、
+已經有帳號的 Email 在舊平板直接登入、登出後找得到老師登入、試聽語音有音檔"""
+import time, json
+from playwright.sync_api import sync_playwright
+from synchelp import *
+
+EM = f"mg{time.time_ns()}@example.com"
+now = int(time.time() * 1000)
+store = lambda d: f"if (!localStorage.getItem('g7review:v1')) localStorage.setItem('g7review:v1', {json.dumps(json.dumps(d))});"
+with sync_playwright() as p:
+    b = p.chromium.launch(channel="msedge")
+    T, code = make_teacher(b, email=EM)
+    amy = add_student(T, "Amy")
+    ben = add_student(T, "Ben")
+    A = page(b, 390, 844, "A")
+    A.goto(link(code, "student", amy))
+    wait_until(lambda: st(A) == "member")
+    answer_one(A)
+    att = lambda q, t: {"q": q, "m": "u2b", "r": "bad", "t": [], "a": "x", "h": 0, "c": 0, "x": "p", "ts": t, "d": "tdev"}
+    a2 = att("u2b-03", now - 5000)
+    http("PUT", f"/classes/{code}/a/{amy}/{a2['ts']}-u2b-03-tdev.json", a2)  # 例如老師在學生模式測試時做的
+    P = page(b, 390, 844, "P")
+    P.goto(link(code, "parent", amy))
+    wait_until(lambda: st(P) == "member")
+    check(wait_until(lambda: P.evaluate("window.__app.S.attempts.length") == 2), "parent has Amy's 2 answers")
+    # 試聽語音：有事先做好的音檔（靜音模式也聽得到）
+    check(T.evaluate("(async () => { await window.__app.AudioLib.load(); return !!window.__app.AudioLib.find(window.__app.VOICE_SAMPLE) })()"), "voice sample has audio files")
+    # 單筆刪除：老師點作答 → 刪除這筆作答 → 雲端、學生、家長都刪掉
+    T.goto(URL + "#/student/" + amy)
+    check(wait_until(lambda: T.locator(".live-row").count() == 2), "teacher sees 2 answers")
+    T.locator(".live-row").first.click()
+    T.wait_for_selector("[data-delatt]")
+    # 上一頁先關視窗，不離開學生頁
+    T.go_back()
+    check(wait_until(lambda: T.locator(".sheet-wrap").count() == 0) and T.evaluate("location.hash") == "#/student/" + amy, "back closes the sheet and stays on the page")
+    T.locator(".live-row").first.click()
+    T.click("[data-delatt]")
+    T.click(".sheet [data-ok]")
+    check(wait_until(lambda: T.locator(".live-row").count() == 1), "teacher feed shows 1 answer after delete")
+    check(wait_until(lambda: len(http("GET", f"/classes/{code}/a/{amy}.json")[1] or {}) == 1), "cloud has 1 answer")
+    check(len((http("GET", f"/classes/{code}/del/{amy}/a.json")[1] or {})) == 1, "deleted list has 1 key")
+    P.evaluate("window.__app.Sync.fetchStu()")
+    A.evaluate("window.__app.Sync.fetchStu()")
+    check(wait_until(lambda: P.evaluate("window.__app.S.attempts.length") == 1), "parent device dropped the deleted answer")
+    check(wait_until(lambda: A.evaluate("window.__app.S.attempts.length") == 1), "student device dropped the deleted answer")
+    stok = tok_of(A)
+    check(http("GET", f"/classes/{code}/del/{ben}.json?auth={stok}")[0] == 401, "Amy cannot read Ben's deleted list")
+    check(http("PUT", f"/classes/{code}/del/{amy}/a/x.json?auth={stok}", 1)[0] == 401, "student cannot write deleted list")
+    # 錄音：老師可以刪
+    http("PUT", f"/recs/{code}/{amy}/hello.json", {"d": "data:audio/mp4;base64,AAAA", "ts": now, "sc": 90, "said": "hello", "en": "Hello."})
+    T.goto(URL + "#/student/" + amy)
+    T.click(".rec-card [data-loadrec]")
+    check(wait_until(lambda: T.locator(".rec-card [data-delrec]").count() == 1), "recording has delete button")
+    T.click(".rec-card [data-delrec]")
+    T.click(".sheet [data-ok]")
+    check(wait_until(lambda: http("GET", f"/recs/{code}/{amy}/hello.json")[1] is None), "recording deleted")
+    # 清除今天 → 全部
+    a3 = att("u2b-04", now - 3000)
+    http("PUT", f"/classes/{code}/a/{amy}/{a3['ts']}-u2b-04-tdev.json", a3)
+    check(wait_until(lambda: len(http("GET", f"/classes/{code}/a/{amy}.json")[1] or {}) == 2), "Amy has 2 answers again")
+    check(wait_until(lambda: A.evaluate("window.__app.S.attempts.length") == 2), "student device got the new answer")
+    T.goto(URL + "#/student/" + amy)
+    T.wait_for_selector("[data-clear]")
+    T.click("[data-clear]")
+    T.click('.sheet [data-c="all"]')
+    T.click(".sheet [data-ok]")
+    check(wait_until(lambda: not http("GET", f"/classes/{code}/a/{amy}.json")[1]), "clear all: no answers in cloud")
+    check(wait_until(lambda: not http("GET", f"/classes/{code}/s/{amy}.json")[1]), "clear all: no sessions in cloud")
+    check(http("GET", f"/classes/{code}/students/{amy}.json")[1] is not None, "student still in the list")
+    A.evaluate("window.__app.Sync.fetchStu()")
+    check(wait_until(lambda: A.evaluate("window.__app.S.attempts.length") == 0), "student device cleared too")
+    # 勾選 → 刪除學生
+    T.goto(URL + "#/students")
+    T.click("[data-pick]")
+    T.click(f'.sc[data-card="{ben}"]')
+    T.click("[data-pick-del]")
+    T.click(".sheet [data-ok]")
+    check(wait_until(lambda: T.locator(".sc").count() == 1), "batch delete removed Ben")
+    check(http("GET", f"/classes/{code}/students/{ben}.json")[1] is None, "Ben gone from cloud")
+    # 這個裝置的練習紀錄（老師自己測試的）
+    answer_one(T)
+    check(T.evaluate("window.__app.S.attempts.length") >= 1, "teacher device has its own practice")
+    T.goto(URL + "#/settings")
+    T.click('[data-x="wipe"]')
+    T.click(".sheet [data-ok]")
+    check(wait_until(lambda: T.evaluate("window.__app.S.attempts.length") == 0), "wiped this device's practice")
+    # 登出 → 設定裡找得到「老師登入」
+    T.click('[data-x="signout"]')
+    T.click(".sheet [data-ok]")
+    T.goto(URL + "#/settings")
+    T.wait_for_selector('[data-go="#/teacher"]')
+    check("老師登入" in txt(T, ".page"), "settings shows 老師登入 after sign-out")
+    T.click('[data-go="#/teacher"]')
+    T.wait_for_selector(".teacher-page")
+    check(T.locator(".teacher-page [data-back]").count() == 1, "login page has 返回")
+    # 舊平板（匿名建立的後台）：輸入已經有帳號的 Email＋密碼 → 直接登入那個帳號的後台
+    OLD = "oldtablet9abcdefghjk"
+    http("PUT", f"/classes/{OLD}.json", {"owner": "tabuid", "open": True})
+    auth = f"localStorage.setItem('g7review:auth', JSON.stringify({{uid:'tabuid', rt:'rt-tabuid', it:'tok-tabuid', exp:{now + 3600000}}}));"
+    K = page(b, 820, 1180, "K", seed=DBSEED + auth + store({"seen": {"intro": 1}, "profile": {"id": "tab"}, "sync": {"code": OLD, "role": "teacher", "at": now, "owner": True}}))
+    K.goto(URL + "#/teacher")
+    K.wait_for_selector(".teacher-page")
+    check("設定老師帳號" in txt(K, ".teacher-page") and "直接登入" in txt(K, ".teacher-page"), "upgrade page explains existing accounts")
+    K.fill("#t-email", EM)
+    K.fill("#t-pw", "wrongpass")
+    K.click("[data-t-ok]")
+    check(wait_until(lambda: "密碼不對" in txt(K, ".t-err")), "existing email + wrong password -> error")
+    K.fill("#t-pw", "secret123")
+    K.click("[data-t-ok]")
+    check(wait_until(lambda: st(K) == "owner" and sync_of(K).get("code") == code), "existing email -> logs into that account's backend")
+    check(wait_until(lambda: K.locator(".sc").count() == 1), "old tablet now sees the account's student")
+    # 歡迎畫面也有老師登入
+    W = page(b, 390, 844, "W", seed=DBSEED)
+    W.goto(URL)
+    W.wait_for_selector(".role-pick")
+    check(W.locator(".welcome [data-teacher]").count() == 1, "welcome has a teacher login link")
+    b.close()
+report()

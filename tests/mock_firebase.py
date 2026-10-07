@@ -75,7 +75,7 @@ def can_read(ps, uid, legacy, prov):
         return bool(uid)
     if sec == "members" and len(ps) >= 4 and ps[3] == uid:
         return True
-    if sec in ("students", "a", "s", "live", "hw") and len(ps) >= 4:
+    if sec in ("students", "a", "s", "live", "hw", "del") and len(ps) >= 4:
         return bool(uid) and mem(c, uid).get("sid") == ps[3]
     return False
 
@@ -119,7 +119,7 @@ def can_write(ps, uid, val, legacy, prov):
         return get_node(ps) is None and val == uid
     if sec == "tkey":
         return adm and val is None  # 老師連結已停用：只能刪掉
-    if sec in ("open", "legacy", "blocked", "hw"):
+    if sec in ("open", "legacy", "blocked", "hw", "del"):
         return adm
     if sec == "students":  # 規則寫在 students/$sid：整個 students 不能一次刪
         return adm and len(ps) >= 4

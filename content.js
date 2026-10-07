@@ -2506,6 +2506,12 @@ export const FLASH = {
   ],
 }
 
+// 設定頁「試聽語音」：也要有事先做好的音檔（靜音模式才聽得到）
+export const VOICE_SAMPLE = [
+  ['W', 'Hi, I am Jamie. Nice to meet you.'],
+  ['M', 'Nice to meet you, too.'],
+]
+
 // 口說練習：跟讀句子（自編，對應各單元的重點句型）。[英文, 中文, 發音提醒]
 export const SPEAK = {
   Starter: [
