@@ -20,7 +20,7 @@
           ".read": "auth != null && ((root.child('classes/' + $code + '/owner').val() === auth.uid && auth.provider === 'password') || root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid)",
           ".write": "auth != null && root.child('classes/' + $code + '/owner').val() === auth.uid && auth.provider === 'password'",
           "$k": {
-            ".write": "auth != null && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid && root.child('classes/' + $code + '/members/' + auth.uid + '/role').val() === 'student'",
+            ".write": "auth != null && newData.exists() && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid && root.child('classes/' + $code + '/members/' + auth.uid + '/role').val() === 'student'",
             ".validate": "newData.hasChildren(['d', 'ts']) && newData.child('d').isString() && newData.child('d').val().length < 300000"
           }
         }

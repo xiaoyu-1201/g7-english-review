@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.9.3（10/7）'
+const VERSION = '2.9.4（10/7）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -2955,7 +2955,7 @@ function viewSettings() {
       <div class="group"><div class="group-h">App</div><div class="list">
         <button class="row" data-x="update"><span class="row-t">檢查更新</span><span class="row-r">${VERSION}</span>${ICON.chev}</button>
         <button class="row" data-x="install"><span class="row-t">加到主畫面（像 App 一樣打開）</span>${ICON.chev}</button>
-        ${teacherMode() || !S.sync?.code ? '<button class="row danger" data-x="wipe"><span class="row-t">清除這個裝置的練習紀錄</span></button>' : ''}
+        ${teacherMode() ? '<button class="row danger" data-x="wipe"><span class="row-t">清除這個裝置的練習紀錄</span></button>' : ''}
       </div>${teacherMode() ? '<p class="group-f">「清除」只會清掉在這個裝置上自己練習的紀錄（例如測試時做的題目）；學生的紀錄在雲端，不受影響。</p>' : ''}</div>
       <p class="foot">題目、文章、聽力稿都是依翰林版七上 Starter～Review 1 的字彙與句型自編，不含課本原文。<br>紀錄存在這個瀏覽器裡；清除瀏覽器資料會一起刪除，記得定期匯出備份。</p>
     </div>`,

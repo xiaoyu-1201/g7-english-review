@@ -93,7 +93,8 @@ def can_write(ps, uid, val, legacy, prov):
         if is_admin(ps[1], uid, prov):
             return True
         m = mem(ps[1], uid)
-        return len(ps) == 4 and m.get("sid") == ps[2] and m.get("role") == "student" and (val is None or (isinstance(val, dict) and "d" in val and "ts" in val))
+        # 學生只能上傳、覆蓋自己的錄音，不能刪（刪除只有老師）
+        return len(ps) == 4 and m.get("sid") == ps[2] and m.get("role") == "student" and isinstance(val, dict) and "d" in val and "ts" in val
     if len(ps) == 2 and ps[0] == "codes":
         if not uid or len(ps[1]) != 6:
             return False

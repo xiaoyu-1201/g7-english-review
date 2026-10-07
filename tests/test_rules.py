@@ -107,6 +107,8 @@ try:
     R = f"recs/{C.split('/')[1]}"
     rec = {"d": "data:audio/mp4;base64,AAAA", "ts": now}
     expect(True, db("PUT", f"{R}/{amy}/s1", S1, rec), "student uploads recording")
+    expect(False, db("DELETE", f"{R}/{amy}/s1", S1), "student cannot delete recordings")
+    expect(False, db("DELETE", f"{C}/a/{amy}/k1", S1), "student cannot delete answers")
     expect(False, db("PUT", f"{R}/{amy}/s2", P1, rec), "parent cannot upload recording")
     expect(True, db("GET", f"{R}/{amy}", P1), "parent reads child's recordings")
     expect(False, db("GET", f"{R}/{amy}", S2), "other student cannot read recordings")
