@@ -1,7 +1,7 @@
 // 讓 App 沒有網路也能打開
 // 更新：每次都先問 GitHub 有沒有新版（跳過 10 分鐘暫存）；新版裝好會自動重新整理一次
 // 改版時：app.js 的 VERSION 和這裡的 CACHE 都要改
-const CACHE = 'g7review-v29'
+const CACHE = 'g7review-v30'
 const SHELL = ['./', 'index.html', 'app.js', 'content.js', 'art.js', 'qrcode.js', 'styles.css', 'manifest.webmanifest', 'icon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png']
 
 self.addEventListener('install', (e) => {

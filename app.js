@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.9.2（10/7）'
+const VERSION = '2.9.3（10/7）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -4294,13 +4294,13 @@ const Sync = {
       await this.req('PATCH', '', upd)
     }
   },
-  // 清除一個學生的練習紀錄：since＝這個時間之後的（今天）；0＝全部（連口說錄音、上線狀態）
-  async clearStudent(sid, since = 0) {
-    const pick = (o) => Object.entries(o || {}).filter(([, x]) => x && (x.ts || 0) >= since).map(([k]) => k)
+  // 清除一個學生的練習紀錄：hit(作答或練習)＝要刪的；all＝全部（連口說錄音、上線狀態）
+  async clearStudent(sid, hit, all = false) {
+    const pick = (o) => Object.entries(o || {}).filter(([, x]) => x && (all || hit(x))).map(([k]) => k)
     const ak = pick(this.D.a?.[sid])
     const sk = pick(this.D.s?.[sid])
     await this.delRecords(sid, ak, sk)
-    if (!since) {
+    if (all) {
       await this.req('DELETE', `live/${sid}`)
       await this.req('DELETE', `recs/${this.code()}/${sid}`, undefined, true).catch(() => {})
     }
@@ -4591,17 +4591,35 @@ document.addEventListener('click', (e) => {
 })
 
 // 一個學生的作答紀錄（即時更新；點一題看完整題目與解析）
-function feedHTML(list) {
+// sid：老師看某個學生時傳進來，會標出「在這個裝置上做的」（老師自己測試的）
+function feedHTML(list, sid = '') {
   const feed = list.slice(-40).reverse()
+  const mine = sid && Sync.isAdmin() && !ACTIVE ? myDevIds(sid) : new Set()
   return feed.length
     ? `<div class="list flat live-feed">${feed
         .map((a) => {
           const it = ITEM[a.q]
           if (!it) return ''
-          return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・不太確定' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
+          return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${mine.has(a.d) ? '<em class="lr-mine">這個裝置做的</em>' : ''}${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・不太確定' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
         })
         .join('')}</div>`
     : '<p class="muted pad">還沒有作答紀錄。</p>'
+}
+// 這個裝置做過的作答（每筆作答的 d＝做題的裝置代號）：這個裝置本身（例如以前用學生連結測試過），加上在這個裝置開「學生模式」做的
+function myDevIds(sid) {
+  const ids = new Set([S.profile.id])
+  try {
+    const d = JSON.parse(localStorage.getItem(`${KEY}@${sid}`) || 'null')
+    if (d?.profile?.id) ids.add(d.profile.id)
+  } catch {}
+  return ids
+}
+// 老師看一筆作答：是在哪裡做的
+function whoMadeText(sid, d) {
+  if (myDevIds(sid).has(d)) return '在這個裝置上做的（老師測試的）'
+  const name = Sync.students[sid]?.name || '學生'
+  const m = Object.values(Sync.members).find((x) => x?.sid === sid && x.pid === d)
+  return m ? `在${name}的裝置上做的（${m.dev || '裝置'}）` : '在其他裝置上做的'
 }
 // sid：老師看某個學生時才有，可以刪掉這一筆（例如自己測試的）
 function feedClick(e, list, sid = '') {
@@ -4610,11 +4628,12 @@ function feedClick(e, list, sid = '') {
   const a = list.find((x) => Sync.akey(x) === r.dataset.att)
   if (!a) return
   const canDel = sid && Sync.isAdmin() && !ACTIVE
-  const b = sheet(`<h2 class="sheet-title">學生的作答</h2><p class="sheet-p">${esc(fmtTime(a.ts))}</p><div class="review-slot"></div>${canDel ? '<div class="sheet-actions"><button class="btn ghost danger-t" data-delatt>刪除這筆作答</button></div>' : ''}`, { wide: true })
+  const who = canDel ? whoMadeText(sid, a.d) : ''
+  const b = sheet(`<h2 class="sheet-title">學生的作答</h2><p class="sheet-p">${esc(fmtTime(a.ts))}${who ? `・${esc(who)}` : ''}</p><div class="review-slot"></div>${canDel ? '<div class="sheet-actions"><button class="btn ghost danger-t" data-delatt>刪除這筆作答</button></div>' : ''}`, { wide: true })
   $('.review-slot', b).append(reviewCard(ITEM[a.q], a, '學生的答案'))
   if (canDel)
     $('[data-delatt]', b).onclick = () =>
-      confirmSheet('刪除這筆作答？', '學生和家長那邊也會一起刪掉，沒辦法復原。', '刪除', async () => {
+      confirmSheet('刪除這筆作答？', `${esc(who)}。學生和家長那邊也會一起刪掉，沒辦法復原。`, '刪除', async () => {
         try {
           await Sync.delRecords(sid, [Sync.akey(a)])
           toast('已刪除', '🗑️')
@@ -4762,24 +4781,36 @@ function viewStudents(keepScroll = false) {
     if (g) go(g.dataset.go)
   })
 }
-// 清除一個學生的練習紀錄（今天的／全部）：雲端刪掉，學生、家長的裝置回到 App 時也會刪掉
+// 清除一個學生的練習紀錄：雲端刪掉，學生、家長的裝置回到 App 時也會刪掉
+// 「只刪這個裝置做的」只刪老師自己測試的（用每筆作答的裝置代號判斷），學生自己做的不會動；「今天的」「全部」不分是誰做的
 function clearSheet(sid) {
   const name = Sync.students[sid]?.name || '學生'
   const list = Sync.attemptsOf(sid)
+  const sess = Sync.sessionsOf(sid)
+  const mine = myDevIds(sid)
   const t0 = dayStart()
-  const nToday = list.filter((a) => a.ts >= t0).length
+  const isMine = (x) => mine.has(x.d)
+  const isToday = (x) => (x.ts || 0) >= t0
+  const nMine = list.filter(isMine).length
+  const nToday = list.filter(isToday).length
   const b = sheet(`<h2 class="sheet-title">清除 ${esc(name)} 的練習紀錄</h2>
-    <p class="sheet-p">例如自己測試時做的題目。${esc(name)} 還會留在名單上，可以繼續練習；作業、開放的課不會變。</p>
+    <p class="sheet-p">只想刪自己測試的，請選第一個，${esc(name)} 自己做的不會動。${esc(name)} 都會留在名單上，作業、開放的課也不會變。</p>
     <div class="list">
-      <button class="row" data-c="today" ${nToday ? '' : 'disabled'}><span class="row-t">刪除今天的練習<small>今天 ${nToday} 題</small></span>${ICON.chev}</button>
-      <button class="row danger" data-c="all" ${list.length || Sync.sessionsOf(sid).length ? '' : 'disabled'}><span class="row-t">刪除全部練習紀錄<small>${list.length} 題、${Sync.sessionsOf(sid).length} 次練習，連口說錄音</small></span></button>
+      <button class="row" data-c="mine" ${nMine || sess.some(isMine) ? '' : 'disabled'}><span class="row-t">只刪在這個裝置上做的<small>${nMine ? `${nMine} 題，是你在這個裝置上測試時做的` : '這個裝置沒有做過這個學生的題目'}</small></span>${ICON.chev}</button>
+      <button class="row danger" data-c="today" ${nToday ? '' : 'disabled'}><span class="row-t">刪除今天的全部練習<small>今天 ${nToday} 題，包含${esc(name)}自己做的</small></span></button>
+      <button class="row danger" data-c="all" ${list.length || sess.length ? '' : 'disabled'}><span class="row-t">刪除全部練習紀錄<small>${list.length} 題、${sess.length} 次練習，連口說錄音，包含${esc(name)}自己做的</small></span></button>
     </div>`)
   b.addEventListener('click', (e) => {
     const c = e.target.closest('[data-c]')?.dataset.c
     if (!c) return
-    confirmSheet(c === 'all' ? `刪除 ${name} 的全部練習紀錄？` : `刪除 ${name} 今天的練習？`, '學生和家長那邊也會一起刪掉，沒辦法復原。', '刪除', async () => {
+    const T = {
+      mine: [`刪除在這個裝置上做的 ${nMine} 題？`, `只刪你在這個裝置上測試時做的，${esc(name)}自己做的不會動。沒辦法復原。`],
+      today: [`刪除 ${name} 今天的全部練習？`, `今天 ${nToday} 題都會刪掉，<b>包含${esc(name)}自己做的</b>。學生和家長那邊也會一起刪掉，沒辦法復原。`],
+      all: [`刪除 ${name} 的全部練習紀錄？`, `${list.length} 題都會刪掉，<b>包含${esc(name)}自己做的</b>。學生和家長那邊也會一起刪掉，沒辦法復原。`],
+    }[c]
+    confirmSheet(T[0], T[1], '刪除', async () => {
       try {
-        const n = await Sync.clearStudent(sid, c === 'all' ? 0 : t0)
+        const n = await Sync.clearStudent(sid, c === 'mine' ? isMine : isToday, c === 'all')
         toast(`已刪除 ${n} 題`, '🧹')
       } catch {
         toast('沒有成功，請檢查網路再試一次', '⚠️')
@@ -4950,7 +4981,7 @@ function viewStudent(sid, keepScroll = false) {
       <section class="card live-dev">
         <div class="ld-head"><span class="ld-dot${isActive(l) ? ' on' : ''}"></span><div class="ld-who"><b>即時作答</b><span>${esc(liveText(l))}</span></div>
           <div class="ld-today"><b>${today.length}</b> 題<span>今天${today.length ? `・對 ${Math.round((ok / today.length) * 100)}%` : ''}</span></div></div>
-        ${feedHTML(list)}
+        ${feedHTML(list, sid)}
       </section>
       ${
         tc.length
@@ -4965,7 +4996,7 @@ function viewStudent(sid, keepScroll = false) {
         <button class="row" data-units><span class="row-ic">🔓</span><span class="row-t">開放的課<small>${esc([...unitsOfStu(st)].filter((u) => UNITS.includes(u)).join('、') || '還沒有開放')}</small></span>${ICON.chev}</button>
         <button class="row" data-rename><span class="row-ic">✏️</span><span class="row-t">改暱稱</span>${ICON.chev}</button>
         <button class="row" data-go="#/manage"><span class="row-ic">👥</span><span class="row-t">裝置管理<small>看這個學生、家長有哪些裝置，可以移除</small></span>${ICON.chev}</button>
-        <button class="row" data-clear><span class="row-ic">🧹</span><span class="row-t">清除練習紀錄<small>例如自己測試時做的題目；學生還會留在名單上</small></span>${ICON.chev}</button>
+        <button class="row" data-clear><span class="row-ic">🧹</span><span class="row-t">清除練習紀錄<small>可以只刪你自己測試的，學生做的不會動</small></span>${ICON.chev}</button>
         <button class="row danger" data-delstu><span class="row-t">刪除這個學生</span></button>
       </div><p class="group-f">刪除學生：這個學生和家長的裝置都會被移出，雲端的練習紀錄也會刪掉。單一筆作答：點上面的作答，再按「刪除這筆作答」。</p></div>
     </div>`,
@@ -5073,7 +5104,7 @@ function viewWatch(sid, keepScroll = false) {
             </section>`
           : `<div class="empty card"><div class="empty-ic">${isActive(l) ? '📱' : '💤'}</div><h2>${esc(statusTxt)}</h2><p class="muted">${name} 開始做題目時，這裡會自動顯示那一題。</p></div>`
       }
-      <section class="card"><div class="sec-h"><div><h2>剛剛的作答</h2></div></div>${feedHTML(list.slice(-10))}</section>
+      <section class="card"><div class="sec-h"><div><h2>剛剛的作答</h2></div></div>${feedHTML(list.slice(-10), sid)}</section>
     </div>`,
   )
   if (it) {
