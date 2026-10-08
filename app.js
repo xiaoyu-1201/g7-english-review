@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.10（10/8）'
+const VERSION = '2.14.11（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -544,7 +544,8 @@ const AudioLib = {
     if (!this.idx) return null
     const files = lines.map(([sp, t]) => {
       const s = String(t).trim()
-      return this.idx[`${sp || 'W'}|${s}`] || (lines.length === 1 ? this.idx[`w|${s.toLowerCase()}`] || this.idx[`W|${s}`] : '')
+      // 找不到指定聲音的音檔就試其他聲音（問答的問題是男聲 M 做的；10/8 曾因為鍵不對退回內建朗讀，靜音模式下就沒聲音）
+      return this.idx[`${sp || 'W'}|${s}`] || this.idx[`W|${s}`] || this.idx[`M|${s}`] || (lines.length === 1 ? this.idx[`w|${s.toLowerCase()}`] : '')
     })
     return files.every(Boolean) ? files : null
   },
@@ -3782,6 +3783,8 @@ function newSpeak(unit, mode, level, list) {
 // 這一句要念的目標、顯示給老師的文字
 const spTarget = (s) => (s.pair ? (s.target ? s.b : s.a) : s)
 const spText = (s) => (s.qa ? s.q : spTarget(s).en)
+// 要播的音檔：問答的問題是男聲（collect.mjs 用 M 做的）
+const spAudio = (s) => (s.qa ? [['M', s.q]] : spText(s))
 // 問答：答案不只一種，拿分數最高的那一個
 function speakScoreAny(targets, alts) {
   let best = null
@@ -3974,7 +3977,7 @@ function speakRun() {
   // 不看字、對比組、問答：每一句第一次出現時自動念一次（在按鈕的點擊裡呼叫，iPhone 才會出聲）
   if ((hide || s.pair || s.qa) && !SP.played[SP.i]) {
     SP.played[SP.i] = true
-    Voice.speak(spText(s))
+    Voice.speak(spAudio(s))
   }
   let L = null
   $('.speak-run').addEventListener('click', async (e) => {
@@ -3996,7 +3999,7 @@ function speakRun() {
       SP.over = true
       return go('#/')
     }
-    if (a === 'play' || a === 'slow') return Voice.speak(spText(s), a === 'slow')
+    if (a === 'play' || a === 'slow') return Voice.speak(spAudio(s), a === 'slow')
     if (a === 'peek') {
       SP.peek[SP.i] = true
       return speakRun()

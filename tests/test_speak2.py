@@ -94,6 +94,15 @@ with sync_playwright() as p:
     T.click("[data-act=go]")
     T.wait_for_selector(".sp-card-qa")
     check(T.locator(".sp-ans").count() == 0 and "以英文回答" in txt(T, ".sp-ask") and T.locator("[data-act=peek]").count() == 0, "qa hides the answers and has no peek button before answering")
+    # 問題要用做好的音檔播（男聲 M 的鍵），不能退回手機朗讀（靜音模式會沒聲音）
+    T.evaluate("window.__played = null; window.__app.AudioLib.play = (files) => { window.__played = files; return Promise.resolve() }")
+    T.click("[data-act=play]")
+    check(bool(T.evaluate("window.__played")), "qa question plays a prepared audio file, not device speech")
+    missing = T.evaluate("""async () => {
+      const m = await import('./content.js')
+      return Object.values(m.SPEAK_QA).flat().map(([q]) => q).filter((q) => !window.__app.AudioLib.find([['M', q]]))
+    }""")
+    check(not missing, f"every qa question resolves to an audio file {missing[:3]}")
     ans = T.evaluate("window.__app.SP.list[0].ans[1]")
     T.evaluate("(t) => { window.__say = t }", ans)
     T.click("[data-act=mic]")
