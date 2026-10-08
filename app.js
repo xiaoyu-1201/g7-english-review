@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.8（10/8）'
+const VERSION = '2.14.9（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3867,12 +3867,12 @@ function speakRun() {
             .join('')}</div>
           ${s.tip ? `<div class="sp-tip">${ICON.bulb}<span>${esc(s.tip)}</span></div>` : ''}`
               : s.qa
-                ? `<div class="sp-ask">請以英文回答${peek || r ? '' : '（先不看參考答案）'}</div>
+                ? `<div class="sp-ask">${r ? '參考答案如下，可以再念一次' : '請以英文回答（念過一次才會顯示參考答案）'}</div>
           ${s.fig ? `<div class="sp-fig">${figure(s.fig)}</div>` : ''}
           <div class="sp-en sp-q" lang="en">${esc(s.q)}</div>
           <div class="sp-zh">${esc(s.zh)}</div>
           ${s.hint ? `<div class="sp-ctx">情境：${esc(s.hint)}</div>` : ''}
-          ${r ? `<div class="sp-ans"><b>參考答案</b><span lang="en">${speakWordsHTML(r.words)}</span>${s.ans.filter((a) => a !== r.target).length ? `<small lang="en">也可以：${esc(s.ans.filter((a) => a !== r.target).slice(0, 3).join('　／　'))}</small>` : ''}</div>` : peek ? `<div class="sp-ans"><b>參考答案</b><span lang="en">${esc(s.ans[0])}</span>${s.ans.length > 1 ? `<small lang="en">也可以：${esc(s.ans.slice(1, 4).join('　／　'))}</small>` : ''}</div>` : ''}
+          ${r ? `<div class="sp-ans"><b>參考答案</b><span lang="en">${speakWordsHTML(r.words)}</span>${s.ans.filter((a) => a !== r.target).length ? `<small lang="en">也可以：${esc(s.ans.filter((a) => a !== r.target).slice(0, 3).join('　／　'))}</small>` : ''}</div>` : ''}
           ${s.tip ? `<div class="sp-tip">${ICON.bulb}<span>${esc(s.tip)}</span></div>` : ''}`
                 : hide
                   ? `<div class="sp-en sp-hidden" aria-label="句子先藏起來">${s.en
@@ -3883,7 +3883,7 @@ function speakRun() {
           <div class="sp-zh">${esc(s.zh)}</div>
           ${s.tip ? `<div class="sp-tip">${ICON.bulb}<span>${esc(s.tip)}</span></div>` : ''}`
           }
-          <div class="sp-listen"><button class="pill" data-act="play">${ICON.speaker}<span>${s.qa ? '播放問題' : '播放示範'}</span></button><button class="pill" data-act="slow">🐢<span>慢速</span></button>${hide || (s.qa && !peek && !r) ? `<button class="pill" data-act="peek">👀<span>${s.qa ? '參考答案' : '顯示原文'}</span></button>` : ''}</div>
+          <div class="sp-listen"><button class="pill" data-act="play">${ICON.speaker}<span>${s.qa ? '播放問題' : '播放示範'}</span></button><button class="pill" data-act="slow">🐢<span>慢速</span></button>${hide ? '<button class="pill" data-act="peek">👀<span>顯示原文</span></button>' : ''}</div>
         </section>
         <div class="sp-mic-wrap">
           <button class="sp-mic" data-act="mic" aria-label="${r ? '再念一次' : '開始錄音'}" ${s.pair && pick == null ? 'disabled' : ''}>${ICON.mic}</button>

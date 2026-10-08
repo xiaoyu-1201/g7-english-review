@@ -93,7 +93,7 @@ with sync_playwright() as p:
     T.click('#sp-unit [data-u="Unit 1"]')
     T.click("[data-act=go]")
     T.wait_for_selector(".sp-card-qa")
-    check(T.locator(".sp-ans").count() == 0 and "以英文回答" in txt(T, ".sp-ask"), "qa hides the answers at first")
+    check(T.locator(".sp-ans").count() == 0 and "以英文回答" in txt(T, ".sp-ask") and T.locator("[data-act=peek]").count() == 0, "qa hides the answers and has no peek button before answering")
     ans = T.evaluate("window.__app.SP.list[0].ans[1]")
     T.evaluate("(t) => { window.__say = t }", ans)
     T.click("[data-act=mic]")
@@ -101,8 +101,7 @@ with sync_playwright() as p:
     T.screenshot(path=str(OUT / "s2-qa.png"))
     T.click("[data-act=next]")
     T.wait_for_selector(".sp-card-qa")
-    T.click("[data-act=peek]")
-    check(T.locator(".sp-ans").count() == 1, "peek shows the reference answers")
+    check(T.locator(".sp-ans").count() == 0 and T.locator("[data-act=peek]").count() == 0, "next question again hides the answers")
     T.click("[data-act=close]")
     # 分數低會建議改基礎
     T.goto(URL + "#/speak")
