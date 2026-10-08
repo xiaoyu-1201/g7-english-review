@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.6（10/8）'
+const VERSION = '2.14.7（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3696,7 +3696,7 @@ function speakPool(unit, mode = 'read', level = 'std') {
   const units = spUnitsOf(unit)
   let list
   if (mode === 'pair') list = units.flatMap((u) => (SPEAK_PAIRS[u] || []).map(([a, b, za, zb, tip, lv]) => ({ pair: true, a: { en: a, zh: za }, b: { en: b, zh: zb }, tip, lv: lv || 2, u })))
-  else if (mode === 'qa') list = units.flatMap((u) => (SPEAK_QA[u] || []).map(([q, ans, zh, tip, lv]) => ({ qa: true, q, ans, zh, tip, lv: lv || 2, u })))
+  else if (mode === 'qa') list = units.flatMap((u) => (SPEAK_QA[u] || []).map(([q, ans, zh, tip, lv, x]) => ({ qa: true, q, ans, zh, tip, lv: lv || 2, u, fig: x?.fig, hint: x?.hint })))
   else list = units.flatMap((u) => SPEAK[u].map(([en, zh, tip, lv]) => ({ en, zh, tip, lv: spLv(en, lv), u })))
   const f = list.filter((x) => spLvOk(x.lv, level))
   return f.length >= 4 ? f : list
@@ -3861,8 +3861,10 @@ function speakRun() {
           ${s.tip ? `<div class="sp-tip">${ICON.bulb}<span>${esc(s.tip)}</span></div>` : ''}`
               : s.qa
                 ? `<div class="sp-ask">請以英文回答${peek || r ? '' : '（先不看參考答案）'}</div>
+          ${s.fig ? `<div class="sp-fig">${figure(s.fig)}</div>` : ''}
           <div class="sp-en sp-q" lang="en">${esc(s.q)}</div>
           <div class="sp-zh">${esc(s.zh)}</div>
+          ${s.hint ? `<div class="sp-ctx">情境：${esc(s.hint)}</div>` : ''}
           ${r ? `<div class="sp-ans"><b>參考答案</b><span lang="en">${speakWordsHTML(r.words)}</span>${s.ans.filter((a) => a !== r.target).length ? `<small lang="en">也可以：${esc(s.ans.filter((a) => a !== r.target).slice(0, 3).join('　／　'))}</small>` : ''}</div>` : peek ? `<div class="sp-ans"><b>參考答案</b><span lang="en">${esc(s.ans[0])}</span>${s.ans.length > 1 ? `<small lang="en">也可以：${esc(s.ans.slice(1, 4).join('　／　'))}</small>` : ''}</div>` : ''}
           ${s.tip ? `<div class="sp-tip">${ICON.bulb}<span>${esc(s.tip)}</span></div>` : ''}`
                 : hide

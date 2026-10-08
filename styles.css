@@ -5184,6 +5184,27 @@ ul.plain b {
 .sp-q {
   font-size: clamp(22px, 5vw, 30px);
 }
+/* 問答的圖和情境提示（使用者 10/8：沒有圖不知道要答什麼） */
+.sp-fig {
+  margin: 0 auto 12px;
+  max-width: 420px;
+}
+.sp-fig .fig {
+  margin: 0 auto;
+}
+.sp-fig .fig-pic .pic-r {
+  font-size: 44px;
+}
+.sp-ctx {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--sel-bg);
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 600;
+}
 .sp-ans {
   margin-top: 12px;
   padding: 12px 14px;
