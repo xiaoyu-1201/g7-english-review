@@ -4078,7 +4078,7 @@ ul.plain b {
   margin: 4px 0 0;
 }
 @media (min-width: 700px) {
-  .sp-modes {
+  .sp-intro .sp-modes {
     grid-template-columns: repeat(4, 1fr);
   }
 }
@@ -5292,13 +5292,21 @@ ul.plain b {
 }
 .sp-mode {
   display: grid;
-  gap: 2px;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 1px;
+  align-items: center;
   justify-items: start;
-  padding: 12px 14px;
+  text-align: left;
+  padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--fill2);
   box-shadow: inset 0 0 0 1.5px transparent;
   transition: box-shadow 0.15s, background 0.15s;
+}
+.sp-mode .sp-mode-ic {
+  grid-row: 1 / 3; /* 圖示在左邊，名稱和說明都在右邊（圖示右邊不要空著） */
 }
 .sp-mode.on {
   background: var(--sel-bg);
@@ -5308,8 +5316,8 @@ ul.plain b {
   transform: scale(0.98);
 }
 .sp-mode-ic {
-  font-size: 22px;
-  line-height: 1.2;
+  font-size: 24px;
+  line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', var(--font);
 }
 .sp-mode b {
