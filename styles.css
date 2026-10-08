@@ -4568,10 +4568,20 @@ ul.plain b {
 .sc-stats b {
   font-family: var(--round);
   font-size: 19px;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+/* 手機：第三格的課名（Review 1）放不下，字小一點、可以換行 */
+@media (max-width: 480px) {
+  .sc-stats b {
+    font-size: 16px;
+  }
+}
+/* 成員管理：老師的 Email 很長，要能斷行 */
+.row-t,
+.row-t b {
+  overflow-wrap: anywhere;
 }
 .sc-stats span {
   font-size: 12px;
@@ -5138,6 +5148,29 @@ ul.plain b {
 .sp-field .chips-row {
   width: 100%;
   justify-content: flex-start;
+}
+/* 範圍複選：換行排、不用拖動 */
+.chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+.chips-wrap button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  background: var(--fill);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--label);
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.chips-wrap button.on {
+  background: var(--blue);
+  color: #fff;
 }
 .seg.full button {
   flex: 1;

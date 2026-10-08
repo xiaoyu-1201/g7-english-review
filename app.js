@@ -1,9 +1,9 @@
-// 國一英文段考複習 App（翰林版七上 Starter～Review 1）
+// 國一英文段考複習 App（翰林版七上 Starter～Review 3，三次段考）
 // 純前端：紀錄存在這台裝置（localStorage），可以匯出／匯入合併。
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.3（10/8）'
+const VERSION = '2.14.4（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -2079,7 +2079,7 @@ function welcome() {
     `<div class="welcome">
       <img class="w-logo" src="icon.svg" alt="" width="64" height="64">
       <h2>歡迎使用英文段考複習</h2>
-      <p class="sheet-p">翰林版七上・第一次段考複習</p>
+      <p class="sheet-p">翰林版七上・段考複習與會考題型</p>
       <div class="w-rows">
         <div class="w-row"><span class="w-ic">💡</span><div><b>先猜，再看重點</b><p>每個單元先用觀念卡讓你猜規則，自己想過的記得更牢。</p></div></div>
         <div class="w-row"><span class="w-ic">🔎</span><div><b>抓出粗心</b><p>大寫、標點、空格寫錯都會被抓出來，養成「寫完檢查」的習慣。</p></div></div>
@@ -3158,7 +3158,7 @@ function viewSettings() {
         <button class="row" data-x="install"><span class="row-t">加到主畫面（像 App 一樣打開）</span>${ICON.chev}</button>
         ${teacherMode() ? '<button class="row danger" data-x="wipe"><span class="row-t">清除這個裝置的練習紀錄</span></button>' : ''}
       </div>${teacherMode() ? '<p class="group-f">「清除」只會清掉在這個裝置上自己練習的紀錄（例如測試時做的題目）；學生的紀錄在雲端，不受影響。</p>' : ''}</div>
-      <p class="foot">題目、文章、聽力稿都是依翰林版七上 Starter～Review 1 的字彙與句型自編，不含課本原文。<br>紀錄存在這個瀏覽器裡；清除瀏覽器資料會一起刪除，記得定期匯出備份。</p>
+      <p class="foot">題目、文章、聽力稿都是依翰林版七上各課的字彙與句型自編，不含課本原文。<br>紀錄存在這個瀏覽器裡；清除瀏覽器資料會一起刪除，記得定期匯出備份。</p>
     </div>`,
   )
   const v = $('.page')
@@ -3661,8 +3661,10 @@ const SP_MODES = { read: '句子跟讀', blind: '聽力複誦', pair: '辨識句
 const SP_LEVELS = { easy: '初級', std: '中級', hard: '高級' }
 const SP_N = { read: 8, blind: 8, pair: 6, qa: 6 }
 // 題庫：read／blind＝句子；pair＝對比組（兩句只差一個音）；qa＝問答（App 問、學生自己答，答案不只一種）
+// 範圍可以複選：'all'＝全部開放的課；字串＝一課；陣列＝好幾課
+const spUnitsOf = (u) => (u === 'all' || !u ? speakUnits() : Array.isArray(u) ? u.filter((x) => speakUnits().includes(x)) : [u])
 function speakPool(unit, mode = 'read', level = 'std') {
-  const units = unit === 'all' ? speakUnits() : [unit]
+  const units = spUnitsOf(unit)
   let list
   if (mode === 'pair') list = units.flatMap((u) => (SPEAK_PAIRS[u] || []).map(([a, b, za, zb, tip, lv]) => ({ pair: true, a: { en: a, zh: za }, b: { en: b, zh: zb }, tip, lv: lv || 2, u })))
   else if (mode === 'qa') list = units.flatMap((u) => (SPEAK_QA[u] || []).map(([q, ans, zh, tip, lv]) => ({ qa: true, q, ans, zh, tip, lv: lv || 2, u })))
@@ -3693,7 +3695,11 @@ function viewSpeak() {
   if (SP && !SP.over) return speakRun()
   const sess = S.sessions.filter((s) => s.k === 'speak')
   const best = sess.length ? Math.max(...sess.map((s) => s.s)) : 0
-  let unit = speakUnits().includes(S.profile.speakUnit) ? S.profile.speakUnit : 'all'
+  // 範圍（複選）：記在 speakUnits；舊的 speakUnit（單選）也接受
+  const allU = speakUnits()
+  let unit = spUnitsOf(Array.isArray(S.profile.speakUnits) ? S.profile.speakUnits : S.profile.speakUnit || 'all')
+  if (!unit.length) unit = [...allU]
+  const isAll = () => unit.length === allU.length
   let mode = SP_MODES[S.profile.speakMode] ? S.profile.speakMode : 'read'
   let level = SP_LEVELS[S.profile.speakLv] ? S.profile.speakLv : 'std'
   const MODE_DESC = {
@@ -3719,7 +3725,7 @@ function viewSpeak() {
         <p class="muted small sp-mode-desc">${MODE_DESC[mode]}</p>
         <div class="sp-field"><span class="sp-label">難度</span><div class="seg full" id="sp-lv">${Object.entries(SP_LEVELS).map(([k, v]) => `<button data-lv="${k}" class="${level === k ? 'on' : ''}">${v}</button>`).join('')}</div></div>
         <p class="muted small sp-lv-desc">${LV_DESC[level]}</p>
-        <div class="sp-field"><span class="sp-label">範圍</span><div class="chips-row" id="sp-unit">${['all', ...speakUnits()].map((u) => `<button data-u="${u}" class="${u === unit ? 'on' : ''}">${u === 'all' ? '全部' : u}</button>`).join('')}</div></div>
+        <div class="sp-field"><span class="sp-label">範圍（可複選）</span><div class="chips-wrap" id="sp-unit" role="group">${['all', ...allU].map((u) => `<button type="button" data-u="${u}" class="${u === 'all' ? (isAll() ? 'on' : '') : unit.includes(u) ? 'on' : ''}" aria-pressed="${u === 'all' ? isAll() : unit.includes(u)}">${u === 'all' ? '全部' : u}</button>`).join('')}</div></div>
         <p class="muted sp-n">每回 ${SP_N[mode]} ${mode === 'pair' ? '組' : mode === 'qa' ? '題' : '句'}。${best ? `目前最高 ${best} 分。` : ''}</p>
         <button class="btn primary big" data-act="go" ${speakEngine() ? '' : 'disabled'}>開始</button>
       </div>
@@ -3734,11 +3740,20 @@ function viewSpeak() {
   $('.speak-intro').addEventListener('click', (e) => {
     const u = e.target.closest('[data-u]')
     if (u) {
-      unit = u.dataset.u
-      S.profile.speakUnit = unit
+      const k = u.dataset.u
+      // 全部＝選所有的課；在「全部」的狀態點一課＝只選那一課；其他時候點一課＝加入或拿掉（至少留一課）
+      if (k === 'all') unit = [...allU]
+      else if (isAll()) unit = [k]
+      else if (unit.includes(k)) unit = unit.length > 1 ? unit.filter((x) => x !== k) : unit
+      else unit = allU.filter((x) => unit.includes(x) || x === k)
+      S.profile.speakUnits = unit
+      delete S.profile.speakUnit
       save()
-      $$('#sp-unit button').forEach((b) => b.classList.toggle('on', b === u))
-      u.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' })
+      $$('#sp-unit button').forEach((b) => {
+        const on = b.dataset.u === 'all' ? isAll() : unit.includes(b.dataset.u)
+        b.classList.toggle('on', on)
+        b.setAttribute('aria-pressed', on)
+      })
     }
     const m = e.target.closest('[data-m]')
     if (m) {
