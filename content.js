@@ -2780,4 +2780,7 @@ import { PASSAGES3, MODULES3, LESSONS3 } from './content3.js'
 Object.assign(PASSAGES, PASSAGES3)
 Object.assign(MODULES, MODULES3)
 for (const L of LESSONS3) LESSONS.splice(LESSONS.findIndex((x) => x.id === L.after) + 1, 0, L)
-export { EXAMS }
+// 口說 2.14（speak2.js）：補句子、拿掉含金量低的、對比組、問答
+import { SPEAK_MORE, SPEAK_DROP, SPEAK_PAIRS, SPEAK_QA } from './speak2.js'
+for (const u of Object.keys(SPEAK)) SPEAK[u] = SPEAK[u].filter(([en]) => !SPEAK_DROP.has(en)).concat(SPEAK_MORE[u] || [])
+export { EXAMS, SPEAK_PAIRS, SPEAK_QA }
