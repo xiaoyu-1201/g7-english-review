@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.9（10/8）'
+const VERSION = '2.14.10（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3558,7 +3558,32 @@ function to16k(x, sr) {
 }
 // 開始聽：講完停 0.8 秒就結束（或再按一次麥克風）；最多 12 秒；7 秒都沒講話＝沒聽到
 // 同一條麥克風也錄音（念完可以聽自己的聲音），不會互搶
+// 拿 PCM 的方式：有 ScriptProcessor 就直接收；沒有（或壞掉）就用 AnalyserNode 量音量，PCM 事後從錄音檔解出來
+// 不管哪裡出錯，麥克風一定要放掉（放不掉的話 iPhone 之後播音檔會沒聲音或變小聲）
 let ACTIVE_MIC = null // 正在錄音的那一次（離開畫面時用來放掉麥克風）
+const MIC_STREAMS = new Set() // 還開著的麥克風串流（保險：出錯或離開時全部關掉）
+function releaseMics() {
+  for (const s of MIC_STREAMS) {
+    try {
+      s.getTracks().forEach((t) => t.stop())
+    } catch {}
+  }
+  MIC_STREAMS.clear()
+}
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && releaseMics())
+// 錄音檔 → PCM（iPhone 是 mp4／aac，Chrome 是 webm／opus，瀏覽器自己會解）
+async function decodeBlob(AC, blob) {
+  const ac = new AC()
+  try {
+    const ab = await blob.arrayBuffer()
+    return await new Promise((ok, no) => {
+      const p = ac.decodeAudioData(ab, ok, no)
+      if (p?.then) p.then(ok, no)
+    })
+  } finally {
+    ac.close?.().catch(() => {})
+  }
+}
 async function listenLocal(onInterim) {
   const AC = window.AudioContext || window.webkitAudioContext
   const ctx = new AC() // 要在按下去的那一刻建立（iPhone 才會開聲音）
@@ -3577,6 +3602,7 @@ async function listenLocal(onInterim) {
     const err = e?.name === 'NotAllowedError' || e?.name === 'SecurityError' ? 'mic-denied' : 'audio-capture'
     return { stop() {}, done: Promise.resolve({ alts: [], err, blob: null }) }
   }
+  MIC_STREAMS.add(stream)
   let rec = null
   const chunks = []
   if (window.MediaRecorder)
@@ -3587,8 +3613,7 @@ async function listenLocal(onInterim) {
     } catch {
       rec = null
     }
-  const src = ctx.createMediaStreamSource(stream)
-  const proc = ctx.createScriptProcessor(2048, 1, 1)
+  const sr = ctx.sampleRate
   const pcm = []
   let total = 0
   let floor = 1
@@ -3598,15 +3623,8 @@ async function listenLocal(onInterim) {
   let quiet = 0 // 講完之後安靜了多久（秒）
   let finish
   const ended = new Promise((ok) => (finish = ok))
-  // 保險：螢幕鎖住、切到別的 App 時 AudioContext 會暫停、onaudioprocess 不再觸發，麥克風就會一直開著（使用者 10/8 的截圖）
-  // → 切出去就結束；另外不管怎樣 15 秒一定結束
-  const hardStop = setTimeout(() => finish(), 15000)
-  const onHide = () => document.visibilityState === 'hidden' && finish()
-  document.addEventListener('visibilitychange', onHide)
-  ACTIVE_MIC = () => finish()
-  proc.onaudioprocess = (e) => {
-    const x = new Float32Array(e.inputBuffer.getChannelData(0))
-    pcm.push(x)
+  // 量音量：連續兩段有聲音＝開始講；講完安靜 0.8 秒＝結束
+  const feed = (x) => {
     let s = 0
     for (let i = 0; i < x.length; i++) s += x[i] * x[i]
     const rms = Math.sqrt(s / x.length)
@@ -3617,24 +3635,59 @@ async function listenLocal(onInterim) {
       if (first < 0) first = Math.max(0, total - x.length)
       last = total + x.length
       quiet = 0
-    } else if (first >= 0) quiet += x.length / ctx.sampleRate
+    } else if (first >= 0) quiet += x.length / sr
     total += x.length
-    const sec = total / ctx.sampleRate
+    const sec = total / sr
     if ((first >= 0 && quiet > 0.8) || sec > 12 || (first < 0 && sec > 7)) finish()
   }
-  src.connect(proc)
-  proc.connect(ctx.destination) // 輸出是靜音（不會從喇叭出聲）
+  let src = null
+  let proc = null
+  let meter = 0
+  let vad = false // 有沒有在量音量（沒有的話只能靠按停或時間到）
+  try {
+    src = ctx.createMediaStreamSource(stream)
+    if (ctx.createScriptProcessor && lsGet('g7review:noproc') !== '1') {
+      proc = ctx.createScriptProcessor(2048, 1, 1)
+      proc.onaudioprocess = (e) => {
+        const x = new Float32Array(e.inputBuffer.getChannelData(0))
+        pcm.push(x)
+        feed(x)
+      }
+      src.connect(proc)
+      proc.connect(ctx.destination) // 輸出是靜音（不會從喇叭出聲）
+    } else {
+      const an = ctx.createAnalyser()
+      an.fftSize = 2048
+      src.connect(an)
+      const buf = new Float32Array(an.fftSize)
+      meter = setInterval(() => {
+        an.getFloatTimeDomainData(buf)
+        feed(buf)
+      }, Math.round((an.fftSize / sr) * 1000))
+    }
+    vad = true
+  } catch {
+    // 連音量都量不到：只錄音，按停或 12 秒才結束
+    meter = setInterval(() => {
+      total += Math.round(sr / 10)
+      if (total / sr > 12) finish()
+    }, 100)
+  }
+  // 保險：螢幕鎖住、切到別的 App 時 AudioContext 會暫停、音量就量不到了，麥克風會一直開著 → 切出去就結束；不管怎樣 15 秒一定結束
+  const hardStop = setTimeout(() => finish(), 15000)
+  const onHide = () => document.visibilityState === 'hidden' && finish()
+  document.addEventListener('visibilitychange', onHide)
+  ACTIVE_MIC = () => finish()
   const done = ended.then(async () => {
     clearTimeout(hardStop)
+    clearInterval(meter)
     document.removeEventListener('visibilitychange', onHide)
     ACTIVE_MIC = null
-    proc.onaudioprocess = null
+    if (proc) proc.onaudioprocess = null
     try {
-      src.disconnect()
-      proc.disconnect()
+      src?.disconnect()
+      proc?.disconnect()
     } catch {}
-    const sr = ctx.sampleRate
-    ctx.close?.().catch(() => {})
     let blob = null
     if (rec) {
       await new Promise((ok) => {
@@ -3644,19 +3697,38 @@ async function listenLocal(onInterim) {
         } catch {
           ok()
         }
+        setTimeout(ok, 1500) // onstop 沒來也不能卡住（麥克風要放掉）
       })
       if (chunks.length) blob = new Blob(chunks, { type: rec.mimeType || chunks[0].type })
     }
     stream.getTracks().forEach((t) => t.stop()) // 放掉麥克風
-    if (first < 0) return { alts: [], err: 'no-speech', blob }
-    // 只留講話那一段（前後各多留一點）
-    const all = new Float32Array(total)
-    let o = 0
-    for (const c of pcm) {
-      all.set(c, o)
-      o += c.length
-    }
-    const seg = all.subarray(Math.max(0, first - Math.round(sr * 0.25)), Math.min(total, last + Math.round(sr * 0.35)))
+    MIC_STREAMS.delete(stream)
+    await ctx.close?.().catch(() => {})
+    // 要辨識的那一段（前後各多留一點）：有 PCM 就直接切；沒有就從錄音檔解碼
+    let seg = null
+    let segSr = sr
+    if (proc) {
+      if (first < 0) return { alts: [], err: 'no-speech', blob }
+      const all = new Float32Array(total)
+      let o = 0
+      for (const c of pcm) {
+        all.set(c, o)
+        o += c.length
+      }
+      seg = all.subarray(Math.max(0, first - Math.round(sr * 0.25)), Math.min(total, last + Math.round(sr * 0.35)))
+    } else if (blob) {
+      if (vad && first < 0) return { alts: [], err: 'no-speech', blob }
+      try {
+        const dec = await decodeBlob(AC, blob)
+        const ch = dec.getChannelData(0)
+        segSr = dec.sampleRate
+        const k = dec.sampleRate / sr
+        seg = first >= 0 ? ch.subarray(Math.max(0, Math.round((first - sr * 0.25) * k)), Math.min(ch.length, Math.round((last + sr * 0.35) * k))) : ch
+      } catch {
+        return { alts: [], err: 'no-speech', blob }
+      }
+      if (!seg.length) return { alts: [], err: 'no-speech', blob }
+    } else return { alts: [], err: 'audio-capture', blob }
     let text = ''
     try {
       const A = await asr
@@ -3672,7 +3744,7 @@ async function listenLocal(onInterim) {
         }
       }
       onInterim?.('辨識中…')
-      text = await A.transcribe(to16k(seg, sr))
+      text = await A.transcribe(to16k(seg, segSr))
     } catch {
       return { alts: [], err: 'asr-load', blob }
     }
@@ -6323,7 +6395,10 @@ function route() {
   Voice.stop()
   const h = location.hash || '#/'
   const [, a, b] = h.split('/')
-  if (a !== 'speak') ACTIVE_MIC?.() // 離開口說（例如按瀏覽器的返回）：錄音結束、放掉麥克風
+  if (a !== 'speak') {
+    ACTIVE_MIC?.() // 離開口說（例如按瀏覽器的返回）：錄音結束、放掉麥克風
+    releaseMics()
+  }
   if (a !== 'exam' && EXAM && !EXAM.graded) clearInterval(EXAM.timer)
   if (a !== 'watch' && WAKE) WAKE.release().catch(() => {})
   if (a === 'watch' && b) return viewWatch(b)
@@ -6423,4 +6498,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, get SP() { return SP } }
+window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }
