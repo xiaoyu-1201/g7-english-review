@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14（10/8）'
+const VERSION = '2.14.1（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -1994,7 +1994,7 @@ function viewHome() {
       <section class="quick">
         <button class="qk qk-speak" data-go="#/speak"><span class="qk-ic">${ICON.mic}</span><span class="qk-tt"><span class="qk-t">口說練習</span><span class="qk-s">${(() => {
           const sp = S.sessions.filter((s) => s.k === 'speak')
-          return sp.length ? `最高 ${Math.max(...sp.map((s) => s.s))} 分・練口說也練聽力` : '跟著念，App 聽你說・練口說也練聽力'
+          return sp.length ? `最高 ${Math.max(...sp.map((s) => s.s))} 分・跟讀、辨音、問答，也練聽力` : '跟讀、辨音、問答，逐字評分・也練聽力'
         })()}</span></span>${ICON.chev}</button>
         <button class="qk qk-exam" data-go="#/exam"><span class="qk-ic">${ICON.doc}</span><span class="qk-t">模擬段考</span><span class="qk-s">${examBest.length ? `最高 ${Math.max(...examBest.map((s) => s.s))} 分` : '約 30 題・交卷前要檢查'}</span></button>
         <button class="qk qk-flash" data-go="#/flash"><span class="qk-ic">${ICON.bolt}</span><span class="qk-t">閃電挑戰</span><span class="qk-s">${S.flash.best ? `最高 ${S.flash.best} 題` : '60 秒反應力'}</span></button>
@@ -3368,7 +3368,7 @@ const SPEAK_ERR = {
   'asr-load': '辨識模型下載失敗，請檢查網路再試一次',
   'not-allowed': '沒有麥克風權限：請允許這個網站使用麥克風（iPhone、iPad：設定 → Safari → 麥克風；也要打開「設定 → 一般 → 鍵盤 → 聽寫」）',
   'service-not-allowed': '語音辨識沒有開：iPhone、iPad 請打開「設定 → 一般 → 鍵盤 → 聽寫」',
-  'no-speech': '沒有聽到聲音，請靠近一點再說一次',
+  'no-speech': '沒有收到聲音，請靠近麥克風再念一次',
   'audio-capture': '找不到麥克風',
   network: '語音辨識需要網路，請檢查網路',
 }
@@ -3487,10 +3487,14 @@ async function listen(onInterim, target) {
 // ── 網頁裡的語音辨識（預設）：錄下整句 → 在網頁裡辨識（asr.js）。沒有手機辨識的提示音、不會跟錄音搶麥克風、主畫面 App 也能用 ──
 // 辨識方式：local＝網頁裡辨識；sr＝手機內建語音辨識（設定在口說練習的開始畫面）
 const LOCAL_OK = !!(navigator.mediaDevices?.getUserMedia && window.WebAssembly && (window.AudioContext || window.webkitAudioContext))
-let LOCAL_FAILED = false // 模型下載失敗：這次開 App 期間改用手機內建
-const speakEngine = () => (LOCAL_OK && !(LOCAL_FAILED && SR) && (S.profile.speakEngine !== 'sr' || !SR) ? 'local' : SR ? 'sr' : '')
+// 只用網頁裡的辨識（沒有提示音）。手機內建的辨識會發出很大聲的提示音（使用者 10/8），所以就算模型下載失敗也不切過去；
+// 只有裝置跑不了網頁辨識（LOCAL_OK＝false）或自動測試指定時才用手機內建的
+const speakEngine = () => (LOCAL_OK && (S.profile.speakEngine !== 'sr' || !SR) ? 'local' : SR ? 'sr' : '')
 let ASR_MOD = null
 const getASR = async () => (ASR_MOD ||= (await import('./asr.js')).ASR)
+const asrReady = () => !!ASR_MOD?.ready
+// 這一次按麥克風用哪個：網頁辨識還沒準備好（模型下載中）就先等（'wait'），不用手機內建的（它的提示音很大聲，使用者 10/8 要求不要）
+const engineNow = () => (speakEngine() === 'local' && !asrReady() ? 'wait' : speakEngine())
 // 48k／44.1k → 16k（先平均再取樣，等於簡單的低通）
 function to16k(x, sr) {
   if (sr === 16000) return x
@@ -3627,8 +3631,8 @@ const speakUnits = () => Object.keys(SPEAK).filter((u) => myUnits().has(u))
 const spLv = (en, lv) => lv || (en.split(/\s+/).length <= 4 ? 1 : en.split(/\s+/).length <= 8 ? 2 : 3)
 // 基礎：只出易、中；標準：全部；挑戰：只出中、難
 const spLvOk = (lv, level) => (level === 'easy' ? lv <= 2 : level === 'hard' ? lv >= 2 : true)
-const SP_MODES = { read: '看字跟讀', blind: '不看字', pair: '對比', qa: '問答' }
-const SP_LEVELS = { easy: '基礎', std: '標準', hard: '挑戰' }
+const SP_MODES = { read: '句子跟讀', blind: '聽力複誦', pair: '辨識句意', qa: '基本問答' } // 後兩個就是會考聽力的大題名稱
+const SP_LEVELS = { easy: '初級', std: '中級', hard: '高級' }
 const SP_N = { read: 8, blind: 8, pair: 6, qa: 6 }
 // 題庫：read／blind＝句子；pair＝對比組（兩句只差一個音）；qa＝問答（App 問、學生自己答，答案不只一種）
 function speakPool(unit, mode = 'read', level = 'std') {
@@ -3657,7 +3661,7 @@ function speakScoreAny(targets, alts) {
   }
   return best
 }
-const spTitle = (sp) => `口說練習（${SP_MODES[sp.mode] || '看字跟讀'}${sp.level && sp.level !== 'std' ? '・' + SP_LEVELS[sp.level] : ''}）`
+const spTitle = (sp) => `口說練習（${SP_MODES[sp.mode] || '句子跟讀'}${sp.level && sp.level !== 'std' ? '・' + SP_LEVELS[sp.level] : ''}）`
 function viewSpeak() {
   RUN = null
   if (SP && !SP.over) return speakRun()
@@ -3667,21 +3671,20 @@ function viewSpeak() {
   let mode = SP_MODES[S.profile.speakMode] ? S.profile.speakMode : 'read'
   let level = SP_LEVELS[S.profile.speakLv] ? S.profile.speakLv : 'std'
   const MODE_DESC = {
-    read: '看著句子，先聽再跟著說。',
-    blind: '句子先藏起來，只聽聲音再跟著說，說完才看到句子。最能練段考聽力（例如 thirteen／thirty、this／these 聽得出來）。',
-    pair: '兩句只差一個音（thirteen／thirty、can／can\'t、bag／back）：先聽出是哪一句，再把它念出來。直接對應會考的「辨識句意」。',
-    qa: 'App 用英文問，你用英文回答，不看答案。人稱、be 動詞要自己換（問 you 答 I、問 she 答 she）。對應會考的「基本問答」。',
+    read: '顯示句子，先聽示範，再複誦；系統逐字評分。',
+    blind: '先不顯示句子，聽完示範後複誦，複誦後才顯示原文。訓練段考聽力的聽辨能力（例如 thirteen／thirty、this／these）。',
+    pair: '兩句僅差一個音（thirteen／thirty、can／can\'t、bag／back）：先選出播放的是哪一句，再念出該句。對應會考聽力第一部分。',
+    qa: '系統以英文提問，學生以英文作答，不看參考答案；人稱與 be 動詞需自行轉換。對應會考聽力第二部分。',
   }
-  const LV_DESC = { easy: '基礎：短句、基本考點，先建立信心。', std: '標準：每課全部的句子。', hard: '挑戰：只出長句和容易聽錯的。' }
+  const LV_DESC = { easy: '初級：短句與基本句型，適合剛開始練習。', std: '中級：各課全部的句子。', hard: '高級：長句與易混淆的發音。' }
   Sync.presence({ view: 'home' })
   setView(
     `<div class="page narrow speak-intro">
-      ${header('口說練習', '先聽，再跟著說。練口說，也練段考聽力。', '', true)}
+      ${header('口說練習', '聽示範、複誦、作答，系統逐字評分；同時訓練段考聽力。', '', true)}
       ${speakEngine() ? '' : '<div class="callout care"><b>這個瀏覽器不能用麥克風。</b>iPhone、iPad 請用 Safari 打開；電腦和 Android 請用 Chrome。</div>'}
       <div class="card sp-intro">
         <div class="sp-big-ic">${ICON.mic}</div>
-        ${LOCAL_OK && SR ? `<div class="seg small" id="sp-eng"><button data-eng="local" class="${speakEngine() === 'local' ? 'on' : ''}">沒有提示音</button><button data-eng="sr" class="${speakEngine() === 'sr' ? 'on' : ''}">手機內建辨識</button></div>` : ''}
-        ${speakEngine() === 'local' ? '<p class="muted sp-eng-desc">準備辨識模型…</p>' : speakEngine() === 'sr' ? '<p class="muted sp-eng-desc">用手機內建的語音辨識：反應比較快，但按麥克風時手機會發出提示音。</p>' : ''}
+        ${speakEngine() === 'local' && !asrReady() ? '<p class="muted small sp-eng-desc" aria-live="polite"></p>' : ''}
         <div class="seg" id="sp-mode">${Object.entries(SP_MODES).map(([k, v]) => `<button data-m="${k}" class="${mode === k ? 'on' : ''}">${v}</button>`).join('')}</div>
         <p class="muted sp-mode-desc">${MODE_DESC[mode]}</p>
         <div class="seg small" id="sp-lv">${Object.entries(SP_LEVELS).map(([k, v]) => `<button data-lv="${k}" class="${level === k ? 'on' : ''}">${v}</button>`).join('')}</div>
@@ -3691,10 +3694,10 @@ function viewSpeak() {
         <button class="btn primary big" data-act="go" ${speakEngine() ? '' : 'disabled'}>開始</button>
       </div>
       <ul class="sp-how">
-        <li>第一次會問能不能用麥克風，請按「允許」。</li>
-        <li>環境安靜一點，手機或平板離嘴巴近一點。</li>
-        <li>念錯的字會標成紅色，點一下可以聽那個字。</li>
-        <li>App 聽的是發音，不是拼字：人名不算分（灰色），同音字（例如 they're／there）、縮寫和完整寫法都算對。</li>
+        <li>第一次使用時瀏覽器會詢問麥克風權限，請選擇「允許」。</li>
+        <li>請在安靜的環境練習，裝置靠近嘴巴。</li>
+        <li>念錯的字以紅色標示，點一下可聽該字的發音。</li>
+        <li>評分依據發音而非拼字：人名不計分（灰色）；同音字（they're／there）、縮寫與完整寫法皆算正確。</li>
       </ul>
     </div>`,
   )
@@ -3723,12 +3726,6 @@ function viewSpeak() {
       $$('#sp-lv button').forEach((b) => b.classList.toggle('on', b === lv))
       $('.sp-lv-desc').textContent = LV_DESC[level]
     }
-    const en = e.target.closest('[data-eng]')
-    if (en) {
-      S.profile.speakEngine = en.dataset.eng
-      save()
-      return viewSpeak()
-    }
     if (e.target.closest('[data-act=go]') && speakEngine()) {
       SP = newSpeak(unit, mode, level)
       speakRun()
@@ -3736,15 +3733,16 @@ function viewSpeak() {
     const g = e.target.closest('[data-go]')
     if (g) go(g.dataset.go)
   })
-  // 網頁辨識：一打開就開始準備模型（第一次要下載約 28MB），顯示進度
-  if (speakEngine() === 'local') {
+  // 網頁辨識：一打開就在背景準備模型（第一次要下載約 28MB）。下載中只顯示一行小字，好了就不顯示；
+  // 還沒好之前按麥克風會先用手機內建的辨識（會有提示音），好了就自動換過去
+  if (speakEngine() === 'local' && !asrReady()) {
     const desc = (t) => {
       const d = $('.speak-intro .sp-eng-desc')
       if (d) d.textContent = t
     }
     getASR()
       .then((A) => {
-        const f = (p) => desc(p >= 1 ? '辨識模型準備好了：按麥克風時不會有提示音。' : `第一次使用要下載辨識模型（約 28MB，只要一次，建議用 Wi‑Fi）：${Math.round(p * 100)}%`)
+        const f = (p) => desc(p >= 1 ? '' : `第一次使用：正在下載辨識模型（約 28MB）${Math.round(p * 100)}%`)
         if (A.ready) return f(1)
         A.listeners.add(f)
         f(A.progress)
@@ -3752,7 +3750,7 @@ function viewSpeak() {
           .then(() => f(1))
           .finally(() => A.listeners.delete(f))
       })
-      .catch(() => desc(SR ? '辨識模型下載失敗（請檢查網路）；先用「手機內建辨識」也可以。' : '辨識模型下載失敗，請檢查網路後再打開一次。'))
+      .catch(() => desc('辨識模型下載失敗，請檢查網路（建議 Wi‑Fi）後再打開一次。'))
   }
 }
 function speakRun() {
@@ -3777,13 +3775,13 @@ function speakRun() {
         <section class="card sp-card${s.pair ? ' sp-card-pair' : ''}${s.qa ? ' sp-card-qa' : ''}">
           ${
             s.pair
-              ? `<div class="sp-ask">${pick == null ? '你聽到的是哪一句？' : pick === s.target ? '聽對了！現在念出這一句' : `不是這句。播的是 ${s.target ? 'B' : 'A'}，念出它`}</div>
+              ? `<div class="sp-ask">${pick == null ? '剛才播放的是哪一句？' : pick === s.target ? '正確。請念出這一句' : `播放的是 ${s.target ? 'B' : 'A'}，請念出 ${s.target ? 'B' : 'A'}`}</div>
           <div class="sp-pair">${[s.a, s.b]
             .map((x, k) => `<button type="button" class="sp-opt${pick == null ? '' : k === s.target ? ' ok' : k === pick ? ' bad' : ' dim'}" data-pick="${k}" ${pick == null ? '' : 'disabled'}><span class="sp-key">${'AB'[k]}</span><span class="sp-opt-en" lang="en">${r && k === s.target ? speakWordsHTML(r.words) : esc(x.en)}</span><span class="sp-opt-zh">${esc(x.zh)}</span></button>`)
             .join('')}</div>
           ${s.tip ? `<div class="sp-tip">${ICON.bulb}<span>${esc(s.tip)}</span></div>` : ''}`
               : s.qa
-                ? `<div class="sp-ask">用英文回答${peek || r ? '' : '（先不看答案）'}</div>
+                ? `<div class="sp-ask">請以英文回答${peek || r ? '' : '（先不看參考答案）'}</div>
           <div class="sp-en sp-q" lang="en">${esc(s.q)}</div>
           <div class="sp-zh">${esc(s.zh)}</div>
           ${r ? `<div class="sp-ans"><b>參考答案</b><span lang="en">${speakWordsHTML(r.words)}</span>${s.ans.filter((a) => a !== r.target).length ? `<small lang="en">也可以：${esc(s.ans.filter((a) => a !== r.target).slice(0, 3).join('　／　'))}</small>` : ''}</div>` : peek ? `<div class="sp-ans"><b>參考答案</b><span lang="en">${esc(s.ans[0])}</span>${s.ans.length > 1 ? `<small lang="en">也可以：${esc(s.ans.slice(1, 4).join('　／　'))}</small>` : ''}</div>` : ''}
@@ -3792,16 +3790,16 @@ function speakRun() {
                   ? `<div class="sp-en sp-hidden" aria-label="句子先藏起來">${s.en
                       .split(/\s+/)
                       .map((w) => `<i style="width:${Math.max(2, w.length) * 0.62}em"></i>`)
-                      .join('')}</div><div class="sp-zh muted">先聽，聽懂了就跟著說</div>`
+                      .join('')}</div><div class="sp-zh muted">先聽示範，再複誦</div>`
                   : `<div class="sp-en" lang="en">${r ? speakWordsHTML(r.words) : esc(s.en)}</div>
           <div class="sp-zh">${esc(s.zh)}</div>
           ${s.tip ? `<div class="sp-tip">${ICON.bulb}<span>${esc(s.tip)}</span></div>` : ''}`
           }
-          <div class="sp-listen"><button class="pill" data-act="play">${ICON.speaker}<span>${s.qa ? '聽問題' : '聽'}</span></button><button class="pill" data-act="slow">🐢<span>慢速</span></button>${hide || (s.qa && !peek && !r) ? `<button class="pill" data-act="peek">👀<span>${s.qa ? '看參考答案' : '看字'}</span></button>` : ''}</div>
+          <div class="sp-listen"><button class="pill" data-act="play">${ICON.speaker}<span>${s.qa ? '播放問題' : '播放示範'}</span></button><button class="pill" data-act="slow">🐢<span>慢速</span></button>${hide || (s.qa && !peek && !r) ? `<button class="pill" data-act="peek">👀<span>${s.qa ? '參考答案' : '顯示原文'}</span></button>` : ''}</div>
         </section>
         <div class="sp-mic-wrap">
-          <button class="sp-mic" data-act="mic" aria-label="${r ? '再說一次' : '開始說'}" ${s.pair && pick == null ? 'disabled' : ''}>${ICON.mic}</button>
-          <div class="sp-mic-label">${r ? '再說一次' : s.pair ? (pick == null ? '先選 A 或 B' : '點一下，念出那一句') : s.qa ? '點一下，用英文回答' : hide ? '聽完就跟著說' : '點一下，跟著說'}</div>
+          <button class="sp-mic" data-act="mic" aria-label="${r ? '再念一次' : '開始錄音'}" ${s.pair && pick == null ? 'disabled' : ''}>${ICON.mic}</button>
+          <div class="sp-mic-label">${r ? '再念一次' : s.pair ? (pick == null ? '請先選出聽到的句子' : '按下麥克風，念出該句') : s.qa ? '按下麥克風，以英文回答' : hide ? '聽完示範後，按下麥克風複誦' : '按下麥克風，複誦句子'}</div>
           <div class="sp-live" aria-live="polite"></div>
         </div>
         <section class="sp-result card" ${r ? '' : 'hidden'}>${r ? speakResultHTML(r) : ''}</section>
@@ -3855,12 +3853,21 @@ function speakRun() {
       if (L) return L.stop() // 再按一次＝說完了
       Voice.stop()
       mic.classList.add('on')
-      $('.sp-mic-label').textContent = '正在聽…說完會自動停'
+      $('.sp-mic-label').textContent = '錄音中，說完會自動停止'
       tell({ said: '', listening: 1 })
       const idx = SP.i
       const live = $('.sp-live')
       L = { stop() {} }
-      const engine = speakEngine()
+      const engine = engineNow()
+      if (engine === 'wait') {
+        mic.classList.remove('on')
+        $('.sp-mic-label').textContent = SP.res[SP.i] ? '再念一次' : '按下麥克風開始'
+        L = null
+        getASR()
+          .then((A) => A.load())
+          .catch(() => toast('辨識模型下載失敗，請檢查網路（建議 Wi‑Fi）再試一次', '⚠️'))
+        return toast(`辨識模型還在下載（${Math.round((ASR_MOD?.progress || 0) * 100)}%），好了再按一次`, '⏳')
+      }
       L = await (engine === 'local' ? listenLocal : listen)((t) => (live.textContent = t), s.qa ? s.ans[0] : tg.en)
       const { alts, err, blob, clash } = await L.done
       L = null
@@ -3868,15 +3875,10 @@ function speakRun() {
       // 念到一半就離開、換下一句：這次不算（不然分數會記到別句，或把畫面拉回口說）
       if (SP.over || SP.i !== idx || !mic.isConnected) return
       if (!alts.length) {
-        $('.sp-mic-label').textContent = SP.res[SP.i] ? '再說一次' : '點一下，跟著說'
+        $('.sp-mic-label').textContent = SP.res[SP.i] ? '再念一次' : '按下麥克風開始'
         $('.sp-live').textContent = ''
         if (clash) return toast('已經調整好，請再按一次麥克風說一次', '🎤')
-        // 網頁辨識的模型載入失敗（例如沒網路）：這次先改用手機內建的語音辨識
-        if (err === 'asr-load' && SR) {
-          LOCAL_FAILED = true
-          return toast('辨識模型下載失敗，先改用手機內建的辨識，請再按一次麥克風', '🎤')
-        }
-        return toast(SPEAK_ERR[err] || '沒聽清楚，請再說一次', '🎤')
+        return toast(SPEAK_ERR[err] || '沒有辨識到內容，請再念一次', '🎤')
       }
       const res = s.qa ? speakScoreAny(s.ans, alts) : speakScore(tg.en, alts)
       const prev = SP.res[SP.i]
@@ -3993,7 +3995,7 @@ document.addEventListener('click', async (e) => {
   }
 })
 function speakResultHTML(r) {
-  const msg = r.score >= 100 ? '完美！每個字都很清楚' : r.score >= 85 ? '很棒！只差一點點' : r.score >= 65 ? '不錯！紅色的字再念一次' : '先按「聽」，跟著節奏再念一次'
+  const msg = r.score >= 100 ? '全部正確，發音清楚' : r.score >= 85 ? '很好，只差一點' : r.score >= 65 ? '不錯，紅色的字再練一次' : '先播放示範，跟著節奏再念一次'
   const miss = r.words.filter((w) => !w.ok).map((w) => w.t.replace(/[^A-Za-z' -]/g, ''))
   return `<div class="sp-score ${r.score >= 85 ? 'ok' : r.score >= 65 ? 'care' : 'bad'}"><b>${r.score}</b><span>分</span></div>
     <div class="sp-res-t"><div class="sp-msg">${msg}</div><div class="sp-heard">我聽到：<span lang="en">${esc(r.heard)}</span></div>
@@ -5570,7 +5572,7 @@ function viewWatch(sid, keepScroll = false) {
       ${
         sp
           ? `<section class="card watch-q watch-sp${spCls ? ' answered ' + spCls : ''}${spKey && spKey !== watchFresh ? ' fresh' : ''}">
-              <div class="wq-h"><span class="ld-dot on"></span>${l.listening ? '正在說…' : l.said ? `${l.sc} 分` : '準備跟著說'}<small>口說練習</small></div>
+              <div class="wq-h"><span class="ld-dot on"></span>${l.listening ? '錄音中…' : l.said ? `${l.sc} 分` : '準備複誦'}<small>口說練習</small></div>
               <div class="sp-en" lang="en">${l.said ? speakWordsHTML(speakScore(l.text, [l.said]).words) : esc(l.text)}</div>
               ${l.said ? `<div class="sp-heard">聽到：<span lang="en">${esc(l.said)}</span></div>` : ''}${l.rk && l.said ? `<button class="pill sp-mine" data-rec="${sid}|${l.rk}">${ICON.play}<span>聽學生念的</span></button>` : ''}
             </section>`
@@ -6329,4 +6331,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, takeMix, bookPick, get SP() { return SP } }
+window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, get SP() { return SP } }

@@ -19,11 +19,17 @@ with sync_playwright() as p:
     ctx.add_init_script(SEED)
     A = ctx.pages[0] if ctx.pages else ctx.new_page()
     A.on("pageerror", lambda e: errors.append(f"A pageerror: {e}"))
+    # 設定檔是沿用的（模型才不用每次重新下載），但 HTTP 快取要清掉，不然會拿到舊的程式
+    ctx.new_cdp_session(A).send("Network.clearBrowserCache")
     A.goto(URL + "#/speak")
     A.wait_for_selector(".speak-intro")
     check(A.evaluate("window.__app.speakEngine()") == "local", "default engine is the in-page recognizer (no beep)")
-    check(A.locator('#sp-eng [data-eng="local"].on').count() == 1, "engine switch shows 沒有提示音 selected")
-    check(wait_until(lambda: "準備好了" in txt(A, ".sp-eng-desc"), 240), "model downloaded and ready")
+    check(A.locator("#sp-eng").count() == 0, "no engine switch on the intro (downloads in the background)")
+    check(wait_until(lambda: A.evaluate("window.__app.asrReady()"), 240), "model downloaded and ready in the background")
+    check(A.evaluate("window.__app.engineNow()") == "local", "mic uses the in-page recognizer once ready (never the beeping one)")
+    dev = A.evaluate("(async () => (await import('./asr.js')).ASR.device)()")
+    print("asr device", dev, "webgpu available:", A.evaluate("!!navigator.gpu"))
+    check(dev in ("webgpu", "wasm"), f"model runs on {dev}")
     # 直接跑一次：假的麥克風念 "Those are my pencils."
     t0 = time.time()
     heard = A.evaluate("""async () => {
@@ -41,12 +47,16 @@ with sync_playwright() as p:
     A.click("[data-act=mic]")
     check(wait_until(lambda: A.locator(".sp-score").count() == 1, 30), "UI flow shows a score")
     check(A.locator('[data-act="mine"]').count() == 1, "student can play own recording")
-    # 切回手機內建辨識
     A.locator("[data-act=close]").click()
+    # 強制走 CPU（wasm）那條路也要能辨識（沒有 WebGPU 的手機）
+    A.evaluate("localStorage.setItem('g7review:asr', 'wasm')")
     A.goto(URL + "#/speak")
-    A.wait_for_selector("#sp-eng")
-    A.click('#sp-eng [data-eng="sr"]')
-    check(A.evaluate("window.__app.speakEngine()") == "sr" and "提示音" in txt(A, ".sp-eng-desc"), "can switch back to the built-in recognizer")
-    A.click('#sp-eng [data-eng="local"]')
+    A.reload()  # 模型是整頁只載入一次，要重新整理才會走 wasm
+    A.wait_for_selector(".speak-intro")
+    check(wait_until(lambda: A.evaluate("window.__app.asrReady()"), 240), "wasm fallback loads")
+    dev2 = A.evaluate("(async () => (await import('./asr.js')).ASR.device)()")
+    heard2 = A.evaluate("""async () => { const L = await window.__app.listenLocal(); const r = await L.done; return r.alts }""")
+    check(dev2 == "wasm" and bool(heard2), f"wasm fallback recognizes ({dev2}: {heard2})")
+    A.evaluate("localStorage.removeItem('g7review:asr')")
     ctx.close()
 report()

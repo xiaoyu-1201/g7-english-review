@@ -129,7 +129,7 @@ with sync_playwright() as p:
     A.wait_for_selector(".sp-card")
     A.evaluate("() => window.__say = ''")
     A.click("[data-act=mic]")
-    check(wait_until(lambda: "沒有聽到聲音" in txt(A, "#toast")), "no-speech message")
+    check(wait_until(lambda: "沒有收到聲音" in txt(A, "#toast")), "no-speech message")
     # 念到一半按「跳過」：這次的分數不能記到下一句
     time.sleep(0.4)
     A.evaluate("() => window.__say = document.querySelector('.sp-en').textContent")
