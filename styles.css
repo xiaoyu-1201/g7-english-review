@@ -196,6 +196,18 @@ svg .fill {
 .page.narrow {
   max-width: 760px;
 }
+/* 手機：上方的留白縮小（使用者 10/8：灰色那邊太寬） */
+@media (max-width: 480px) {
+  .page {
+    padding-top: calc(env(safe-area-inset-top) + 8px);
+  }
+  .lg-head {
+    margin: 0 4px 16px;
+  }
+  .back {
+    margin-bottom: 2px;
+  }
+}
 .lg-head {
   margin: 8px 4px 22px;
 }
