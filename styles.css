@@ -196,7 +196,7 @@ svg .fill {
 .page.narrow {
   max-width: 760px;
 }
-/* 手機：上方的留白縮小（使用者 10/8：灰色那邊太寬） */
+/* 手機：上方的留白縮小（使用者 10/8：灰色那邊太寬）；有「返回」的頁面，返回和標題併成一列（像 iOS 導覽列） */
 @media (max-width: 480px) {
   .page {
     padding-top: calc(env(safe-area-inset-top) + 8px);
@@ -206,6 +206,32 @@ svg .fill {
   }
   .back {
     margin-bottom: 2px;
+  }
+  .lg-head:has(> .back) {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 4px;
+    align-items: start;
+    margin-bottom: 12px;
+  }
+  .lg-head:has(> .back) .back {
+    margin: 0 0 0 -6px;
+    padding: 2px 6px;
+    min-height: 29px; /* 和 24px 的標題對齊 */
+  }
+  .lg-head:has(> .back) .back span {
+    display: none;
+  }
+  .lg-head:has(> .back) h1 {
+    font-size: 24px;
+    line-height: 1.2;
+  }
+  .lg-head:has(> .back) .lg-sub {
+    margin-top: 2px;
+    font-size: 14px;
+  }
+  .lg-head:has(> .back) .lg-row {
+    min-width: 0;
   }
 }
 .lg-head {
@@ -2524,6 +2550,17 @@ ul.plain b {
 .tabbar a svg {
   width: 26px;
   height: 26px;
+}
+.tabbar a {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* 手機在 Safari 裡：底部工具列附近的觸控區會被瀏覽器拿走（使用者 10/8：分頁按不下去），按鈕往上抬 */
+@media (max-width: 480px) and (display-mode: browser) {
+  .tabbar {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
 }
 .tabbar a.on {
   color: var(--blue);
