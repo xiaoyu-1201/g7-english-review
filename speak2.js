@@ -129,7 +129,7 @@ export const SPEAK_QA = {
     ['Where is my eraser?', ["It's under the desk.", "It's in the box.", "It's on the table.", 'It is under your book.', "It's in your bag."], '我的橡皮擦在哪裡？', '回答位置：It\'s ＋ 介系詞 ＋ 地方', 2, { hint: '橡皮擦在書桌下面（under the desk）' }],
     ["What's this?", ["It's a pen.", "It's a marker.", "It's an eraser.", 'It is a pen.', "It's a notebook."], '這是什麼？', 'It\'s a／an…', 1, { fig: { k: 'pic', rows: ['🖊️'], bg: 'plain' } }],
     ['Are these your notebooks?', ['Yes, they are.', "No, they aren't.", 'No, they are not.'], '這些是你的筆記本嗎？', 'these → they', 2, { fig: { k: 'pic', rows: ['📒📒 ✔'], bg: 'plain' }, hint: '是你的' }],
-    ['What are those?', ['They are my books.', "They're comic books.", "They're markers.", 'They are pencils.'], '那些是什麼？', 'those → They\'re ＋ 複數', 2, { fig: { k: 'pic', rows: ['📚📚📚'], bg: 'room' } }],
+    ['What are those?', ['They are books.', "They're books.", 'They are my books.', "They're comic books.", 'They are pencils.'], '那些是什麼？', 'those → They\'re ＋ 複數', 2, { fig: { k: 'pic', rows: ['📚📚📚'], bg: 'room' } }],
     ['Is that your bag?', ["No, it isn't. It's Amy's.", "No, it isn't.", 'Yes, it is.'], '那是你的袋子嗎？', 'that → it', 1, { fig: { k: 'pic', rows: ['🎒 Amy'], bg: 'plain' }, hint: '不是你的，是 Amy 的' }],
     ['Where are the cats?', ["They're behind the sofa.", 'They are under the bed.', "They're on the sofa.", 'They are in the box.'], '貓在哪裡？', '複數 → They\'re', 2, { fig: { k: 'pic', rows: ['🐱🐱', '🛋️'], bg: 'room' }, hint: '貓在沙發後面（behind）' }],
     ['Is your pencil box blue?', ["No, it isn't. It's red.", "No, it isn't.", 'Yes, it is.'], '你的鉛筆盒是藍色的嗎？', '', 2, { fig: { k: 'pic', rows: ['🟥 ✏️'], bg: 'plain' }, hint: '鉛筆盒是紅色的' }],
@@ -167,7 +167,7 @@ export const SPEAK_QA = {
     ['There are three monkeys and one lion. How many monkeys are there?', ['There are three.', 'Three.', 'There are three monkeys.'], '有三隻猴子和一隻獅子。猴子有幾隻？', '', 2, { fig: { k: 'pic', rows: ['🐒🐒🐒', '🦁'], bg: 'grass' } }],
     ['How many days are there in a week?', ['There are seven.', 'Seven.', 'There are seven days.', 'There are seven days in a week.'], '一個星期有幾天？', '', 2, { fig: { k: 'cal', mon: 'This Week', first: 0, days: 7 } }],
     ['Is there any milk in the fridge?', ['Yes, there is.', "No, there isn't.", 'No, there is not.'], '冰箱裡有牛奶嗎？', 'milk 不可數 → is', 2, { fig: { k: 'pic', rows: ['🥛'], bg: 'room' }, hint: '有' }],
-    ["What's in the river?", ['There is a fish in the river.', 'There is a fish.', 'There are some fish.', 'There are some fish in the river.', 'There is an elephant.'], '河裡有什麼？', 'There is／are…', 3, { fig: { k: 'pic', rows: ['🐟'], bg: 'water' } }],
+    ["What's in the river?", ['There is a fish in the river.', 'There is a fish.', 'A fish.', 'There are some fish.', 'There are some fish in the river.'], '河裡有什麼？', 'There is／are…', 3, { fig: { k: 'pic', rows: ['🐟'], bg: 'water' } }],
     ['Are there any snakes in the Bug House?', ["No, there aren't.", "No, there aren't any snakes.", 'Yes, there are.'], '昆蟲館裡有蛇嗎？', '', 3, { fig: { k: 'pic', rows: ['🐛🐞🦋'], bg: 'grass' }, hint: '只有蟲，沒有蛇' }],
   ],
 }
