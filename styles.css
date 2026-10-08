@@ -5109,27 +5109,35 @@ ul.plain b {
   line-height: 1.4;
   color: var(--label2);
 }
+/* 標籤放在控制項上面、置中（側邊標籤在置中版面裡看起來很突兀） */
+.sp-modes,
+.sp-field {
+  width: 100%;
+  align-self: stretch;
+}
 .sp-field {
   display: grid;
-  grid-template-columns: 36px 1fr;
-  align-items: center;
   gap: 8px;
-  margin-top: 10px;
-  text-align: left;
+  justify-items: center;
+  margin-top: 6px;
 }
 .sp-label {
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--label2);
 }
 .seg.full,
 .sp-intro .seg.full {
   display: flex;
-  width: auto;
-  justify-self: stretch;
+  width: 100%;
   min-width: 0;
   margin: 0;
   box-sizing: border-box;
+}
+.sp-field .chips-row {
+  width: 100%;
+  justify-content: flex-start;
 }
 .seg.full button {
   flex: 1;
@@ -5163,8 +5171,11 @@ ul.plain b {
   color: #fff;
 }
 .sp-intro .sp-mode-desc {
-  margin: 0 0 4px;
+  margin: -4px 0 2px;
   min-height: 1.4em;
+}
+.sp-intro .sp-lv-desc {
+  margin: -6px 0 0;
 }
 .sp-intro .sp-n {
   margin: 12px 0 10px;
