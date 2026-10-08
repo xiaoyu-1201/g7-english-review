@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.5（10/8）'
+const VERSION = '2.14.6（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -2006,9 +2006,16 @@ function viewHome() {
         <button class="qk qk-notes" data-go="#/notes"><span class="qk-ic">${ICON.notes}</span><span class="qk-t">重點總整理</span><span class="qk-s">考前一頁看完</span></button>
       </section>
 
-      ${LESSONS.filter((L) => L.modules.some(modOpen)).map(
-        (L, i, arr) => `${openExams().length > 1 && L.exam !== arr[i - 1]?.exam ? `<h2 class="exam-h">${esc(EXAMS.find((e) => e.id === L.exam)?.title || '')}</h2>` : ''}<section class="lesson">
-          <div class="sec-h"><div><h2>${esc(L.title)}</h2><p>${esc(lessonSub(L))}</p></div>${L.modules.every(modOpen) ? `<button class="link" data-plan="${L.id}">上課流程</button>` : ''}</div>
+      ${LESSONS.filter((L) => L.modules.some(modOpen)).map((L, i, arr) => {
+        // 一堂課全部做完就收起來（可以點開；點過的狀態會記住）
+        const mods = L.modules.filter(modOpen)
+        const stats = mods.map((m) => moduleStats(m))
+        const allDone = stats.every((s) => s.done >= s.total)
+        const folded = S.ui?.fold?.[L.id] ?? allDone
+        const mastered = stats.reduce((n, s) => n + s.mastered, 0)
+        const total = stats.reduce((n, s) => n + s.total, 0)
+        return `${openExams().length > 1 && L.exam !== arr[i - 1]?.exam ? `<h2 class="exam-h">${esc(EXAMS.find((e) => e.id === L.exam)?.title || '')}</h2>` : ''}<section class="lesson${folded ? ' folded' : ''}" data-lesson="${L.id}">
+          <div class="sec-h"><button type="button" class="lesson-h" data-fold="${L.id}" aria-expanded="${!folded}"><span class="fold-chev">${ICON.chev}</span><span><h2>${esc(L.title)}</h2><p>${folded ? `${mods.length} 個單元・精熟 ${mastered}／${total}${allDone ? '・已完成' : ''}` : esc(lessonSub(L))}</p></span></button>${L.modules.every(modOpen) ? `<button class="link" data-plan="${L.id}">上課流程</button>` : ''}</div>
           <div class="mods">${L.modules
             .filter(modOpen)
             .map((mid) => {
@@ -2025,14 +2032,14 @@ function viewHome() {
               </button>`
             })
             .join('')}</div>
-        </section>`,
-      ).join('')}
+        </section>`
+      }).join('')}
       ${MOD_ORDER.some((m) => !modOpen(m)) ? '<p class="locked-note">🔒 其他課程：老師上課後開放</p>' : ''}
 
-      <section class="card checklist-card">
-        <div class="sec-h"><div><h2>交卷前 30 秒檢查</h2><p>每次寫完考卷，照順序看一遍。</p></div></div>
+      <details class="card checklist-card fold-card">
+        <summary><div class="sec-h"><div><h2>交卷前 30 秒檢查</h2><p>每次寫完考卷，照順序看一遍。</p></div><span class="fold-chev">${ICON.chev}</span></div></summary>
         <ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>
-      </section>
+      </details>
       <p class="foot">內容依翰林版七上課本範圍自編（不含課本原文）· 版本 ${VERSION}</p>
     </div>`,
   )
@@ -2046,6 +2053,15 @@ function viewHome() {
     if (r) return go('#/run/' + encodeURIComponent(r.dataset.resume))
     const p = e.target.closest('[data-plan]')
     if (p) return planSheet(p.dataset.plan)
+    const f = e.target.closest('[data-fold]')
+    if (f) {
+      const sec = f.closest('.lesson')
+      const folded = sec.classList.toggle('folded')
+      f.setAttribute('aria-expanded', !folded)
+      ;((S.ui ||= {}).fold ||= {})[f.dataset.fold] = folded
+      save()
+      return
+    }
     if (e.target.closest('[data-plan-more]')) {
       PLAN_OPEN = !PLAN_OPEN
       $('.plan-card').outerHTML = planHTML()
@@ -2957,13 +2973,16 @@ function viewStats() {
 
       ${badgesHTML()}
 
-      <section class="card">
-        <div class="sec-h"><div><h2>單元精熟度</h2><p>最後一次作答答對 ＝ 精熟。</p></div></div>
+      <details class="card fold-card">
+        <summary><div class="sec-h"><div><h2>單元精熟度</h2><p>${(() => {
+          const ss = openMods().map(moduleStats)
+          return `精熟 ${ss.reduce((n, s) => n + s.mastered, 0)}／${ss.reduce((n, s) => n + s.total, 0)} 題・最後一次作答答對 ＝ 精熟`
+        })()}</p></div><span class="fold-chev">${ICON.chev}</span></div></summary>
         <div class="list flat">${openMods().map((mid) => {
           const s = moduleStats(mid)
           return `<button class="row" data-mod="${mid}"><span class="row-ic">${MODULES[mid].icon}</span><span class="row-t">${esc(MODULES[mid].title)} <small class="inl">${esc(MODULES[mid].unit)}</small><span class="mini-bar"><i style="width:${(s.mastered / s.total) * 100}%"></i></span></span><span class="row-r">${s.mastered}/${s.total}</span>${s.best ? stars(s.best) : '<span class="stars-ph"></span>'}</button>`
         }).join('')}</div>
-      </section>
+      </details>
 
       ${
         sess.length

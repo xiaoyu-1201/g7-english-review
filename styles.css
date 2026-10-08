@@ -781,6 +781,80 @@ button.row:active {
 .lesson {
   margin-bottom: 30px;
 }
+/* 收合（2.14.6）：堂的標題可以點開／收起；手機上單元卡片改成一列一列 */
+.lesson-h {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  min-width: 0;
+  flex: 1;
+}
+.lesson-h h2 {
+  margin: 0;
+}
+.lesson-h p {
+  margin: 2px 0 0;
+}
+.fold-chev {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 4px;
+  color: var(--label3);
+  transition: transform 0.2s;
+}
+.fold-chev svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.lesson:not(.folded) .lesson-h .fold-chev {
+  transform: rotate(90deg);
+}
+.lesson.folded .mods {
+  display: none;
+}
+.lesson.folded {
+  margin-bottom: 18px;
+}
+details.fold-card > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.fold-card > summary::-webkit-details-marker {
+  display: none;
+}
+details.fold-card > summary .sec-h {
+  margin-bottom: 0;
+  align-items: center;
+}
+details.fold-card[open] > summary .sec-h {
+  margin-bottom: 14px;
+}
+details.fold-card[open] > summary .fold-chev {
+  transform: rotate(90deg);
+}
+@media (max-width: 480px) {
+  .mods {
+    gap: 8px;
+  }
+  .mod {
+    padding: 12px 14px;
+    gap: 12px;
+    border-radius: var(--r-md);
+  }
+  .mod .eyebrow {
+    display: none;
+  }
+  .mod-bar {
+    margin-top: 6px;
+  }
+}
 .mods {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
