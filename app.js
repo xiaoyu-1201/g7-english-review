@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.7（10/8）'
+const VERSION = '2.14.8（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -2518,7 +2518,7 @@ function buildExam(exId) {
 }
 // 第一冊會考模擬：整冊混合、全部選擇題；大題比照會考（聽力三部分、單題、克漏字、閱讀、圖表）
 function buildFinal(ex) {
-  const pool = examPool(ex)
+  const pool = examPool(ex).filter((i) => i.t === 'mcq') // 會考全部是選擇題：題組裡的填空、改寫不出
   const { take, inOrder, has, P, listen } = examTools(pool)
   const all = (k) => EXAMS.filter((e) => !e.kind).flatMap((e) => e[k]).filter(has)
   const clozeId = pick(all('cloze'))
@@ -2559,9 +2559,12 @@ function viewExam() {
       `<div class="page narrow">
         ${header('模擬段考', '', '', true)}
         <div class="card exam-intro">
-          <div class="exam-ic">${ICON.doc}</div>
-          ${exs.length > 1 ? `<div class="seg" id="ex-pick">${exs.map((e) => `<button data-ex="${e.id}" class="${e.id === pickId ? 'on' : ''}">${esc(e.kind ? '會考模擬' : e.title)}</button>`).join('')}</div>` : ''}
-          <p class="muted ex-range">範圍：${esc(ex.range)}</p>
+          ${(() => {
+            const hist = S.sessions.filter((s) => s.k === 'exam' && (s.ex || 'e1') === ex.id)
+            const bestS = hist.length ? Math.max(...hist.map((s) => s.s)) : 0
+            return `<div class="sp-hero"><div class="exam-ic">${ICON.doc}</div><div class="sp-hero-t"><b>${hist.length ? `最高 ${bestS} 分・考過 ${hist.length} 次` : '還沒考過這一回'}</b><small class="ex-range">範圍：${esc(ex.range)}${hist.length ? `・最近一次 ${hist[hist.length - 1].s} 分` : ''}</small></div></div>`
+          })()}
+          ${exs.length > 1 ? `<div class="seg full" id="ex-pick">${exs.map((e) => `<button data-ex="${e.id}" class="${e.id === pickId ? 'on' : ''}">${esc(e.kind ? '會考模擬' : e.title)}</button>`).join('')}</div>` : ''}
           ${
             final
               ? `<h2>約 35 題，全部選擇題，比照會考</h2>
@@ -2810,10 +2813,8 @@ function viewFlash() {
       `<div class="page narrow">
         ${header('閃電挑戰', '', '', true)}
         <div class="card flash-intro">
-          <div class="flash-ic">${ICON.bolt}</div>
-          <h2>60 秒，答對越多越好</h2>
+          <div class="sp-hero"><div class="flash-ic">${ICON.bolt}</div><div class="sp-hero-t"><b>${S.flash.best ? `最高紀錄 ${S.flash.best} 題` : '60 秒，答對越多越好'}</b><small>${S.flash.best ? `60 秒快問快答・${S.sessions.filter((s) => s.k === 'flash').length} 回` : '還沒玩過'}</small></div></div>
           <p class="muted">be 動詞、a／an、名詞複數、所有格，混在一起快問快答。答錯不扣分，但連對會有加乘的感覺 🔥</p>
-          ${S.flash.best ? `<div class="flash-best">最高紀錄 <b>${S.flash.best}</b> 題</div>` : ''}
           ${FL?.over ? flashResultHTML() : ''}
           <button class="btn primary big" data-act="go">${FL?.over ? '再玩一次' : '開始'}</button>
         </div>
@@ -3746,8 +3747,14 @@ function viewSpeak() {
       ${header('口說練習', '聽示範、複誦、作答，系統逐字評分；同時訓練段考聽力。', '', true)}
       ${speakEngine() ? '' : '<div class="callout care"><b>這個瀏覽器不能用麥克風。</b>iPhone、iPad 請用 Safari 打開；電腦和 Android 請用 Chrome。</div>'}
       <div class="card sp-intro">
-        <div class="sp-big-ic">${ICON.mic}</div>
-        ${speakEngine() === 'local' && !asrReady() ? `<p class="muted small sp-eng-desc" aria-live="polite">${asrAllowed() ? '' : `首次使用需下載語音辨識模型（約 ${asrSizeMB()}MB，建議 Wi‑Fi）。<button type="button" class="link" data-act="asrdl">下載</button>`}</p>` : ''}
+        <div class="sp-hero">
+          <div class="sp-big-ic">${ICON.mic}</div>
+          <div class="sp-hero-t">
+            <b>${sess.length ? `最高 ${best} 分・練過 ${sess.reduce((n, s) => n + (s.n || 0), 0)} 句` : '先聽示範，再開口'}</b>
+            <small>${sess.length ? `最近一次 ${sess[sess.length - 1].s} 分${sess[sess.length - 1].weak?.length ? `・要再練：${esc(sess[sess.length - 1].weak.slice(0, 3).join('、'))}` : '・發音都很清楚'}` : '每回約 3 分鐘；念錯的字會標成紅色，點一下可以聽'}</small>
+            ${speakEngine() === 'local' && !asrReady() ? `<p class="muted small sp-eng-desc" aria-live="polite">${asrAllowed() ? '' : `首次使用需下載語音辨識模型（約 ${asrSizeMB()}MB，建議 Wi‑Fi）。<button type="button" class="link" data-act="asrdl">下載</button>`}</p>` : ''}
+          </div>
+        </div>
         <div class="sp-modes" id="sp-mode" role="radiogroup" aria-label="練習方式">${Object.entries(SP_MODES)
           .map(([k, v]) => `<button type="button" role="radio" aria-checked="${mode === k}" data-m="${k}" class="sp-mode${mode === k ? ' on' : ''}"><span class="sp-mode-ic">${MODE_IC[k]}</span><b>${v}</b><small>${MODE_SHORT[k]}</small></button>`)
           .join('')}</div>
