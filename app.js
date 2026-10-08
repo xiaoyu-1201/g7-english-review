@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.4（10/8）'
+const VERSION = '2.14.5（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -2046,6 +2046,11 @@ function viewHome() {
     if (r) return go('#/run/' + encodeURIComponent(r.dataset.resume))
     const p = e.target.closest('[data-plan]')
     if (p) return planSheet(p.dataset.plan)
+    if (e.target.closest('[data-plan-more]')) {
+      PLAN_OPEN = !PLAN_OPEN
+      $('.plan-card').outerHTML = planHTML()
+      return
+    }
     const n = e.target.closest('[data-next]')
     if (n) return n.dataset.next.startsWith('mod:') ? startModule(n.dataset.next.slice(4)) : go(n.dataset.next)
     if (e.target.closest('[data-warm]')) return startRun('warm', '每日暖身', warmIds())
@@ -2286,13 +2291,18 @@ function planHTML() {
   const done = tasks.filter((t) => t.done).length
   const sub =
     daysLeft == null ? '到「設定」填段考日期，會自動把單元分配到每一天。' : daysLeft > 0 ? `距離段考 ${daysLeft} 天：照這個進度剛剛好。錯題每天先做，隔天再做記得更牢。` : daysLeft === 0 ? '今天段考！看重點、記得檢查清單。' : '段考結束了，辛苦了！'
+  // 預設收合：只列還沒做的前 3 項（做完的收起來），點「顯示全部」才展開（手機上不用一直滑）
+  const shown = PLAN_OPEN ? tasks : tasks.filter((t) => !t.done).slice(0, 3)
+  const hidden = tasks.length - shown.length
   return `<section class="card plan-card">
     <div class="sec-h"><div><h2>今天的任務</h2><p>${esc(sub)}</p></div><span class="plan-count${done === tasks.length ? ' all' : ''}">${done === tasks.length ? '全部完成 🎉' : `${done}／${tasks.length}`}</span></div>
-    <div class="list flat">${tasks
+    <div class="list flat">${shown
       .map((t) => `<button class="row task${t.done ? ' done' : ''}" ${t.warm ? 'data-warm' : t.mod ? `data-mod="${t.mod}"` : `data-go="${t.go}"`}><span class="chk-box">${ICON.check}</span><span class="row-t">${esc(t.t)}<small>${esc(t.sub)}</small></span>${ICON.chev}</button>`)
       .join('')}</div>
+    ${hidden > 0 ? `<button class="link plan-more" data-plan-more aria-expanded="false">顯示全部 ${tasks.length} 項${done ? `（含做完的 ${done} 項）` : ''}</button>` : PLAN_OPEN && tasks.length > 3 ? '<button class="link plan-more" data-plan-more aria-expanded="true">收合</button>' : ''}
   </section>`
 }
+let PLAN_OPEN = false
 
 // 下一步建議：錯題（間隔複習）優先 → 還沒做完的單元 → 模擬段考
 function nextStepHTML(book) {

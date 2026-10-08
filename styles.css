@@ -2973,6 +2973,17 @@ ul.plain b {
   color: var(--green);
   font-size: 17px;
 }
+/* 今天的任務預設收合：只列還沒做的前幾項（手機不用一直滑） */
+.plan-more {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--blue);
+  text-align: center;
+}
 .row.task .chk-box {
   margin-top: 0;
 }
