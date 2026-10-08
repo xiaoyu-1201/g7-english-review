@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.2（10/8）'
+const VERSION = '2.14.3（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3497,6 +3497,18 @@ const speakEngine = () => (LOCAL_OK && (S.profile.speakEngine !== 'sr' || !SR) ?
 let ASR_MOD = null
 const getASR = async () => (ASR_MOD ||= (await import('./asr.js')).ASR)
 const asrReady = () => !!ASR_MOD?.ready
+// 這台下載過模型了嗎（下載過才會自動補下載；第一次要先問，因為使用者的網路有流量上限）
+const asrAllowed = () => lsGet('g7review:asrok') === '1'
+const asrSizeMB = () => (navigator.gpu && lsGet('g7review:asr') !== 'wasm' ? 55 : 28)
+// 第一次下載前先問一次
+function askASRDownload(then) {
+  confirmSheet(`下載語音辨識模型（約 ${asrSizeMB()}MB）？`, '口說練習在裝置上辨識你念的句子，不會有提示音。只需下載一次，之後存在瀏覽器裡；建議連 Wi‑Fi 時下載。', '下載', () => {
+    try {
+      localStorage.setItem('g7review:asrok', '1')
+    } catch {}
+    then?.()
+  })
+}
 // 這一次按麥克風用哪個：網頁辨識還沒準備好（模型下載中）就先等（'wait'），不用手機內建的（它的提示音很大聲，使用者 10/8 要求不要）
 const engineNow = () => (speakEngine() === 'local' && !asrReady() ? 'wait' : speakEngine())
 // 48k／44.1k → 16k（先平均再取樣，等於簡單的低通）
@@ -3691,6 +3703,8 @@ function viewSpeak() {
     qa: '系統以英文提問，學生以英文作答，不看參考答案；人稱與 be 動詞需自行轉換。對應會考聽力第二部分。',
   }
   const LV_DESC = { easy: '初級：短句與基本句型，適合剛開始練習。', std: '中級：各課全部的句子。', hard: '高級：長句與易混淆的發音。' }
+  const MODE_SHORT = { read: '看句子，聽示範後複誦', blind: '不看句子，聽完再複誦', pair: '聽出只差一個音的句子', qa: '聽問題，用英文回答' }
+  const MODE_IC = { read: '📖', blind: '🎧', pair: '🔀', qa: '💬' }
   Sync.presence({ view: 'home' })
   setView(
     `<div class="page narrow speak-intro">
@@ -3698,12 +3712,14 @@ function viewSpeak() {
       ${speakEngine() ? '' : '<div class="callout care"><b>這個瀏覽器不能用麥克風。</b>iPhone、iPad 請用 Safari 打開；電腦和 Android 請用 Chrome。</div>'}
       <div class="card sp-intro">
         <div class="sp-big-ic">${ICON.mic}</div>
-        ${speakEngine() === 'local' && !asrReady() ? '<p class="muted small sp-eng-desc" aria-live="polite"></p>' : ''}
-        <div class="seg" id="sp-mode">${Object.entries(SP_MODES).map(([k, v]) => `<button data-m="${k}" class="${mode === k ? 'on' : ''}">${v}</button>`).join('')}</div>
-        <p class="muted sp-mode-desc">${MODE_DESC[mode]}</p>
-        <div class="seg small" id="sp-lv">${Object.entries(SP_LEVELS).map(([k, v]) => `<button data-lv="${k}" class="${level === k ? 'on' : ''}">${v}</button>`).join('')}</div>
-        <p class="muted sp-lv-desc">${LV_DESC[level]}</p>
-        <div class="seg" id="sp-unit">${[...speakUnits(), 'all'].map((u) => `<button data-u="${u}" class="${u === unit ? 'on' : ''}">${u === 'all' ? '全部' : u}</button>`).join('')}</div>
+        ${speakEngine() === 'local' && !asrReady() ? `<p class="muted small sp-eng-desc" aria-live="polite">${asrAllowed() ? '' : `首次使用需下載語音辨識模型（約 ${asrSizeMB()}MB，建議 Wi‑Fi）。<button type="button" class="link" data-act="asrdl">下載</button>`}</p>` : ''}
+        <div class="sp-modes" id="sp-mode" role="radiogroup" aria-label="練習方式">${Object.entries(SP_MODES)
+          .map(([k, v]) => `<button type="button" role="radio" aria-checked="${mode === k}" data-m="${k}" class="sp-mode${mode === k ? ' on' : ''}"><span class="sp-mode-ic">${MODE_IC[k]}</span><b>${v}</b><small>${MODE_SHORT[k]}</small></button>`)
+          .join('')}</div>
+        <p class="muted small sp-mode-desc">${MODE_DESC[mode]}</p>
+        <div class="sp-field"><span class="sp-label">難度</span><div class="seg full" id="sp-lv">${Object.entries(SP_LEVELS).map(([k, v]) => `<button data-lv="${k}" class="${level === k ? 'on' : ''}">${v}</button>`).join('')}</div></div>
+        <p class="muted small sp-lv-desc">${LV_DESC[level]}</p>
+        <div class="sp-field"><span class="sp-label">範圍</span><div class="chips-row" id="sp-unit">${['all', ...speakUnits()].map((u) => `<button data-u="${u}" class="${u === unit ? 'on' : ''}">${u === 'all' ? '全部' : u}</button>`).join('')}</div></div>
         <p class="muted sp-n">每回 ${SP_N[mode]} ${mode === 'pair' ? '組' : mode === 'qa' ? '題' : '句'}。${best ? `目前最高 ${best} 分。` : ''}</p>
         <button class="btn primary big" data-act="go" ${speakEngine() ? '' : 'disabled'}>開始</button>
       </div>
@@ -3722,13 +3738,17 @@ function viewSpeak() {
       S.profile.speakUnit = unit
       save()
       $$('#sp-unit button').forEach((b) => b.classList.toggle('on', b === u))
+      u.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' })
     }
     const m = e.target.closest('[data-m]')
     if (m) {
       mode = m.dataset.m
       S.profile.speakMode = mode
       save()
-      $$('#sp-mode button').forEach((b) => b.classList.toggle('on', b === m))
+      $$('#sp-mode button').forEach((b) => {
+        b.classList.toggle('on', b === m)
+        b.setAttribute('aria-checked', b === m)
+      })
       $('.sp-mode-desc').textContent = MODE_DESC[mode]
       $('.sp-n').firstChild.textContent = `每回 ${SP_N[mode]} ${mode === 'pair' ? '組' : mode === 'qa' ? '題' : '句'}。`
     }
@@ -3740,6 +3760,7 @@ function viewSpeak() {
       $$('#sp-lv button').forEach((b) => b.classList.toggle('on', b === lv))
       $('.sp-lv-desc').textContent = LV_DESC[level]
     }
+    if (e.target.closest('[data-act=asrdl]')) return askASRDownload(() => viewSpeak())
     if (e.target.closest('[data-act=go]') && speakEngine()) {
       SP = newSpeak(unit, mode, level)
       speakRun()
@@ -3749,7 +3770,7 @@ function viewSpeak() {
   })
   // 網頁辨識：一打開就在背景準備模型（第一次要下載約 28MB）。下載中只顯示一行小字，好了就不顯示；
   // 還沒好之前按麥克風會先用手機內建的辨識（會有提示音），好了就自動換過去
-  if (speakEngine() === 'local' && !asrReady()) {
+  if (speakEngine() === 'local' && !asrReady() && asrAllowed()) {
     const desc = (t) => {
       const d = $('.speak-intro .sp-eng-desc')
       if (d) d.textContent = t
@@ -3877,10 +3898,13 @@ function speakRun() {
         mic.classList.remove('on')
         $('.sp-mic-label').textContent = SP.res[SP.i] ? '再念一次' : '按下麥克風開始'
         L = null
-        getASR()
-          .then((A) => A.load())
-          .catch(() => toast('辨識模型下載失敗，請檢查網路（建議 Wi‑Fi）再試一次', '⚠️'))
-        return toast(`辨識模型還在下載（${Math.round((ASR_MOD?.progress || 0) * 100)}%），好了再按一次`, '⏳')
+        const start = () =>
+          getASR()
+            .then((A) => A.load())
+            .catch(() => toast('辨識模型下載失敗，請檢查網路（建議 Wi‑Fi）再試一次', '⚠️'))
+        if (!asrAllowed()) return askASRDownload(start) // 第一次：先問要不要下載
+        start()
+        return toast(`辨識模型下載中（${Math.round((ASR_MOD?.progress || 0) * 100)}%），完成後再按一次`, '⏳')
       }
       L = await (engine === 'local' ? listenLocal : listen)((t) => (live.textContent = t), s.qa ? s.ans[0] : tg.en)
       const { alts, err, blob, clash } = await L.done

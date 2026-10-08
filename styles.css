@@ -5068,7 +5068,106 @@ ul.plain b {
   margin-left: 2px;
 }
 .sp-lv-desc {
-  margin: -6px 0 12px;
+  margin: 6px 0 4px;
+}
+/* 口說開始畫面（2.14.2）：模式卡片、滿版難度、可滑動的範圍 */
+.sp-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 8px 0 10px;
+  text-align: left;
+}
+.sp-mode {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--fill2);
+  box-shadow: inset 0 0 0 1.5px transparent;
+  transition: box-shadow 0.15s, background 0.15s;
+}
+.sp-mode.on {
+  background: var(--sel-bg);
+  box-shadow: inset 0 0 0 2px var(--blue);
+}
+.sp-mode:active {
+  transform: scale(0.98);
+}
+.sp-mode-ic {
+  font-size: 22px;
+  line-height: 1.2;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', var(--font);
+}
+.sp-mode b {
+  font-size: 16px;
+  font-weight: 700;
+}
+.sp-mode small {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--label2);
+}
+.sp-field {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  text-align: left;
+}
+.sp-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label2);
+}
+.seg.full,
+.sp-intro .seg.full {
+  display: flex;
+  width: auto;
+  justify-self: stretch;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+.seg.full button {
+  flex: 1;
+  padding: 0 6px;
+}
+.chips-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  margin: 0 -2px;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.chips-row::-webkit-scrollbar {
+  display: none;
+}
+.chips-row button {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  background: var(--fill);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--label);
+  white-space: nowrap;
+}
+.chips-row button.on {
+  background: var(--blue);
+  color: #fff;
+}
+.sp-intro .sp-mode-desc {
+  margin: 0 0 4px;
+  min-height: 1.4em;
+}
+.sp-intro .sp-n {
+  margin: 12px 0 10px;
 }
 /* 2.13 跟隨學生、重點總整理手機版 */
 .sc-ava {

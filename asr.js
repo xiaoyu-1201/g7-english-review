@@ -7,6 +7,8 @@ const MODEL = 'onnx-community/moonshine-tiny-ONNX'
 
 let loading = null
 export const ASR = {
+  // 這次會下載多大（給使用者看）：有 GPU 先試 fp16
+  sizeMB: () => (navigator.gpu && localStorage.getItem('g7review:asr') !== 'wasm' ? 55 : 28),
   ready: false,
   progress: 0, // 0～1
   device: '', // 'webgpu' 或 'wasm'（載入好才知道）
@@ -27,7 +29,8 @@ export const ASR = {
         this.listeners.forEach((f) => f(this.progress))
       }
       const tries = []
-      if (navigator.gpu && !(localStorage.getItem('g7review:asr') === 'wasm')) tries.push({ device: 'webgpu', dtype: 'fp16' }, { device: 'webgpu', dtype: 'fp32' })
+      // 只試 fp16（約 55MB）；不試 fp32（110MB，使用者的網路有流量上限）。GPU 跑不了就用 CPU 的 q8（約 28MB）
+      if (navigator.gpu && !(localStorage.getItem('g7review:asr') === 'wasm')) tries.push({ device: 'webgpu', dtype: 'fp16' })
       tries.push({ device: 'wasm', dtype: 'q8' })
       let pipe = null
       let lastErr = null
@@ -44,6 +47,9 @@ export const ASR = {
         }
       }
       if (!pipe) throw lastErr || new Error('asr-load')
+      try {
+        localStorage.setItem('g7review:asrok', '1') // 這台下載過了：以後被清掉就直接補下載，不再問
+      } catch {}
       this.ready = true
       this.progress = 1
       this.listeners.forEach((f) => f(1))

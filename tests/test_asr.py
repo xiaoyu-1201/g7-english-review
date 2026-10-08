@@ -24,6 +24,14 @@ with sync_playwright() as p:
     A.goto(URL + "#/speak")
     A.wait_for_selector(".speak-intro")
     check(A.evaluate("window.__app.speakEngine()") == "local", "default engine is the in-page recognizer (no beep)")
+    # 第一次：先問要不要下載（使用者的網路有流量上限），按「下載」才開始
+    if A.locator("[data-act=asrdl]").count():
+        check("MB" in txt(A, ".sp-eng-desc"), "first visit asks before downloading and shows the size")
+        A.click("[data-act=asrdl]")
+        A.wait_for_selector(".sheet [data-ok]")
+        A.click(".sheet [data-ok]")
+        A.wait_for_selector(".speak-intro")
+    check(A.evaluate("localStorage.getItem('g7review:asrok')") == "1", "download consent remembered")
     check(A.locator("#sp-eng").count() == 0, "no engine switch on the intro (downloads in the background)")
     check(wait_until(lambda: A.evaluate("window.__app.asrReady()"), 240), "model downloaded and ready in the background")
     check(A.evaluate("window.__app.engineNow()") == "local", "mic uses the in-page recognizer once ready (never the beeping one)")
