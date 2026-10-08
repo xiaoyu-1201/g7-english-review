@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.1（10/8）'
+const VERSION = '2.14.2（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -661,8 +661,12 @@ const Voice = {
       this.silent.loop = true
       this.silent.setAttribute('playsinline', '')
     }
-    if (on) this.silent.play().catch(() => {})
-    else this.silent.pause()
+    clearTimeout(this.silentTimer)
+    if (on) {
+      this.silent.play().catch(() => {})
+      // 保險：朗讀的結束事件偶爾不會來（iPhone），無聲音檔不能一直循環播下去（會一直占著聲音、耗電）
+      this.silentTimer = setTimeout(() => this.silent.pause(), 30000)
+    } else this.silent.pause()
   },
   stop() {
     if (this.ok) speechSynthesis.cancel()
@@ -3512,6 +3516,7 @@ function to16k(x, sr) {
 }
 // 開始聽：講完停 0.8 秒就結束（或再按一次麥克風）；最多 12 秒；7 秒都沒講話＝沒聽到
 // 同一條麥克風也錄音（念完可以聽自己的聲音），不會互搶
+let ACTIVE_MIC = null // 正在錄音的那一次（離開畫面時用來放掉麥克風）
 async function listenLocal(onInterim) {
   const AC = window.AudioContext || window.webkitAudioContext
   const ctx = new AC() // 要在按下去的那一刻建立（iPhone 才會開聲音）
@@ -3551,6 +3556,12 @@ async function listenLocal(onInterim) {
   let quiet = 0 // 講完之後安靜了多久（秒）
   let finish
   const ended = new Promise((ok) => (finish = ok))
+  // 保險：螢幕鎖住、切到別的 App 時 AudioContext 會暫停、onaudioprocess 不再觸發，麥克風就會一直開著（使用者 10/8 的截圖）
+  // → 切出去就結束；另外不管怎樣 15 秒一定結束
+  const hardStop = setTimeout(() => finish(), 15000)
+  const onHide = () => document.visibilityState === 'hidden' && finish()
+  document.addEventListener('visibilitychange', onHide)
+  ACTIVE_MIC = () => finish()
   proc.onaudioprocess = (e) => {
     const x = new Float32Array(e.inputBuffer.getChannelData(0))
     pcm.push(x)
@@ -3572,6 +3583,9 @@ async function listenLocal(onInterim) {
   src.connect(proc)
   proc.connect(ctx.destination) // 輸出是靜音（不會從喇叭出聲）
   const done = ended.then(async () => {
+    clearTimeout(hardStop)
+    document.removeEventListener('visibilitychange', onHide)
+    ACTIVE_MIC = null
     proc.onaudioprocess = null
     try {
       src.disconnect()
@@ -6232,6 +6246,7 @@ function route() {
   Voice.stop()
   const h = location.hash || '#/'
   const [, a, b] = h.split('/')
+  if (a !== 'speak') ACTIVE_MIC?.() // 離開口說（例如按瀏覽器的返回）：錄音結束、放掉麥克風
   if (a !== 'exam' && EXAM && !EXAM.graded) clearInterval(EXAM.timer)
   if (a !== 'watch' && WAKE) WAKE.release().catch(() => {})
   if (a === 'watch' && b) return viewWatch(b)
