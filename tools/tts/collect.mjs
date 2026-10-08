@@ -27,14 +27,18 @@ const addSentence = (en, sp = 'W') => {
     if (c) words.add(c)
   }
 }
-for (const [en] of Object.values(SPEAK).flat()) addSentence(en)
-// 對比組：兩句都要；問答：問句用男聲、參考答案用女聲
+// 口說的句子、對比組、問答的問句：女聲和男聲各做一個，App 每回隨機分配（使用者 10/8：不一定要男生或女生，可以隨機）；參考答案只做女聲
+const both = (en) => {
+  addSentence(en, 'W')
+  addSentence(en, 'M')
+}
+for (const [en] of Object.values(SPEAK).flat()) both(en)
 for (const [a, b] of Object.values(SPEAK_PAIRS).flat()) {
-  addSentence(a)
-  addSentence(b)
+  both(a)
+  both(b)
 }
 for (const [q, ans] of Object.values(SPEAK_QA).flat()) {
-  addSentence(q, 'M')
+  both(q)
   for (const a of ans) addSentence(a)
 }
 const out = { lines: [...lines], words: [...words] }

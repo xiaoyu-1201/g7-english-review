@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.11（10/8）'
+const VERSION = '2.14.12（10/8）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3777,14 +3777,22 @@ function speakPool(unit, mode = 'read', level = 'std') {
 }
 function newSpeak(unit, mode, level, list) {
   list = list || shuffle(speakPool(unit, mode, level)).slice(0, SP_N[mode] || 8)
-  for (const s of list) if (s.pair && s.target == null) s.target = Math.random() < 0.5 ? 0 : 1 // 對比組：隨機播 A 或 B
+  for (const s of list) {
+    if (s.pair && s.target == null) s.target = Math.random() < 0.5 ? 0 : 1 // 對比組：隨機播 A 或 B
+    s.voice = spPickVoice(spText(s)) // 這一回這句用哪個聲音
+  }
   return { list, i: 0, res: [], unit, mode, level, blind: mode === 'blind', peek: [], played: [], picks: [] }
 }
 // 這一句要念的目標、顯示給老師的文字
 const spTarget = (s) => (s.pair ? (s.target ? s.b : s.a) : s)
 const spText = (s) => (s.qa ? s.q : spTarget(s).en)
-// 要播的音檔：問答的問題是男聲（collect.mjs 用 M 做的）
-const spAudio = (s) => (s.qa ? [['M', s.q]] : spText(s))
+// 要播的音檔：每句在這一回隨機分到女聲或男聲（兩種都做了音檔；哪種沒有就用有的那種）
+const SP_VOICES = ['W', 'M']
+const spPickVoice = (text) => {
+  const have = SP_VOICES.filter((v) => AudioLib.idx?.[`${v}|${String(text).trim()}`])
+  return have.length ? have[Math.floor(Math.random() * have.length)] : 'W'
+}
+const spAudio = (s) => [[s.voice || 'W', spText(s)]]
 // 問答：答案不只一種，拿分數最高的那一個
 function speakScoreAny(targets, alts) {
   let best = null
@@ -6501,4 +6509,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }
+window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }

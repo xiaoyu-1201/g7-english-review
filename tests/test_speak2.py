@@ -47,9 +47,11 @@ with sync_playwright() as p:
       const has = (sp, t) => !!window.__app.AudioLib.idx?.[sp + '|' + t]
       for (const [u, l] of Object.entries(m.SPEAK)) {
         out.units[u] = [l.length, (m.SPEAK_PAIRS[u] || []).length, (m.SPEAK_QA[u] || []).length]
-        for (const [en] of l) if (!has('W', en)) out.missing.push(en)
-        for (const [a, b] of m.SPEAK_PAIRS[u] || []) { if (!has('W', a)) out.missing.push(a); if (!has('W', b)) out.missing.push(b) }
-        for (const [q, ans] of m.SPEAK_QA[u] || []) { if (!has('M', q)) out.missing.push(q); for (const x of ans) if (!has('W', x)) out.missing.push(x) }
+        // 句子、對比、問句：女聲和男聲都要有（每回隨機分配）；參考答案女聲就好
+        const both = (t) => { if (!has('W', t) || !has('M', t)) out.missing.push(t) }
+        for (const [en] of l) both(en)
+        for (const [a, b] of m.SPEAK_PAIRS[u] || []) { both(a); both(b) }
+        for (const [q, ans] of m.SPEAK_QA[u] || []) { both(q); for (const x of ans) if (!has('W', x)) out.missing.push(x) }
       }
       return out
     }""")
@@ -103,6 +105,9 @@ with sync_playwright() as p:
       return Object.values(m.SPEAK_QA).flat().map(([q]) => q).filter((q) => !window.__app.AudioLib.find([['M', q]]))
     }""")
     check(not missing, f"every qa question resolves to an audio file {missing[:3]}")
+    # 每回隨機分配聲音：一回裡兩種聲音都會出現（6 題全同一種的機率 1/32，重抽最多 3 次）
+    voices = T.evaluate("() => { const out = []; for (let k = 0; k < 4; k++) { const sp = window.__app.newSpeak('all', 'read', 'std'); out.push(sp.list.map((s) => s.voice)) } return out }")
+    check(any(len(set(v)) == 2 for v in voices) and all(x in ("W", "M") for v in voices for x in v), f"sentences get a random voice each round {voices[0]}")
     ans = T.evaluate("window.__app.SP.list[0].ans[1]")
     T.evaluate("(t) => { window.__say = t }", ans)
     T.click("[data-act=mic]")
