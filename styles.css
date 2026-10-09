@@ -5250,10 +5250,20 @@ ul.plain b {
 .rr-pos {
   font-size: 15px;
 }
-/* 列印說明視窗（iOS）：正在關的視窗不要印出來 */
+/* 列印、做 PDF（tools/make_pdf.py）：正在關的視窗不印；每一課從新的一頁開始；一張卡不切成兩頁（老師 10/9：被紙張分割） */
 @media print {
   .sheet-wrap {
     display: none !important;
+  }
+  .notes-print .notes-mod.unit-first {
+    break-before: page;
+  }
+  .notes-print .note,
+  .notes-print .notes-check {
+    break-inside: avoid;
+  }
+  .notes-print .notes-h {
+    break-after: avoid;
   }
 }
 /* iOS 主畫面 App 不能列印：給老師複製的網址 */

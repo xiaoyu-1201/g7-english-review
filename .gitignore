@@ -1,6 +1,8 @@
 # 課本 PDF 有版權：不要放進來
 *.pdf
 *.zip
+# 例外：重點總整理做成的 PDF（自己的內容，tools/make_pdf.py 產生，給 iPad 分享到 Goodnotes 用）
+!pdf/*.pdf
 # 教材轉出的文字也有版權
 *.txt
 # 測試輸出、Python 暫存

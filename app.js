@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.15（10/9）'
+const VERSION = '2.15.1（10/9）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -1919,52 +1919,74 @@ function notePoints(show) {
   if (parts.length < 2) return `<div class="note-show">${rich(s)}</div>`
   return `<ul class="note-pts">${parts.map((p) => `<li>${rich(p)}</li>`).join('')}</ul>`
 }
-function notesHTML(mid, hidden = false) {
+// unitFirst：這一課的第一個單元（做 PDF 時從新的一頁開始）
+function notesHTML(mid, hidden = false, unitFirst = false) {
   const m = MODULES[mid]
   const cards = m.items.filter((i) => i.t === 'learn')
-  return `<div class="notes-mod${hidden ? ' hide' : ''}" data-unit="${esc(m.unit)}"><div class="notes-h"><span class="mod-ic">${m.icon}</span><div><div class="eyebrow">${esc(m.unit)}</div><h2>${esc(m.title)}</h2></div></div>
+  return `<div class="notes-mod${hidden ? ' hide' : ''}${unitFirst ? ' unit-first' : ''}" data-unit="${esc(m.unit)}"><div class="notes-h"><span class="mod-ic">${m.icon}</span><div><div class="eyebrow">${esc(m.unit)}</div><h2>${esc(m.title)}</h2></div></div>
     ${cards.map((c) => `<section class="note"><h3>${esc(c.title)}</h3>${c.fig && c.fig.k !== 'preps' ? figure(c.fig) : ''}${notePoints(c.show)}<div class="note-rule">${rich(c.rule)}</div>${c.tip ? `<div class="tip"><b>易錯提醒</b>${rich(c.tip)}</div>` : ''}</section>`).join('')}</div>`
 }
 function showNotes(mid) {
   sheet(notesHTML(mid), { wide: true })
 }
-// 列印（10/9 老師：iPad 上「列印沒辦法按」、Safari 分享面板也沒有「列印」，要把重點總整理存成 PDF 放進 Goodnotes）
-// iOS 不直接叫 window.print()（主畫面 App 沒反應；有的 iPad 沒有列印），先開說明：列印，或 Safari「分享 → 選項 → PDF」存成 PDF
-// hash：有全部的課的列印頁（#/print/notes/<課的代號,…>）；prepare：印之前把收合的都打開
-const STANDALONE = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches
-function doPrint(prepare, hash = location.hash) {
+// 重點總整理的列印與 PDF（10/9 老師：iPad 的「列印」按不動、Safari 分享面板沒有列印、
+// 「Open in Goodnotes」不管選哪一課都只抓到 Starter（Safari 另外重新載入頁面，沒有這邊選的課）還被紙張切開）
+// 做法：重點總整理事先做成 PDF 檔（tools/make_pdf.py → pdf/notes-<課>.pdf、notes-<段考>.pdf、notes-all.pdf；改了觀念卡要重跑再 commit）。
+// iOS 按「PDF」→ 選一份 → 系統分享面板（Web Share 傳檔案）→ Goodnotes、儲存到檔案；不能分享檔案的裝置就在新分頁打開 PDF。
+// 非 iOS：直接 window.print()（電腦可以另存 PDF）。
+const pdfSlug = (u) => u.replace('會考導向', 'kaokao').replace('Ⅱ', '2').replace('Ⅲ', '3').toLowerCase().replace(/\s+/g, '')
+const pdfURL = (f) => new URL(`pdf/${f}`, location.href.split('#')[0]).href
+// 可以拿的 PDF：這一課、整個段考範圍（範圍內的課都開放了才給）、全部（全部開放才給）；都沒有就每一課一份
+function pdfChoices(unit) {
+  const u = myUnits()
+  const out = []
+  if (unit && u.has(unit)) out.push({ title: `這一課：${unit}`, file: `notes-${pdfSlug(unit)}.pdf`, name: `重點總整理 ${unit}` })
+  for (const e of EXAMS) if (!e.kind && e.units.every((x) => u.has(x))) out.push({ title: `${e.title}範圍`, sub: e.range, file: `notes-${e.id}.pdf`, name: `重點總整理 ${e.title}` })
+  if (UNITS.every((x) => u.has(x))) out.push({ title: '全部的課', sub: `${UNITS.length} 個單元`, file: 'notes-all.pdf', name: '重點總整理 全部' })
+  if (!out.length) for (const x of UNITS) if (u.has(x)) out.push({ title: x, file: `notes-${pdfSlug(x)}.pdf`, name: `重點總整理 ${x}` })
+  return out
+}
+let PDF_READY = null // 抓好的檔案：分享被擋（不算在點擊裡）時，再按一次就直接分享
+async function sharePDF(c) {
+  const url = pdfURL(c.file)
+  const fname = `${c.name}.pdf`
+  try {
+    if (PDF_READY?.name !== fname) {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('404')
+      PDF_READY = new File([await res.blob()], fname, { type: 'application/pdf' })
+    }
+    if (!navigator.canShare?.({ files: [PDF_READY] })) return void window.open(url, '_blank')
+    await navigator.share({ files: [PDF_READY], title: c.name })
+  } catch (e) {
+    if (e?.name === 'AbortError') return // 使用者自己取消
+    if (e?.message === '404') return toast('這份 PDF 還沒做好', '⚠️')
+    toast('分享沒有打開，請再按一次', '⚠️')
+  }
+}
+// unit：重點總整理現在看的那一課（列印頁傳空字串）；prepare：印之前把收合的都打開
+function doPrint(prepare, unit = '') {
   if (!IS_IOS) {
     prepare?.()
     return window.print()
   }
-  printHelpSheet(hash, prepare)
+  pdfSheet(unit, prepare)
 }
-function printHelpSheet(hash, prepare) {
-  const url = location.href.split('#')[0] + hash
-  const here = location.hash === hash
-  const pdf = '要存成 PDF 或放進 Goodnotes：按 Safari 的「分享」→ 最上面的「選項」→ 選「PDF」→ 再選 Goodnotes 或「儲存到檔案」。'
+function pdfSheet(unit, prepare) {
+  const cs = pdfChoices(unit)
   const b = sheet(
-    STANDALONE
-      ? `<h2 class="sheet-title">用 Safari 列印或存成 PDF</h2><p class="sheet-p">從主畫面打開的 App 沒辦法列印。請用 Safari 打開下面的網址（有全部的課），再按「列印」。${pdf}</p><div class="pair-link print-url">${esc(url)}</div><div class="sheet-actions"><button class="btn ghost" data-copy>複製網址</button><button class="btn primary" data-open>在 Safari 打開</button></div>`
-      : `<h2 class="sheet-title">列印或存成 PDF</h2><p class="sheet-p">${here ? '這一頁有全部的課。' : '要印全部的課，先打開列印頁。'}${pdf}</p><div class="sheet-actions">${here ? '' : '<button class="btn ghost" data-goprint>打開列印頁（全部的課）</button>'}<button class="btn primary" data-doprint>列印</button></div>`,
+    `<h2 class="sheet-title">存成 PDF</h2><p class="sheet-p">選一份。分享面板出現後，選 Goodnotes 或「儲存到檔案」。</p>
+    <div class="list">${cs.map((c, i) => `<button class="row" data-pdf="${i}"><span class="row-ic">${ICON.doc}</span><span class="row-t">${esc(c.title)}${c.sub ? `<small>${esc(c.sub)}</small>` : ''}</span>${ICON.chev}</button>`).join('')}</div>
+    <div class="sheet-actions"><button class="btn ghost" data-doprint>改用列印</button></div>`,
   )
-  $('[data-copy]', b)?.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(url)
-      toast('已複製網址', '📋')
-    } catch {
-      toast('沒辦法複製，請長按網址選取', '⚠️')
+  b.addEventListener('click', (e) => {
+    const r = e.target.closest('[data-pdf]')
+    if (r) return sharePDF(cs[+r.dataset.pdf])
+    if (e.target.closest('[data-doprint]')) {
+      closeSheet()
+      prepare?.()
+      window.print() // 視窗正在關（列印時 .sheet-wrap 不印）
     }
-  })
-  $('[data-open]', b)?.addEventListener('click', () => window.open(url, '_blank'))
-  $('[data-goprint]', b)?.addEventListener('click', () => {
-    closeSheet()
-    go(hash)
-  })
-  $('[data-doprint]', b)?.addEventListener('click', () => {
-    closeSheet()
-    prepare?.()
-    window.print() // 視窗正在關（列印時 .sheet-wrap 不印）
   })
 }
 // 重點總整理：一次看一課（上面一排課名可以切換，記住上次看的）；列印時全部印出來
@@ -1975,13 +1997,13 @@ function viewAllNotes() {
   Sync.presence({ view: 'notes' })
   setView(
     `<div class="page notes-page">
-      ${header('重點總整理', '一次看一課，點上面切換；考前一天從頭看一遍。', `<button class="btn ghost" data-print>${ICON.doc}<span>列印</span></button>`, true)}
+      ${header('重點總整理', '一次看一課，點上面切換；考前一天從頭看一遍。', `<button class="btn ghost" data-print>${ICON.doc}<span>${IS_IOS ? 'PDF' : '列印'}</span></button>`, true)}
       <div class="notes-units" role="tablist">${units.map((u) => `<button role="tab" class="${u === cur ? 'on' : ''}" data-u="${esc(u)}" aria-selected="${u === cur}">${esc(u)}</button>`).join('')}</div>
       ${mods.map((m) => notesHTML(m, MODULES[m].unit !== cur)).join('')}
       <details class="callout notes-check"><summary>交卷前 30 秒檢查清單</summary><ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol></details>
     </div>`,
   )
-  $('[data-print]').onclick = () => doPrint(() => $$('.notes-page details').forEach((d) => (d.open = true)), '#/print/notes/' + mods.join(','))
+  $('[data-print]').onclick = () => doPrint(() => $$('.notes-page details').forEach((d) => (d.open = true)), units.includes(S.profile.notesUnit) ? S.profile.notesUnit : cur)
   $('.notes-units').addEventListener('click', (e) => {
     const b = e.target.closest('[data-u]')
     if (!b) return
@@ -2434,8 +2456,8 @@ function viewPrint(key, extra = '') {
     const mods = fromUrl.length ? fromUrl : openMods()
     setView(
       `<div class="page notes-page notes-print">
-        ${header('重點總整理', `${mods.length} 個單元，全部一起印`, `<button class="btn primary" data-print>${ICON.doc}<span>列印</span></button>`, true)}
-        ${mods.map((m) => notesHTML(m)).join('')}
+        ${header('重點總整理', `${mods.length} 個單元，全部一起印`, `<button class="btn primary" data-print>${ICON.doc}<span>${IS_IOS ? 'PDF' : '列印'}</span></button>`, true)}
+        ${mods.map((m, i) => notesHTML(m, false, i > 0 && MODULES[mods[i - 1]].unit !== MODULES[m].unit)).join('')}
         <details class="callout notes-check" open><summary>交卷前 30 秒檢查清單</summary><ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol></details>
       </div>`,
     )
@@ -2483,7 +2505,7 @@ function viewPrint(key, extra = '') {
       <div class="paper p-answers"><div class="p-head"><b>${esc(title)}・解答</b></div><ol class="p-key">${key2}</ol></div>` : ''}
     </div>`,
   )
-  $('[data-print]')?.addEventListener('click', () => doPrint())
+  $('[data-print]')?.addEventListener('click', () => window.print()) // 紙本練習卷是臨時組的，沒有事先做好的 PDF
 }
 
 // ───────────────────────── 錯題本 ─────────────────────────
@@ -6707,4 +6729,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { S, ITEM, MODULES, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }
+window.__app = { S, ITEM, MODULES, MOD_ORDER, UNITS, EXAMS, pdfSlug, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }
