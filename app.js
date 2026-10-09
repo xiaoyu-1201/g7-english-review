@@ -4,7 +4,7 @@ import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, E
 import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 
-const VERSION = '2.20（10/9）'
+const VERSION = '2.20.1（10/9）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2529,8 +2529,11 @@ let PLAN_OPEN = false
 // 吉祥物：ChatGPT 生成的圖（img/mascot-<表情>.png）放進來之前，先用這個簡單的 SVG（圓滾滾的薄荷綠小角色、戴耳機）
 // 表情：focus 認真、happy 開心、sleepy 睡覺、cheer 加油
 const MASCOT_ART = false // 有 img/mascot-*.png 之後改成 true
+// 老師 10/9：我畫的暫時版很醜 → GPT 的圖到之前不顯示吉祥物（上方只留背景）
+const MASCOT_PLACEHOLDER = false
 function mascot(mood = 'happy', cls = '') {
   if (MASCOT_ART) return `<img class="mascot ${cls}" src="img/mascot-${mood}.png" alt="" aria-hidden="true">`
+  if (!MASCOT_PLACEHOLDER) return ''
   const eyes = {
     focus: '<ellipse cx="80" cy="104" rx="7" ry="9" fill="#23302b"/><ellipse cx="120" cy="104" rx="7" ry="9" fill="#23302b"/><circle cx="82" cy="101" r="2.4" fill="#fff"/><circle cx="122" cy="101" r="2.4" fill="#fff"/><path d="M70 90 L88 94 M130 90 L112 94" stroke="#23302b" stroke-width="4" stroke-linecap="round"/>',
     happy: '<path d="M71 106 Q80 94 89 106 M111 106 Q120 94 129 106" stroke="#23302b" stroke-width="5" fill="none" stroke-linecap="round"/>',

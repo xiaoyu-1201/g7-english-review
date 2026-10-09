@@ -7213,3 +7213,17 @@ h3 > .ti.ic-lead {
   width: 32px;
   height: 32px;
 }
+/* 吉祥物的圖還沒到：上方只留一條淡綠背景，提示框不留圖示的位置（2.20.1） */
+.hero-art:not(:has(.mascot)) {
+  height: 56px;
+  min-height: 0;
+}
+@media (min-width: 700px) {
+  .hero:has(.hero-art:not(:has(.mascot))) {
+    grid-template-columns: 1fr;
+  }
+  .hero-art:not(:has(.mascot)) {
+    min-height: 0;
+    height: 56px;
+  }
+}
