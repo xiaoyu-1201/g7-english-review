@@ -4,7 +4,7 @@ import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, E
 import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 
-const VERSION = '2.19.1（10/9）'
+const VERSION = '2.20（10/9）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2179,20 +2179,24 @@ function viewHome() {
       ${hwCardHTML(myRole() === 'parent') || '<section class="hw-card" hidden></section>'}
       ${studentsCardHTML()}
 
-      <section class="today card">
-        <div class="rings" aria-hidden="true">
-          ${ring(t.n / goal, 104, 11, 'r1')}
-          <div class="ring-in">${ring(t.n ? t.acc : 0, 78, 11, 'r2')}</div>
-          <div class="ring-in2">${ring(t.n ? t.careFree : 0, 52, 11, 'r3')}</div>
-        </div>
-        <div class="today-txt">
-          <div class="today-h">今天</div>
-          <div class="today-row"><i class="dot r1"></i>練習<b>${t.n}</b><span>／${goal} 題</span></div>
-          <div class="today-row"><i class="dot r2"></i>正確率<b>${t.n ? Math.round(t.acc * 100) : '—'}</b><span>${t.n ? '%' : ''}</span></div>
-          <div class="today-row"><i class="dot r3"></i>細心度<b>${t.n ? Math.round(t.careFree * 100) : '—'}</b><span>${t.n ? '%' : ''}</span></div>
-        </div>
-        ${resume ? `<button class="resume" data-resume="${esc(resume[0])}"><span class="resume-k">繼續上次</span><span class="resume-t">${esc(resume[1].title)}・第 ${resume[1].i + 1} 張</span>${ICON.chev}</button>` : nextStepHTML(book)}
-      </section>
+      ${(() => {
+        // 2.20 今天的狀態（StressWatch 風格）：吉祥物＋狀態大字＋刻度條＋兩個大數字（和近 7 天平均比）＋吉祥物的一句話＋下一步
+        const ts = todayState()
+        return `<section class="hero card">
+          <div class="hero-art">${mascot(ts.mood)}</div>
+          <div class="hero-body">
+            <p class="hero-hi">今天的學習狀態</p>
+            <h2 class="hero-status">${esc(ts.word)}</h2>
+            ${scaleHTML(ts.level)}
+            <div class="hero-metrics">
+              <div class="hm"><span>今天練習</span><b>${ts.n}<small>／${goal} 題</small></b>${ts.avgN != null ? trendTxt(ts.n, ts.avgN, ' 題') : ''}${sparkSVG(ts.nSeries)}</div>
+              <div class="hm"><span>正確率</span><b>${ts.acc ?? '—'}<small>${ts.acc != null ? '%' : ''}</small></b>${ts.acc != null && ts.avgAcc != null ? trendTxt(ts.acc, ts.avgAcc, '%') : ''}${sparkSVG(ts.accSeries)}</div>
+            </div>
+            <div class="hero-tip">${mascot(ts.mood === 'sleepy' ? 'cheer' : ts.mood, 'mini')}<p>${esc(ts.tip)}</p></div>
+            <div class="hero-acts">${resume ? `<button class="resume" data-resume="${esc(resume[0])}"><span class="resume-k">繼續上次</span><span class="resume-t">${esc(resume[1].title)}・第 ${resume[1].i + 1} 張</span>${ICON.chev}</button>` : nextStepHTML(book)}</div>
+          </div>
+        </section>`
+      })()}
       ${liveBannerHTML() || '<div class="live-banner" hidden></div>'}
       ${planHTML()}
 
@@ -2520,6 +2524,73 @@ function planHTML() {
   </section>`
 }
 let PLAN_OPEN = false
+
+// ───────────────────────── 吉祥物與首頁狀態（2.20，老師 10/9 給 StressWatch 當參考：吉祥物、狀態大字、刻度條、大數字＋小折線、一句貼心話） ─────────────────────────
+// 吉祥物：ChatGPT 生成的圖（img/mascot-<表情>.png）放進來之前，先用這個簡單的 SVG（圓滾滾的薄荷綠小角色、戴耳機）
+// 表情：focus 認真、happy 開心、sleepy 睡覺、cheer 加油
+const MASCOT_ART = false // 有 img/mascot-*.png 之後改成 true
+function mascot(mood = 'happy', cls = '') {
+  if (MASCOT_ART) return `<img class="mascot ${cls}" src="img/mascot-${mood}.png" alt="" aria-hidden="true">`
+  const eyes = {
+    focus: '<ellipse cx="80" cy="104" rx="7" ry="9" fill="#23302b"/><ellipse cx="120" cy="104" rx="7" ry="9" fill="#23302b"/><circle cx="82" cy="101" r="2.4" fill="#fff"/><circle cx="122" cy="101" r="2.4" fill="#fff"/><path d="M70 90 L88 94 M130 90 L112 94" stroke="#23302b" stroke-width="4" stroke-linecap="round"/>',
+    happy: '<path d="M71 106 Q80 94 89 106 M111 106 Q120 94 129 106" stroke="#23302b" stroke-width="5" fill="none" stroke-linecap="round"/>',
+    sleepy: '<path d="M71 104 Q80 111 89 104 M111 104 Q120 111 129 104" stroke="#23302b" stroke-width="4.5" fill="none" stroke-linecap="round"/>',
+    cheer: '<ellipse cx="80" cy="103" rx="8" ry="10" fill="#23302b"/><ellipse cx="120" cy="103" rx="8" ry="10" fill="#23302b"/><circle cx="83" cy="99" r="3" fill="#fff"/><circle cx="123" cy="99" r="3" fill="#fff"/>',
+  }[mood]
+  const mouth = {
+    focus: '<path d="M93 124 L107 124" stroke="#23302b" stroke-width="4" stroke-linecap="round"/>',
+    happy: '<path d="M88 120 Q100 136 112 120 Z" fill="#23302b"/><path d="M94 128 Q100 133 106 128" fill="#f28ba8"/>',
+    sleepy: '<ellipse cx="100" cy="125" rx="5" ry="4" fill="#23302b"/>',
+    cheer: '<path d="M86 118 Q100 140 114 118 Z" fill="#23302b"/><path d="M93 128 Q100 134 107 128" fill="#f28ba8"/>',
+  }[mood]
+  const arms = {
+    focus: '<ellipse cx="44" cy="134" rx="12" ry="9" fill="#6fbf96"/><g transform="rotate(-35 150 128)"><rect x="140" y="104" width="10" height="44" rx="3" fill="#ffd166"/><path d="M140 148 L145 158 L150 148 Z" fill="#f4c99b"/><rect x="140" y="104" width="10" height="7" rx="2" fill="#f28ba8"/></g><ellipse cx="156" cy="134" rx="12" ry="9" fill="#6fbf96"/>',
+    happy: '<ellipse cx="38" cy="96" rx="11" ry="14" fill="#6fbf96" transform="rotate(-25 38 96)"/><ellipse cx="162" cy="96" rx="11" ry="14" fill="#6fbf96" transform="rotate(25 162 96)"/><path d="M28 62 l4 8 8 4 -8 4 -4 8 -4 -8 -8 -4 8 -4z M170 58 l3 6 6 3 -6 3 -3 6 -3 -6 -6 -3 6 -3z" fill="#ffd166"/>',
+    sleepy: '<ellipse cx="44" cy="136" rx="12" ry="9" fill="#6fbf96"/><ellipse cx="156" cy="136" rx="12" ry="9" fill="#6fbf96"/><text x="150" y="70" font-size="22" font-weight="700" fill="#8fa9c9" font-family="sans-serif">z</text><text x="166" y="52" font-size="16" font-weight="700" fill="#8fa9c9" font-family="sans-serif">z</text>',
+    cheer: '<ellipse cx="44" cy="134" rx="12" ry="9" fill="#6fbf96"/><circle cx="162" cy="84" r="13" fill="#6fbf96"/><path d="M150 74 l-6 -10 M160 68 l0 -12 M172 72 l6 -10" stroke="#ffd166" stroke-width="4" stroke-linecap="round"/>',
+  }[mood]
+  return `<svg class="mascot ${cls}" viewBox="0 0 200 200" aria-hidden="true"><ellipse cx="100" cy="182" rx="58" ry="8" fill="rgba(31,60,48,.08)"/><path d="M38 104 C38 38 162 38 162 104" stroke="#3f8f6a" stroke-width="9" fill="none" stroke-linecap="round"/><ellipse cx="100" cy="116" rx="68" ry="62" fill="#7ccba2"/><ellipse cx="100" cy="136" rx="42" ry="32" fill="#a9dfc2"/><rect x="24" y="92" width="20" height="34" rx="10" fill="#3f8f6a"/><rect x="156" y="92" width="20" height="34" rx="10" fill="#3f8f6a"/><ellipse cx="64" cy="122" rx="9" ry="6" fill="#f28ba8" opacity=".75"/><ellipse cx="136" cy="122" rx="9" ry="6" fill="#f28ba8" opacity=".75"/>${eyes}${mouth}${arms}</svg>`
+}
+// 小折線（近 7 天）；null＝那天沒資料
+function sparkSVG(vals) {
+  const pts = vals.map((v, i) => [i, v]).filter(([, v]) => v != null)
+  if (pts.length < 2) return ''
+  const max = Math.max(...pts.map(([, v]) => v), 1)
+  const min = Math.min(...pts.map(([, v]) => v), 0)
+  const x = (i) => 4 + (i / (vals.length - 1)) * 112
+  const y = (v) => 30 - ((v - min) / (max - min || 1)) * 24
+  const d = pts.map(([i, v], k) => `${k ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')
+  const [li, lv] = pts[pts.length - 1]
+  return `<svg class="spark" viewBox="0 0 120 34" aria-hidden="true"><path d="M4 31 H116" stroke="currentColor" stroke-opacity=".15" stroke-dasharray="2 3"/><path d="${d}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${x(li)}" cy="${y(lv)}" r="3.2" fill="var(--card)" stroke="currentColor" stroke-width="2"/></svg>`
+}
+// 今天的狀態：大字＋刻度（4 格）＋吉祥物表情＋一句話
+function todayState(list = S.attempts) {
+  const t0 = dayStart()
+  const days = [...Array(7)].map((_, k) => t0 - (6 - k) * DAY)
+  const per = days.map((d) => list.filter((a) => a.ts >= d && a.ts < d + DAY))
+  const n = per[6].length
+  const ok = per[6].filter((a) => a.r === 'ok').length
+  const acc = n ? Math.round((ok / n) * 100) : null
+  const past = per.slice(0, 6).filter((p) => p.length)
+  const avgN = past.length ? Math.round(past.reduce((s, p) => s + p.length, 0) / past.length) : null
+  const pastAll = per.slice(0, 6).flat()
+  const avgAcc = pastAll.length ? Math.round((pastAll.filter((a) => a.r === 'ok').length / pastAll.length) * 100) : null
+  const goal = S.profile.goal || 30
+  const level = !n ? 0 : n < Math.min(10, goal / 3) ? 1 : acc >= 85 && n >= 10 ? 3 : acc < 60 ? 1 : 2
+  const word = !n ? '今天還沒開始' : ['', acc < 60 ? '再加把勁' : '暖身中', '穩定進步', '狀態很好'][level]
+  const mood = !n ? 'sleepy' : level === 3 ? 'happy' : level === 2 ? 'focus' : 'cheer'
+  // 一句話：最近 3 天最常錯的考點 → 那個考點的提醒；沒有就依狀態
+  const recentBad = list.filter((a) => a.ts >= t0 - 2 * DAY && a.r !== 'ok')
+  const tag = tagCounts(recentBad)[0]?.[0]
+  const book = bookIds(list).length
+  const tip = tag && TAG_HINTS[tag] ? `最近常錯「${TAGS[tag] || tag}」：${TAG_HINTS[tag]}` : book >= 5 ? `錯題本有 ${book} 題，先把它們練回來，分數最容易進步。` : !n ? '先做 5 題暖身，喚醒英文腦！' : level === 3 ? '今天的狀態很好，再完成一個單元就更穩了！' : '保持節奏，做完一題就檢查一次大寫和標點。'
+  return { n, acc, avgN, avgAcc, level, word, mood, tip, nSeries: per.map((p) => p.length), accSeries: per.map((p) => (p.length ? Math.round((p.filter((a) => a.r === 'ok').length / p.length) * 100) : null)) }
+}
+// 刻度條：4 格（還沒開始、暖身、穩定、很好），圓點停在現在的那格
+const scaleHTML = (level, labels = ['還沒開始', '暖身', '穩定', '很好']) =>
+  `<div class="st-scale" role="img" aria-label="目前：${labels[level]}">${labels.map((l, i) => `<i class="s${i}${i === level ? ' on' : ''}"></i>`).join('')}<b class="st-knob" style="left:${(level + 0.5) * 25}%"></b></div>`
+// 和平均比：▲ 比較好、▼ 比較少
+const trendTxt = (v, avg, unit) => (avg == null ? '' : `<em class="${v >= avg ? 'up' : 'down'}">${v >= avg ? '▲' : '▼'} 近 7 天平均 ${avg}${unit}</em>`)
 
 // 下一步建議：錯題（間隔複習）優先 → 還沒做完的單元 → 模擬段考
 function nextStepHTML(book) {
@@ -5809,13 +5880,18 @@ function parentProgressHTML(list, sess, units, l, name) {
     <div class="pp-status${live ? ' on' : ''}"><i class="ld-dot${live ? ' on' : ''}"></i><span>${live ? esc(liveText(live)) : last ? `最後一次練習：${esc(agoText(last.ts))}` : '還沒有練習紀錄'}</span></div>
     ${seenTxt ? `<div class="pp-new${sinceSeen?.n ? ' on' : ''}">${ICON.star}<span>${seenTxt}</span></div>` : ''}
     ${note ? `<section class="card pp-card pp-note-card"><div class="pp-quote-h">老師的話<small>${fmtDate(note.at)}</small></div><p class="pp-msg">${esc(note.msg)}</p></section>` : ''}
-    <section class="card pp-card">
-      ${secH('這週', `${fmtDate(w0)}～${fmtDate(Date.now())}`)}
+    <section class="card pp-card hero pp-hero">
+      ${(() => {
+        // 2.20 這週的狀態（StressWatch 風格）：吉祥物＋大字＋刻度條
+        const lv = !week.length ? 0 : week.length < 20 ? 1 : pct(wOk, week.length) >= 85 && week.length >= 40 ? 3 : 2
+        const word = ['這週還沒開始', '暖身中', '穩定進步', '很認真'][lv]
+        return `<div class="hero-art">${mascot(['sleepy', 'cheer', 'focus', 'happy'][lv])}</div><div class="hero-body"><p class="hero-hi">${esc(name)} 這週的學習狀態（${fmtDate(w0)}～${fmtDate(Date.now())}）</p><h2 class="hero-status">${word}</h2>${scaleHTML(lv, ['還沒開始', '暖身', '穩定', '很認真'])}`
+      })()}
       <div class="pp-stats">
         ${stat(week.length, '練習題數', lastW ? `上週 ${lastW} 題` : '')}
         ${stat(week.length ? `${pct(wOk, week.length)}<i>%</i>` : '—', '答對率')}
         ${stat(rep.learned.length, '新學會', '', 'ok')}
-      </div>
+      </div></div>
     </section>
     ${
       rep.mods.length

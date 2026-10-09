@@ -6907,3 +6907,309 @@ h3 > .ti.ic-lead {
   margin: 0 0 8px;
   text-align: center;
 }
+/* ═══════════ 2.20 薄荷綠主題（老師 10/9 給 StressWatch 當參考；主色薄荷綠，全部頁面一起改） ═══════════
+   淡薄荷灰底、白色大圓角卡片、柔和陰影、粉色系點綴；可以點的東西＝深一點的薄荷綠（文字要看得清楚）
+   放在最後面：同樣的變數蓋掉上面 Apple 藍的版本 */
+:root {
+  --bg: #eef4f1;
+  --card: #ffffff;
+  --card2: #f6faf8;
+  --fill: rgba(64, 120, 96, 0.1);
+  --fill2: rgba(64, 120, 96, 0.06);
+  --label: #1d2a25;
+  --label2: rgba(29, 42, 37, 0.6);
+  --label3: rgba(29, 42, 37, 0.32);
+  --sep: rgba(29, 42, 37, 0.09);
+  --blue: #16855b; /* 可以點的文字、圖示（對白底 4.6:1） */
+  --brand: #2aae79; /* 主按鈕底色 */
+  --brand-soft: #dcf2e7;
+  --mint: #7ccba2;
+  --green: #1d8f5a;
+  --green-v: #3fbf84;
+  --orange: #c26a12;
+  --orange-v: #f2a65a;
+  --red: #d2423b;
+  --red-v: #ef6f6c;
+  --indigo: #8c88e8;
+  --pink: #ef7fa0;
+  --teal: #5db8d0;
+  --sel-bg: rgba(42, 174, 121, 0.13);
+  --ok-bg: rgba(63, 191, 132, 0.15);
+  --ring1: #f28ba8;
+  --ring2: #3fbf84;
+  --ring3: #8aa6f0;
+  --r-xl: 26px;
+  --r-lg: 22px;
+  --r-md: 16px;
+  --r-sm: 12px;
+  --shadow: 0 1px 2px rgba(31, 60, 48, 0.04), 0 6px 20px rgba(31, 60, 48, 0.06);
+  --bar-bg: rgba(255, 255, 255, 0.9);
+  --tabbar-h: 64px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1513;
+    --card: #18211e;
+    --card2: #1d2824;
+    --fill: rgba(140, 200, 170, 0.14);
+    --fill2: rgba(140, 200, 170, 0.08);
+    --label: #eef6f2;
+    --label2: rgba(238, 246, 242, 0.62);
+    --label3: rgba(238, 246, 242, 0.3);
+    --sep: rgba(238, 246, 242, 0.1);
+    --blue: #6fd6a5;
+    --brand: #2aae79;
+    --brand-soft: rgba(42, 174, 121, 0.22);
+    --sel-bg: rgba(111, 214, 165, 0.16);
+    --shadow: none;
+    --bar-bg: rgba(24, 33, 30, 0.9);
+  }
+}
+/* 主按鈕：薄荷綠底、白字 */
+.btn.primary {
+  background: var(--brand);
+  color: #fff;
+}
+/* 懸浮的膠囊分頁列（像 StressWatch）：離邊 14px、圓角、選到的那格有淡綠底 */
+.tabbar {
+  left: max(14px, env(safe-area-inset-left));
+  right: max(14px, env(safe-area-inset-right));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 6px;
+  border-radius: 32px;
+  box-shadow: 0 8px 28px rgba(31, 60, 48, 0.14), 0 0 0 0.5px rgba(31, 60, 48, 0.06);
+  border-top: 0;
+}
+.tabbar a {
+  min-height: 52px;
+  border-radius: 26px;
+  font-size: 11px;
+}
+.tabbar a.on {
+  color: var(--blue);
+  background: var(--brand-soft);
+}
+.tabbar a svg {
+  width: 24px;
+  height: 24px;
+}
+@media (max-width: 480px) and (display-mode: browser) {
+  .tabbar {
+    padding-bottom: 6px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+}
+#view.with-tabs {
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 40px);
+}
+#toast {
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 30px);
+}
+/* 卡片：白、大圓角、柔和陰影 */
+.card {
+  border-radius: var(--r-lg);
+}
+/* ── 首頁狀態區塊（hero）：吉祥物插圖＋問候＋狀態大字＋刻度條＋兩個大數字＋一句話 ── */
+.hero {
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.hero-art {
+  position: relative;
+  height: 170px;
+  display: grid;
+  place-items: end center;
+  background:
+    radial-gradient(120px 90px at 8% 0%, rgba(124, 203, 162, 0.55), transparent 70%),
+    radial-gradient(140px 100px at 96% 6%, rgba(124, 203, 162, 0.5), transparent 70%),
+    radial-gradient(90px 60px at 80% 70%, rgba(201, 198, 240, 0.45), transparent 70%),
+    linear-gradient(180deg, #cdeee4 0%, #e3f5ee 60%, var(--card) 100%);
+}
+@media (prefers-color-scheme: dark) {
+  .hero-art {
+    background:
+      radial-gradient(120px 90px at 8% 0%, rgba(124, 203, 162, 0.3), transparent 70%),
+      radial-gradient(140px 100px at 96% 6%, rgba(124, 203, 162, 0.25), transparent 70%),
+      linear-gradient(180deg, #1f3a31 0%, var(--card) 100%);
+  }
+}
+.hero-art .mascot {
+  width: 150px;
+  height: 150px;
+  margin-bottom: -6px;
+  object-fit: contain;
+}
+.hero-body {
+  padding: 4px 20px 18px;
+  text-align: center;
+}
+.hero-hi {
+  margin: 0;
+  color: var(--label2);
+  font-size: 15px;
+}
+.hero-status {
+  margin: 2px 0 12px;
+  font: 700 32px/1.2 var(--round);
+  letter-spacing: -0.01em;
+}
+.st-scale {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  max-width: 260px;
+  margin: 0 auto 16px;
+}
+.st-scale i {
+  height: 10px;
+  border-radius: 5px;
+  opacity: 0.45;
+}
+.st-scale i.on {
+  opacity: 1;
+}
+.st-scale .s0 { background: #c9cbd6; }
+.st-scale .s1 { background: #f5b7a8; }
+.st-scale .s2 { background: #b9b6f2; }
+.st-scale .s3 { background: #7ccba2; }
+.st-knob {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 3px solid var(--brand);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.hero-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: left;
+  padding-top: 14px;
+  border-top: 0.5px solid var(--sep);
+}
+.hm span {
+  display: block;
+  font-size: 13px;
+  color: var(--label2);
+}
+.hm b {
+  display: block;
+  font: 700 32px/1.15 var(--round);
+  font-variant-numeric: tabular-nums;
+}
+.hm b small {
+  font-size: 15px;
+  font-weight: 600;
+  margin-left: 2px;
+  color: var(--label2);
+}
+.hm em {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--label2);
+  margin-top: 2px;
+}
+.hm em.up::first-letter {
+  color: var(--green);
+}
+.hm em.down::first-letter {
+  color: var(--orange);
+}
+.hm .spark {
+  display: block;
+  width: 100%;
+  max-width: 130px;
+  height: 30px;
+  margin-top: 6px;
+  color: var(--brand);
+}
+.hero-tip {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--card2);
+  text-align: left;
+}
+.hero-tip .mascot {
+  flex: none;
+  width: 30px;
+  height: 30px;
+}
+.hero-tip p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.hero-acts {
+  margin-top: 12px;
+}
+.hero-acts .resume {
+  max-width: none;
+  width: 100%;
+  background: var(--brand-soft);
+}
+.hero-acts .resume-k {
+  color: var(--blue);
+}
+@media (min-width: 700px) {
+  .hero {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+  }
+  .hero-art {
+    height: auto;
+    min-height: 260px;
+    place-items: center;
+  }
+  .hero-art .mascot {
+    width: 190px;
+    height: 190px;
+  }
+  .hero-body {
+    padding: 22px 26px;
+    text-align: left;
+  }
+  .st-scale {
+    margin-left: 0;
+  }
+}
+/* 首頁活動卡、單元卡：白卡大圓角 */
+.qk,
+.mod {
+  border-radius: var(--r-lg);
+}
+/* 空畫面放吉祥物 */
+.empty .mascot {
+  width: 110px;
+  height: 110px;
+  margin: 0 auto 4px;
+  display: block;
+}
+
+/* 家長的學習進度頂部也用 hero（2.20） */
+.pp-hero.hero {
+  padding: 0;
+}
+.pp-hero .pp-stats {
+  text-align: left;
+}
+.hero .hero-body .pp-stats {
+  margin-top: 2px;
+}
+.hero-tip .mascot.mini,
+.mascot.mini {
+  width: 32px;
+  height: 32px;
+}
