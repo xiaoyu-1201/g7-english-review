@@ -4446,15 +4446,27 @@ ul.plain b {
   grid-column: 1 / -1;
   color: var(--label2);
 }
+/* 正確答案綠、選錯的紅：要一眼看得出來（老師 10/9：顏色再明顯一點） */
 .fb-why li.ok {
-  background: var(--ok-bg);
+  background: rgba(52, 199, 89, 0.22);
+  box-shadow: inset 4px 0 0 var(--green-v);
+}
+.fb-why li.ok b {
+  color: var(--green);
+}
+.fb-why li.ok b::after {
+  content: ' ✓';
 }
 .fb-why li.ok span {
   color: var(--green);
   font-weight: 700;
 }
 .fb-why li.mine {
-  background: var(--bad-bg);
+  background: rgba(255, 59, 48, 0.2);
+  box-shadow: inset 4px 0 0 var(--red-v);
+}
+.fb-why li.mine b {
+  color: var(--red);
 }
 .exam-pts {
   margin-left: 6px;
@@ -5160,6 +5172,97 @@ ul.plain b {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+/* 2.15 老師看學生：今天做到哪、作答依日期收合、徽章 */
+.today-mods {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.today-mods .tm-h {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--label2);
+  margin-right: 2px;
+}
+.today-mods .chip {
+  font-size: 13px;
+}
+.feed-day {
+  margin: 0 0 6px;
+}
+.feed-day > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 2px;
+  font-size: 14px;
+  color: var(--label2);
+}
+.feed-day > summary::-webkit-details-marker {
+  display: none;
+}
+.feed-day .fd-d {
+  font-weight: 700;
+  color: var(--label);
+}
+.feed-day .fd-n {
+  flex: 1;
+}
+.feed-day[open] > summary .fold-chev {
+  transform: rotate(90deg);
+}
+.feed-day .fold-chev {
+  margin-top: 0;
+}
+.badges-card .badges {
+  margin-top: 4px;
+}
+/* 作答清單工具列（老師 10/9：要看得到更早的作答、檢討要快）：全部／只看錯的＋檢討 */
+.feed-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.feed-note {
+  color: var(--label2);
+  font-size: 14px;
+}
+.feed-more {
+  width: 100%;
+  margin-top: 8px;
+}
+.feed-card .sec-h {
+  align-items: flex-start;
+}
+.feed-card .sec-h .link {
+  white-space: nowrap;
+  margin-top: 4px;
+}
+.rr-pos {
+  font-size: 15px;
+}
+/* 列印說明視窗（iOS）：正在關的視窗不要印出來 */
+@media print {
+  .sheet-wrap {
+    display: none !important;
+  }
+}
+/* iOS 主畫面 App 不能列印：給老師複製的網址 */
+.print-url {
+  word-break: break-all;
+  user-select: all;
+  -webkit-user-select: all;
+  margin: 4px 0;
+  font-size: 14px;
 }
 /* 2.14 口說：對比組、問答、難度 */
 .sp-ask {

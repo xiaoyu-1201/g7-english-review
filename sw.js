@@ -1,7 +1,7 @@
 // 讓 App 沒有網路也能打開
 // 更新：每次都先問 GitHub 有沒有新版（跳過 10 分鐘暫存）；新版裝好會自動重新整理一次
 // 改版時：app.js 的 VERSION 和這裡的 CACHE 都要改
-const CACHE = 'g7review-v49'
+const CACHE = 'g7review-v50'
 const SHELL = ['./', 'index.html', 'app.js', 'content.js', 'content2.js', 'content3.js', 'speak2.js', 'art.js', 'qrcode.js', 'asr.js', 'styles.css', 'icon.svg']
 // 主畫面圖示和 manifest 不經過 service worker：iPhone「加入主畫面」抓圖示時會走頁面的 SW，被攔到就會變成文字圖示（10/7）
 const BYPASS = /\.(png|webmanifest)$/
@@ -24,8 +24,9 @@ self.addEventListener('activate', (e) => {
       await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
       await self.clients.claim()
       if (hadOld) {
+        // 告訴開著的頁面有新版；頁面自己決定什麼時候重新整理（做題、考試、課堂檢視中不打斷）
         const wins = await self.clients.matchAll({ type: 'window' })
-        wins.forEach((w) => w.navigate(w.url).catch(() => {}))
+        wins.forEach((w) => w.postMessage({ type: 'updated' }))
       }
     })(),
   )

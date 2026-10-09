@@ -39,9 +39,13 @@ with sync_playwright() as p:
         A.click(f'.qcard .opt[data-i="{wrong}"]')
         check(wait_until(lambda: "已選" in txt(T, ".wq-h")), f"teacher sees the pre-selection: {txt(T, '.wq-h')[:30]}")
         check(T.locator(".watch-q .opt.sel").count() == 1, "the selected option is outlined")
+        # 改選：先選錯的，再改成對的 → 老師看到「先選 X，改成 Y」；檢查後紀錄寫「改了 1 次答案」
+        A.click(f'.qcard .opt[data-i="{it["a"]}"]')
+        check(wait_until(lambda: "改成" in txt(T, ".wq-h") and "先選" in txt(T, ".wq-h")), f"teacher sees the change of mind: {txt(T, '.wq-h')[:50]}")
         T.screenshot(path=str(OUT / "f2-sel.png"))
         A.click("[data-act=check]")
-        check(wait_until(lambda: "答錯了" in txt(T, ".wq-h")), "after checking, the teacher sees the result")
+        check(wait_until(lambda: "答對了" in txt(T, ".wq-h")), "after checking, the teacher sees the result")
+        check(wait_until(lambda: "改了 1 次答案" in txt(T, ".watch-page .live-feed")), "feed notes the answer was changed before checking")
     # 學生 Ben 去寫模擬段考 → 老師切換到 Ben，看到進度
     B.goto(URL + "#/exam")
     B.wait_for_selector("[data-act=start]")

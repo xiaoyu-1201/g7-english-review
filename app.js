@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.14.12（10/8）'
+const VERSION = '2.15（10/9）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -246,6 +246,7 @@ function tagCounts(list) {
 }
 function record(it, res, extra = {}) {
   const a = { q: it.id, m: it.mid, r: res.r, t: res.tags || [], a: String(res.given ?? '').slice(0, 120), h: extra.h || 0, c: extra.c ? 1 : 0, x: extra.x || 'p', ts: Date.now(), d: S.profile.id }
+  if (RUN?.it === it && RUN.sels?.length > 1) a.sw = RUN.sels.length - 1 // 檢查前改了幾次選項
   S.attempts.push(a)
   Sync.queue('a', a)
   return a
@@ -280,27 +281,31 @@ const BADGES = [
   ['lesson2', '🥇', '第 2 堂制霸', '第 2 堂 8 個單元都拿到三星'],
   ['exam', '💯', '準備好了', '模擬段考 90 分以上'],
 ]
-function badgeEarned() {
-  const modSess = S.sessions.filter((s) => s.k?.startsWith('m:'))
+// 哪些徽章達成了：預設算自己的紀錄；老師看學生時傳學生的雲端紀錄進來算（2.15）
+function badgeEarned(data) {
+  const sessions = data?.sessions || S.sessions
+  const attempts = data?.attempts || S.attempts
+  const flashBest = data ? Math.max(0, ...sessions.filter((s) => s.k === 'flash').map((s) => s.s || 0)) : S.flash.best || 0
+  const modSess = sessions.filter((s) => s.k?.startsWith('m:'))
   const best = (m) => Math.max(0, ...modSess.filter((s) => s.m === m).map((s) => s.stars || 0))
   const runs = {}
   let maxRun = 0
-  for (const a of S.attempts) {
+  for (const a of attempts) {
     if (a.x === 'e') continue
     runs[a.d] = a.r === 'ok' ? (runs[a.d] || 0) + 1 : 0
     maxRun = Math.max(maxRun, runs[a.d])
   }
-  const grads = Object.values(bookState()).filter((b) => !b.inBook).length
+  const grads = Object.values(bookState(attempts)).filter((b) => !b.inBook).length
   return {
     start: modSess.length > 0,
     ten: maxRun >= 10,
     careful: modSess.some((s) => s.n >= 10 && !s.care && s.ok >= s.n * 0.8),
-    days: maxStreakDays() >= 3,
+    days: maxStreakDays(attempts) >= 3,
     grad: grads >= 10,
-    flash: (S.flash.best || 0) >= 20,
+    flash: flashBest >= 20,
     lesson1: LESSONS[0].modules.every((m) => best(m) === 3),
     lesson2: LESSONS[1].modules.every((m) => best(m) === 3),
-    exam: S.sessions.some((s) => s.k === 'exam' && s.s >= 90),
+    exam: sessions.some((s) => s.k === 'exam' && s.s >= 90),
   }
 }
 function checkBadges(silent = false) {
@@ -324,8 +329,13 @@ function checkBadges(silent = false) {
 }
 
 // ───────────────────────── 文字批改 ─────────────────────────
+// 全形 → 半形（iPad 用中文鍵盤打出來的「？」「，」和全形字母：看起來一樣，字元不同；10/9 老師發現 Is Sophie a nurse？ 被判錯）
+// 全形的逗號、句號、問號、驚嘆號後面補一個空格（中文標點本來就不留空格；「：」不補，7：30 要等於 7:30）
 const nb = (s) =>
   String(s ?? '')
+    .replace(/[，。？！]/g, (c) => ({ '，': ', ', '。': '. ', '？': '? ', '！': '! ' })[c])
+    .replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/、/g, ', ')
     .replace(/[‘’ʼ′`´]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/ /g, ' ')
@@ -1461,7 +1471,11 @@ function runShell(pr, it, at, reviewing) {
 function tellSel(C) {
   if (!Sync.last || Sync.last.view !== 'run') return
   const sel = $('.opt.sel .opt-text', C.el)?.textContent || ''
-  if ((Sync.last.sel || '') !== sel) Sync.presence({ ...Sync.last, sel })
+  if ((Sync.last.sel || '') === sel) return
+  // 改選的過程也記著（先選 A 再改 C）：老師看得到猶豫，檢查後寫進作答紀錄（sw＝改了幾次）
+  const sels = (RUN.sels ||= [])
+  if (sel && sels[sels.length - 1] !== sel) sels.push(sel)
+  Sync.presence({ ...Sync.last, sel, sels: sels.slice(-5) })
 }
 
 function viewRun(key, at) {
@@ -1691,7 +1705,7 @@ function retryItem() {
   const box = $('.hint-box')
   box.hidden = true
   box.innerHTML = ''
-  Object.assign(RUN, { C, hints: 0, guess: false, checked: false, retry: true })
+  Object.assign(RUN, { C, hints: 0, guess: false, checked: false, retry: true, sels: [] })
   $('.ra-left [data-act=retry]')?.remove()
   $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="hint">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false">🤔<span>不太確定</span></button>`)
   const btn = $('[data-act=check]')
@@ -1914,6 +1928,45 @@ function notesHTML(mid, hidden = false) {
 function showNotes(mid) {
   sheet(notesHTML(mid), { wide: true })
 }
+// 列印（10/9 老師：iPad 上「列印沒辦法按」、Safari 分享面板也沒有「列印」，要把重點總整理存成 PDF 放進 Goodnotes）
+// iOS 不直接叫 window.print()（主畫面 App 沒反應；有的 iPad 沒有列印），先開說明：列印，或 Safari「分享 → 選項 → PDF」存成 PDF
+// hash：有全部的課的列印頁（#/print/notes/<課的代號,…>）；prepare：印之前把收合的都打開
+const STANDALONE = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches
+function doPrint(prepare, hash = location.hash) {
+  if (!IS_IOS) {
+    prepare?.()
+    return window.print()
+  }
+  printHelpSheet(hash, prepare)
+}
+function printHelpSheet(hash, prepare) {
+  const url = location.href.split('#')[0] + hash
+  const here = location.hash === hash
+  const pdf = '要存成 PDF 或放進 Goodnotes：按 Safari 的「分享」→ 最上面的「選項」→ 選「PDF」→ 再選 Goodnotes 或「儲存到檔案」。'
+  const b = sheet(
+    STANDALONE
+      ? `<h2 class="sheet-title">用 Safari 列印或存成 PDF</h2><p class="sheet-p">從主畫面打開的 App 沒辦法列印。請用 Safari 打開下面的網址（有全部的課），再按「列印」。${pdf}</p><div class="pair-link print-url">${esc(url)}</div><div class="sheet-actions"><button class="btn ghost" data-copy>複製網址</button><button class="btn primary" data-open>在 Safari 打開</button></div>`
+      : `<h2 class="sheet-title">列印或存成 PDF</h2><p class="sheet-p">${here ? '這一頁有全部的課。' : '要印全部的課，先打開列印頁。'}${pdf}</p><div class="sheet-actions">${here ? '' : '<button class="btn ghost" data-goprint>打開列印頁（全部的課）</button>'}<button class="btn primary" data-doprint>列印</button></div>`,
+  )
+  $('[data-copy]', b)?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast('已複製網址', '📋')
+    } catch {
+      toast('沒辦法複製，請長按網址選取', '⚠️')
+    }
+  })
+  $('[data-open]', b)?.addEventListener('click', () => window.open(url, '_blank'))
+  $('[data-goprint]', b)?.addEventListener('click', () => {
+    closeSheet()
+    go(hash)
+  })
+  $('[data-doprint]', b)?.addEventListener('click', () => {
+    closeSheet()
+    prepare?.()
+    window.print() // 視窗正在關（列印時 .sheet-wrap 不印）
+  })
+}
 // 重點總整理：一次看一課（上面一排課名可以切換，記住上次看的）；列印時全部印出來
 function viewAllNotes() {
   const mods = openMods()
@@ -1928,10 +1981,7 @@ function viewAllNotes() {
       <details class="callout notes-check"><summary>交卷前 30 秒檢查清單</summary><ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol></details>
     </div>`,
   )
-  $('[data-print]').onclick = () => {
-    $$('.notes-page details').forEach((d) => (d.open = true))
-    window.print()
-  }
+  $('[data-print]').onclick = () => doPrint(() => $$('.notes-page details').forEach((d) => (d.open = true)), '#/print/notes/' + mods.join(','))
   $('.notes-units').addEventListener('click', (e) => {
     const b = e.target.closest('[data-u]')
     if (!b) return
@@ -2377,7 +2427,21 @@ function paperItem(it) {
   if (it.t === 'sort') return `<div class="p-task">${esc(it.q.replace(/[:：].*$/, ''))}</div><div class="p-src">${shuffle(it.chips.map((c) => c[0])).map(esc).join('、')}</div><table class="p-bins"><tr>${it.bins.map((b) => `<th>${esc(b)}</th>`).join('')}</tr><tr>${it.bins.map(() => '<td></td>').join('')}</tr></table>`
   return ''
 }
-function viewPrint(key) {
+// extra：#/print/notes/<課的代號,…>（iOS 主畫面 App 用 Safari 開來印；Safari 沒登入也印得到同樣的課）
+function viewPrint(key, extra = '') {
+  if (key === 'notes') {
+    const fromUrl = extra.split(',').filter((m) => MODULES[m])
+    const mods = fromUrl.length ? fromUrl : openMods()
+    setView(
+      `<div class="page notes-page notes-print">
+        ${header('重點總整理', `${mods.length} 個單元，全部一起印`, `<button class="btn primary" data-print>${ICON.doc}<span>列印</span></button>`, true)}
+        ${mods.map((m) => notesHTML(m)).join('')}
+        <details class="callout notes-check" open><summary>交卷前 30 秒檢查清單</summary><ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol></details>
+      </div>`,
+    )
+    $('[data-print]').onclick = () => doPrint(() => $$('.notes-print details').forEach((d) => (d.open = true)))
+    return
+  }
   let ids = []
   let title = ''
   const L = LESSONS.find((l) => l.id === key)
@@ -2419,7 +2483,7 @@ function viewPrint(key) {
       <div class="paper p-answers"><div class="p-head"><b>${esc(title)}・解答</b></div><ol class="p-key">${key2}</ol></div>` : ''}
     </div>`,
   )
-  $('[data-print]')?.addEventListener('click', () => window.print())
+  $('[data-print]')?.addEventListener('click', () => doPrint())
 }
 
 // ───────────────────────── 錯題本 ─────────────────────────
@@ -2918,13 +2982,15 @@ function whyHTML(list) {
   if (!w.length) return ''
   return `<div class="why-sum"><div class="group-h">自己說的錯因</div><div class="chips">${w.map(([t, n]) => `<span class="chip">${t} × ${n}</span>`).join('')}</div></div>`
 }
-function badgesHTML() {
-  const have = S.badges || {}
+// have：{徽章 id: 拿到的時間或 true}；fold＝做成可收合的卡（老師的學生頁）
+function badgesHTML(have = S.badges || {}, fold = false) {
   const n = BADGES.filter(([id]) => have[id]).length
-  return `<section class="card"><div class="sec-h"><div><h2>徽章</h2><p>已經拿到 ${n}／${BADGES.length} 個。</p></div></div>
-    <div class="badges">${BADGES.map(
-      ([id, ic, name, desc]) => `<div class="badge-item${have[id] ? ' got' : ''}" title="${esc(desc)}"><div class="medal b-${id}"><span>${have[id] ? ic : '🔒'}</span></div><div class="badge-n">${esc(name)}</div><div class="badge-d">${esc(desc)}</div></div>`,
-    ).join('')}</div></section>`
+  const grid = `<div class="badges">${BADGES.map(
+    ([id, ic, name, desc]) => `<div class="badge-item${have[id] ? ' got' : ''}" title="${esc(desc)}"><div class="medal b-${id}"><span>${have[id] ? ic : '🔒'}</span></div><div class="badge-n">${esc(name)}</div><div class="badge-d">${esc(desc)}</div></div>`,
+  ).join('')}</div>`
+  if (fold)
+    return `<details class="card fold-card badges-card"><summary><div class="sec-h"><div><h2>徽章</h2><p>拿到 ${n}／${BADGES.length} 個${n ? `：${BADGES.filter(([id]) => have[id]).map(([, ic]) => ic).join(' ')}` : ''}</p></div><span class="fold-chev">${ICON.chev}</span></div></summary>${grid}</details>`
+  return `<section class="card"><div class="sec-h"><div><h2>徽章</h2><p>已經拿到 ${n}／${BADGES.length} 個。</p></div></div>${grid}</section>`
 }
 function viewStats() {
   const mine = statsFilter === 'mine'
@@ -5118,11 +5184,17 @@ const agoText = (ts) => {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000))
   return s < 60 ? '剛剛' : s < 3600 ? `${Math.floor(s / 60)} 分鐘前` : s < 86400 ? `${Math.floor(s / 3600)} 小時前` : fmtTime(ts)
 }
+// 學生正在做哪一課的哪一題：Unit 2｜this／that…・第 3／12 題（老師 10/9：只看到題目，不知道做到哪一塊）
+function runLabel(l) {
+  const m = MODULES[ITEM[l.q]?.mid]
+  const title = m && l.title === m.title ? `${m.unit}｜${m.title}` : l.title
+  return `${title}・第 ${l.n}／${l.of} 題`
+}
 function liveText(l) {
   if (!l) return '還沒有上線'
   const fresh = Date.now() - l.ts < 10 * 60000
   const where = l.dev === '老師的裝置' || l.dev === '上課平板' ? '（在老師的裝置上）' : ''
-  if (l.view === 'run' && fresh) return `正在做：${l.title}・第 ${l.n}／${l.of} 題${where}`
+  if (l.view === 'run' && fresh) return `正在做：${runLabel(l)}${l.sel ? `・已選「${l.sel}」` : ''}${where}`
   if (l.view === 'exam' && fresh) return `正在寫${l.listen ? '聽力練習卷' : '模擬段考'}${l.of ? `・已寫 ${l.n}／${l.of} 題` : ''}${where}`
   if (l.view === 'notes' && fresh) return `在看重點總整理${where}`
   if (l.view === 'book' && fresh) return `在看錯題本${where}`
@@ -5226,18 +5298,107 @@ document.addEventListener('click', (e) => {
 
 // 一個學生的作答紀錄（即時更新；點一題看完整題目與解析）
 // sid：老師看某個學生時傳進來，會標出「在這個裝置上做的」（老師自己測試的）
-function feedHTML(list, sid = '') {
-  const feed = list.slice(-40).reverse()
+// by：'day'＝依日期分組（學生頁、家長頁；最新一天展開，老師 10/9：只有時間沒有日期會搞混）
+//     'mod'＝依連續做的同一個單元分組（課堂檢視：今天做到哪一塊）
+// st：重畫前的展開狀態（feedState()）；即時更新會整頁重畫，不能把老師展開的那組收回去
+// more：最後面放「更早的作答」（一次多 FEED_PAGE 題；老師 10/9：看不到更早的沒辦法檢討）
+// 只看錯的（FEED_ONLY，只在老師的畫面）：檢討時不用在答對的題目裡找
+let FEED_ONLY = false
+const FEED_MORE = {}
+const FEED_PAGE = 80
+const feedState = () => {
+  const ds = $$('details.feed-day')
+  return ds.length ? { keys: new Set(ds.map((d) => d.dataset.k)), open: new Set(ds.filter((d) => d.open).map((d) => d.dataset.k)) } : null
+}
+const modLabel = (a) => (a.x === 'e' ? '模擬段考' : MODULES[ITEM[a.q]?.mid] ? `${MODULES[ITEM[a.q].mid].unit}｜${MODULES[ITEM[a.q].mid].title}` : '')
+const dayLabel = (d, t0 = dayStart()) => (d === t0 ? '今天' : d === t0 - DAY ? '昨天' : `${fmtDate(d)}（${'日一二三四五六'[new Date(d).getDay()]}）`)
+function feedHTML(list, sid = '', { by = 'day', st = null, more = false } = {}) {
+  const only = FEED_ONLY && !!sid
+  const src = list.filter((a) => ITEM[a.q] && (!only || a.r !== 'ok'))
+  const limit = by === 'day' ? FEED_PAGE * (1 + (FEED_MORE[sid] || 0)) : src.length
+  const feed = src.slice(-limit).reverse()
   const mine = sid && Sync.isAdmin() && !ACTIVE ? myDevIds(sid) : new Set()
-  return feed.length
-    ? `<div class="list flat live-feed">${feed
-        .map((a) => {
-          const it = ITEM[a.q]
-          if (!it) return ''
-          return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${mine.has(a.d) ? '<em class="lr-mine">這個裝置做的</em>' : ''}${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・不太確定' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
-        })
-        .join('')}</div>`
-    : '<p class="muted pad">還沒有作答紀錄。</p>'
+  if (!feed.length) return `<p class="muted pad">${only && list.length ? '沒有答錯的題目。' : '還沒有作答紀錄。'}</p>`
+  const row = (a) => {
+    const it = ITEM[a.q]
+    return `<button class="row live-row" data-att="${esc(Sync.akey(a))}"><span class="lr-r ${a.r}">${a.r === 'ok' ? ICON.check : a.r === 'care' ? '!' : ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(it))}</span><small>${mine.has(a.d) ? '<em class="lr-mine">這個裝置做的</em>' : ''}${esc(a.a || '（空白）')}${a.w ? `・自評：${WHY_ME.find((w) => w[0] === a.w)?.[1] || ''}` : ''}${a.c ? '・不太確定' : ''}${a.h ? `・看了 ${a.h} 個提示` : ''}${a.sw ? `・檢查前改了 ${a.sw} 次答案` : ''}</small></span><span class="row-r">${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>${ICON.chev}</button>`
+  }
+  const gid = (a) => (by === 'day' ? dayStart(a.ts) : a.x === 'e' ? 'exam' : ITEM[a.q].mid)
+  const groups = []
+  for (const a of feed) {
+    const g = groups[groups.length - 1]
+    if (g && g.id === gid(a)) g.items.push(a)
+    else groups.push({ id: gid(a), items: [a] })
+  }
+  // 每組的代號：依日期＝那一天；依單元＝單元＋最早一題的時間（新作答加進來，代號不變，展開狀態才留得住）
+  const key = (g) => (by === 'day' ? `d${g.id}` : `${g.id}:${g.items[g.items.length - 1].ts}`)
+  const label = (g) => (by === 'day' ? dayLabel(g.id) : modLabel(g.items[0]) || '練習')
+  const html = groups
+    .map((g, i) => {
+      const k = key(g)
+      const ok = g.items.filter((a) => a.r === 'ok').length
+      const open = st ? st.open.has(k) || (i === 0 && !st.keys.has(k)) : i === 0
+      return `<details class="feed-day" data-k="${esc(k)}"${open ? ' open' : ''}><summary><span class="fd-d">${esc(label(g))}</span><span class="fd-n">${only ? `錯 ${g.items.length} 題` : `${g.items.length} 題・對 ${ok}`}</span><span class="fold-chev">${ICON.chev}</span></summary><div class="list flat live-feed">${g.items.map(row).join('')}</div></details>`
+    })
+    .join('')
+  const rest = src.length - feed.length
+  return html + (more && rest > 0 ? `<button class="btn ghost feed-more" data-feedmore>更早的作答（還有 ${rest} 題）</button>` : '')
+}
+// 作答清單上方：全部／只看錯的、檢討（答錯的一題一題看）
+function feedToolsHTML(pool) {
+  return `<div class="feed-tools"><div class="seg small" role="tablist"><button role="tab" class="${FEED_ONLY ? '' : 'on'}" data-only="0">全部</button><button role="tab" class="${FEED_ONLY ? 'on' : ''}" data-only="1">只看錯的</button></div>${pool.items.length ? `<button class="btn primary small-btn" data-review>檢討${esc(pool.label)}錯的 ${pool.items.length} 題</button>` : pool.label ? `<span class="feed-note">${esc(pool.label)}沒有答錯</span>` : ''}</div>`
+}
+// 要檢討的題目：最近有作答的那一天（通常是今天）答錯或格式粗心的；同一題錯兩次只留最後一次；「再試一次」的不算
+function reviewPool(list) {
+  const known = list.filter((a) => ITEM[a.q] && a.x !== 'r')
+  if (!known.length) return { items: [], label: '' }
+  const d = dayStart(known[known.length - 1].ts)
+  const t0 = dayStart()
+  const byQ = new Map()
+  for (const a of known) if (dayStart(a.ts) === d && a.r !== 'ok') byQ.set(a.q, a)
+  return { items: [...byQ.values()].sort((x, y) => x.ts - y.ts), label: d === t0 ? '今天' : d === t0 - DAY ? '昨天' : fmtDate(d) }
+}
+// 檢討：答錯的題目一題一題看（題目、學生的答案、正確答案、解析），上一題／下一題（鍵盤 ←→ 也可以）
+function reviewRun(items, label = '') {
+  if (!items.length) return toast('沒有答錯的題目', '🎉')
+  let i = 0
+  const key = (e) => {
+    if (e.key === 'ArrowRight') step(1)
+    if (e.key === 'ArrowLeft') step(-1)
+  }
+  const b = sheet(`<h2 class="sheet-title">檢討${label ? `：${esc(label)}` : ''}</h2><p class="sheet-p rr-pos"></p><div class="review-slot"></div><div class="sheet-actions rr-nav"><button class="btn ghost" data-rr="-1">上一題</button><button class="btn primary" data-rr="1">下一題</button></div>`, { wide: true, onClose: () => document.removeEventListener('keydown', key) })
+  const show = () => {
+    const a = items[i]
+    $('.rr-pos', b).textContent = `第 ${i + 1}／${items.length} 題・${modLabel(a)}・${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}`
+    $('.review-slot', b).replaceChildren(reviewCard(ITEM[a.q], a, '學生的答案'))
+    $('[data-rr="-1"]', b).disabled = i === 0
+    $('[data-rr="1"]', b).textContent = i === items.length - 1 ? '完成' : '下一題'
+    b.closest('.sheet').scrollTop = 0
+  }
+  const step = (n) => {
+    if (n > 0 && i === items.length - 1) return closeSheet()
+    i = Math.max(0, Math.min(items.length - 1, i + n))
+    show()
+  }
+  b.addEventListener('click', (e) => {
+    const n = e.target.closest('[data-rr]')
+    if (n) step(+n.dataset.rr)
+  })
+  document.addEventListener('keydown', key)
+  show()
+}
+// 今天做到哪一塊：做完的單元（練習紀錄）＋還在做的單元（有作答、還沒做完）
+function todayModulesHTML(list, sess) {
+  const t0 = dayStart()
+  const done = sess.filter((s) => s.ts >= t0 && s.k?.startsWith('m:') && MODULES[s.m])
+  const doneSet = new Set(done.map((s) => s.m))
+  const byMod = {}
+  for (const a of list) if (a.ts >= t0 && ITEM[a.q] && !doneSet.has(ITEM[a.q].mid)) (byMod[ITEM[a.q].mid] ||= new Set()).add(a.q)
+  const going = Object.entries(byMod).filter(([m]) => MODULES[m])
+  if (!done.length && !going.length) return ''
+  return `<div class="today-mods"><span class="tm-h">今天</span>${done
+    .map((s) => `<span class="chip ok">✓ ${esc(MODULES[s.m].unit)}｜${esc(MODULES[s.m].title)}${s.s != null ? `　${s.s} 分` : ''}</span>`)
+    .join('')}${going.map(([m, qs]) => `<span class="chip blue">▶ ${esc(MODULES[m].unit)}｜${esc(MODULES[m].title)}　${qs.size}／${MODULES[m].scored.length} 題</span>`).join('')}</div>`
 }
 // 這個裝置做過的作答（每筆作答的 d＝做題的裝置代號）：這個裝置本身（例如以前用學生連結測試過），加上在這個裝置開「學生模式」做的
 function myDevIds(sid) {
@@ -5256,7 +5417,21 @@ function whoMadeText(sid, d) {
   return m ? `在${name}的裝置上做的（${m.dev || '裝置'}）` : '在其他裝置上做的'
 }
 // sid：老師看某個學生時才有，可以刪掉這一筆（例如自己測試的）
-function feedClick(e, list, sid = '') {
+// redraw：切換「只看錯的」、按「更早的作答」之後重畫那一頁
+function feedClick(e, list, sid = '', redraw = null) {
+  const o = e.target.closest('[data-only]')
+  if (o) {
+    FEED_ONLY = o.dataset.only === '1'
+    return redraw?.()
+  }
+  if (e.target.closest('[data-review]')) {
+    const p = reviewPool(list)
+    return reviewRun(p.items, p.label)
+  }
+  if (e.target.closest('[data-feedmore]')) {
+    FEED_MORE[sid] = (FEED_MORE[sid] || 0) + 1
+    return redraw?.()
+  }
   const r = e.target.closest('[data-att]')
   if (!r) return
   const a = list.find((x) => Sync.akey(x) === r.dataset.att)
@@ -5590,6 +5765,7 @@ function viewStudent(sid, keepScroll = false) {
     return setView(`<div class="page narrow">${header('學生', '', '', true)}<div class="empty card"><div class="empty-ic">📡</div><h2>載入中…</h2></div></div>`)
   }
   const y = window.scrollY
+  const fst = feedState()
   const list = Sync.attemptsOf(sid)
   const sess = Sync.sessionsOf(sid)
   const t0 = dayStart()
@@ -5615,8 +5791,11 @@ function viewStudent(sid, keepScroll = false) {
       <section class="card live-dev">
         <div class="ld-head"><span class="ld-dot${isActive(l) ? ' on' : ''}"></span><div class="ld-who"><b>即時作答</b><span>${esc(liveText(l))}</span></div>
           <div class="ld-today"><b>${today.length}</b> 題<span>今天${today.length ? `・對 ${Math.round((ok / today.length) * 100)}%` : ''}</span></div></div>
-        ${feedHTML(list, sid)}
+        ${todayModulesHTML(list, sess)}
+        ${feedToolsHTML(reviewPool(list))}
+        ${feedHTML(list, sid, { st: fst, more: true })}
       </section>
+      ${badgesHTML(badgeEarned({ sessions: sess, attempts: list }), true)}
       ${
         tc.length
           ? `<section class="card"><div class="sec-h"><div><h2>最近兩週常錯的地方</h2><p>上課可以從這裡開始講。</p></div></div><div class="bars">${tc
@@ -5637,7 +5816,7 @@ function viewStudent(sid, keepScroll = false) {
   )
   if (keepScroll) window.scrollTo(0, y)
   $('.stu-detail').addEventListener('click', (e) => {
-    feedClick(e, list, sid)
+    feedClick(e, list, sid, () => viewStudent(sid, true))
     const sh = e.target.closest('[data-share]')
     if (sh) return shareStudent(sid, sh.dataset.share)
     if (e.target.closest('[data-class]')) return enterClass(sid)
@@ -5704,6 +5883,7 @@ function viewWatch(sid, keepScroll = false) {
       })
       .catch(() => {})
   const y = window.scrollY
+  const fst = feedState()
   const list = Sync.attemptsOf(sid)
   const l = latestLive(sid)
   const it = isActive(l) && l.view === 'run' && ITEM[l.q]
@@ -5741,7 +5921,7 @@ function viewWatch(sid, keepScroll = false) {
   const spCls = sp && l.said ? (l.sc >= 85 ? 'ok' : l.sc >= 65 ? 'care' : 'bad') : ''
   setView(
     `<div class="page narrow watch-page">
-      ${header(name, it ? `${l.title}・第 ${l.n}／${l.of} 題` : sp ? `${l.title}・第 ${l.n}／${l.of} 句` : '課堂檢視', syncPill(), true)}
+      ${header(name, it ? runLabel(l) : sp ? `${l.title}・第 ${l.n}／${l.of} 句` : '課堂檢視', syncPill(), true)}
       ${followRow}
       ${
         sp
@@ -5753,12 +5933,12 @@ function viewWatch(sid, keepScroll = false) {
           : it
           ? `<div class="watch-run">${run.map((a) => `<i class="wr ${a.r}" title="${esc(snippet(ITEM[a.q] || {}))}"></i>`).join('')}<span>今天 ${today.length} 題・對 ${today.length ? Math.round((ok / today.length) * 100) : 0}%</span></div>
             <section class="card watch-q${ans ? ' answered ' + ans.r : ''}${ans && Sync.akey(ans) !== watchFresh ? ' fresh' : ''}">
-              <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '不太確定・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : it.t === 'learn' ? '正在看觀念卡' : l.sel ? `已選「${esc(l.sel)}」，還沒檢查` : '正在作答…'}</div>
+              <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '不太確定・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : it.t === 'learn' ? '正在看觀念卡' : l.sel ? `已選「${esc(l.sel)}」，還沒檢查${l.sels?.length > 1 ? `<small>先選 ${esc(l.sels.slice(0, -1).join('、'))}，改成 ${esc(l.sel)}</small>` : ''}` : '正在作答…'}</div>
               <div class="watch-slot"></div>
             </section>`
           : `<div class="empty card"><div class="empty-ic">${isActive(l) ? '📱' : '💤'}</div><h2>${esc(statusTxt)}</h2><p class="muted">${name} 開始做題目時，這裡會自動顯示那一題。</p></div>`
       }
-      <section class="card"><div class="sec-h"><div><h2>剛剛的作答</h2></div></div>${feedHTML(list.slice(-10), sid)}</section>
+      <section class="card feed-card"><div class="sec-h"><div><h2>${today.length ? '今天的作答' : '最近的作答'}</h2><p>${today.length ? `${today.length} 題・對 ${ok}・錯 ${today.length - ok}` : '今天還沒有作答'}</p></div><button class="link" data-go="#/student/${sid}">全部紀錄</button></div>${feedToolsHTML(reviewPool(list))}${feedHTML(today.length ? today : list.slice(-10), sid, { by: today.length ? 'mod' : 'day', st: fst })}</section>
     </div>`,
   )
   if (it) {
@@ -5780,7 +5960,9 @@ function viewWatch(sid, keepScroll = false) {
   $('.watch-page').addEventListener('click', (e) => {
     const f = e.target.closest('[data-follow]')
     if (f) return f.dataset.follow === sid ? go('#/students') : go('#/watch/' + f.dataset.follow)
-    feedClick(e, list, sid)
+    const g = e.target.closest('[data-go]')
+    if (g) return go(g.dataset.go)
+    feedClick(e, list, sid, () => viewWatch(sid, true))
   })
 }
 
@@ -6406,6 +6588,7 @@ function route() {
   Voice.stop()
   const h = location.hash || '#/'
   const [, a, b] = h.split('/')
+  if (UPDATE_PENDING && idleView()) return applyUpdate() // 新版等在這裡：換到不忙的畫面才重新整理
   if (a !== 'speak') {
     ACTIVE_MIC?.() // 離開口說（例如按瀏覽器的返回）：錄音結束、放掉麥克風
     releaseMics()
@@ -6421,7 +6604,7 @@ function route() {
   if (a === 'stats') return viewStats()
   if (a === 'settings') return viewSettings()
   if (a === 'notes') return viewAllNotes()
-  if (a === 'print' && b) return viewPrint(decodeURIComponent(b))
+  if (a === 'print' && b) return viewPrint(decodeURIComponent(b), h.split('/')[3] || '')
   if (a === 'live') return viewLive()
   if (a === 'students') return viewStudents()
   if (a === 'student' && b) return viewStudent(b)
@@ -6480,6 +6663,15 @@ if (S.sync && S.sync.role === 'teacher' && S.sync.owner === undefined && !S.sync
   save()
 }
 Sync.start()
+// 新版裝好：在首頁這類不忙的畫面就馬上重新整理；正在做題、考試、口說、課堂檢視時先記著，換到不忙的畫面再重新整理（10/9 老師上課中不能被打斷）
+// 要宣告在第一次 route() 之前（route 會讀 UPDATE_PENDING）
+let UPDATE_PENDING = false
+const idleView = () => ['', '#/', '#/students', '#/stats', '#/book', '#/settings', '#/notes', '#/manage'].includes(location.hash) && !$('.sheet-wrap')
+function applyUpdate() {
+  if (!UPDATE_PENDING || !idleView()) return
+  UPDATE_PENDING = false
+  location.reload()
+}
 // 打開 App 的第一頁：之後的「返回」如果退到這裡之前（離開 App），改成回上一層
 history.replaceState({ ...(history.state || {}), root: true, sheet: 0 }, '')
 route()
@@ -6499,6 +6691,7 @@ document.addEventListener('visibilitychange', () => {
   if (dead || (Auth.ok() && Auth.data?.exp && Auth.data.exp < Date.now() + 120000)) Sync.start()
 })
 
+// 新版裝好（UPDATE_PENDING、applyUpdate 宣告在上面 route() 之前）
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker
     .register('sw.js', { updateViaCache: 'none' })
@@ -6506,6 +6699,11 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
       document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && reg.update().catch(() => {}))
     })
     .catch(() => {})
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type !== 'updated') return
+    UPDATE_PENDING = true
+    applyUpdate()
+  })
 }
 
 // 給測試用
