@@ -102,6 +102,20 @@ with sync_playwright() as p:
     T.keyboard.press("Escape")
     time.sleep(0.4)
     check(T.locator(".hw-card [data-sharehw]").count() == 1, "each homework has a 傳給學生 button")
+    # 修改已經派出的作業（老師 10/9：不小心按錯要可以改）：原本的項目、時間帶進來；存回同一份
+    hw_before = {k: v for k, v in (http("GET", f"/classes/{code}/hw/{amy}.json")[1] or {}).items() if v.get("kind") != "note"}
+    hid, h0 = next(iter(hw_before.items()))
+    T.click(f'.hw-card [data-edithw="{hid}"]')
+    T.wait_for_selector(".sheet .hp-card")
+    check("修改" in txt(T, ".sheet .sheet-title") and T.locator(".sheet .hw-pick.on").count() == 1 and T.evaluate("document.querySelector('#hw-time').value") == "17:30", "edit opens with the original tasks and time")
+    T.click('.sheet .hp-card[data-t="book"]')
+    T.click(".sheet [data-ok]")
+    T.wait_for_selector(".sheet [data-send]")
+    check("修改後" in txt(T, ".sheet .hw-confirm") and "儲存修改" in txt(T, ".sheet [data-send]"), "confirm step says it is an edit")
+    T.click(".sheet [data-send]")
+    check(wait_until(lambda: "已修改" in txt(T, "#toast")), "edit saved")
+    h1 = (http("GET", f"/classes/{code}/hw/{amy}/{hid}.json")[1] or {})
+    check(len(h1.get("tasks", [])) == 2 and h1.get("at") == h0.get("at") and len([1 for v in (http("GET", f"/classes/{code}/hw/{amy}.json")[1] or {}).values() if v.get("kind") != "note"]) == 1, "the same homework is updated (not a new one), assign time kept")
     # 學生（已連結）點作業連結 → 作業視窗 → 開始第一項
     A.goto(hwlink)
     A.wait_for_selector(".sheet [data-hw]")

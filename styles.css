@@ -36,11 +36,11 @@
   --sofa: #8ab4ee;
   --sofa-dark: #6b9be3;
   --floor: #efe9e0;
-  --r-xl: 26px;
-  --r-lg: 20px;
+  --r-xl: 18px;
+  --r-lg: 16px;
   --r-md: 14px;
   --r-sm: 10px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.06);
+  --shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.05); /* 2.19：卡片不靠大陰影分層，靠底色差（設計手冊 §2） */
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
   --round: ui-rounded, 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang TC', sans-serif;
   --en: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
@@ -249,7 +249,7 @@ svg .fill {
   font-size: clamp(30px, 4.4vw, 38px);
   line-height: 1.12;
   letter-spacing: -0.02em;
-  font-weight: 800;
+  font-weight: 700;
   margin: 0;
 }
 .lg-sub {
@@ -303,7 +303,7 @@ svg .fill {
 .link {
   color: var(--blue);
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   padding: 6px 2px;
   white-space: nowrap;
 }
@@ -1113,7 +1113,7 @@ details.fold-card[open] > summary .fold-chev {
   font-size: 21px;
   line-height: 1.55;
   margin: 4px 0 18px;
-  font-weight: 500;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 .gap {
@@ -1376,7 +1376,7 @@ details.fold-card[open] > summary .fold-chev {
   box-shadow: 0 0 0 1px var(--sep), 0 2px 6px rgba(0, 0, 0, 0.06);
   font-family: var(--en);
   font-size: 20px;
-  font-weight: 500;
+  font-weight: 600;
   animation: pop 0.2s ease;
 }
 .ord-chip.line {
@@ -1943,7 +1943,7 @@ table.grid4 td {
   display: grid;
   place-items: center;
   color: #fff;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 20px;
   flex: none;
   animation: spring 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
@@ -1967,7 +1967,7 @@ table.grid4 td {
   background: var(--red-v);
 }
 .fb-title {
-  font-weight: 800;
+  font-weight: 700;
   font-size: 19px;
 }
 .fb.ok .fb-title {
@@ -2079,7 +2079,7 @@ mark.y {
 }
 .sum-pct b {
   font-size: 46px;
-  font-weight: 800;
+  font-weight: 700;
 }
 .sum-pct span {
   font-size: 20px;
@@ -2111,7 +2111,7 @@ mark.y {
 .tile-v {
   font-family: var(--round);
   font-size: 32px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.15;
 }
 .tile-v small {
@@ -2148,7 +2148,7 @@ mark.y {
   background: var(--care-bg);
 }
 .callout .num {
-  font-weight: 800;
+  font-weight: 700;
   font-family: var(--round);
 }
 .learn-rule .tip {
@@ -2174,7 +2174,7 @@ mark.y {
 .book-n {
   font-family: var(--round);
   font-size: 48px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   color: var(--red);
 }
@@ -2283,7 +2283,7 @@ ul.plain b {
 }
 .er-score b {
   font-size: 64px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   color: var(--blue);
 }
@@ -2376,7 +2376,7 @@ ul.plain b {
   text-align: right;
   font-family: var(--round);
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--orange);
 }
 .flash-stage {
@@ -2784,27 +2784,32 @@ ul.plain b {
   box-shadow: none;
 }
 
-/* 提示泡泡（像動態島） */
+/* 提示泡泡：2.19（審查：被擠成三行、蓋住標題）→ 寬度跟著文字、放在下方分頁列上面、不彈跳 */
 #toast {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 12px);
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 14px);
   left: 50%;
   z-index: 90;
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: min(92vw, 520px);
-  padding: 11px 20px;
-  border-radius: 999px;
+  width: max-content;
+  max-width: min(calc(100vw - 32px), 520px);
+  padding: 11px 18px;
+  border-radius: 14px;
   background: rgba(28, 28, 30, 0.92);
   color: #fff;
   font-size: 15px;
   font-weight: 600;
+  line-height: 1.4;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  transform: translate(-50%, -140%);
+  transform: translate(-50%, 16px);
   opacity: 0;
-  transition: transform 0.4s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.25s;
+  transition: transform 0.25s ease-out, opacity 0.2s;
   pointer-events: none;
+}
+#toast .t-ic.icb {
+  color: #fff;
 }
 #toast.show {
   transform: translate(-50%, 0);
@@ -3040,7 +3045,7 @@ ul.plain b {
 }
 .plan-count {
   font-family: var(--round);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 20px;
   color: var(--label2);
   white-space: nowrap;
@@ -3522,7 +3527,7 @@ ul.plain b {
   display: grid;
   place-items: center;
   color: #fff;
-  font-weight: 800;
+  font-weight: 700;
   flex: none;
   margin-top: 2px;
 }
@@ -3584,7 +3589,7 @@ ul.plain b {
 /* 歡迎畫面：你是誰 */
 .w-ask {
   font-size: 19px;
-  font-weight: 800;
+  font-weight: 700;
   margin: 4px 0 10px;
 }
 .role-pick {
@@ -3855,7 +3860,7 @@ ul.plain b {
 .code-input::placeholder {
   font-size: 18px;
   letter-spacing: 0;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--label3);
   text-transform: none;
 }
@@ -4269,7 +4274,7 @@ ul.plain b {
   background: var(--fill2);
 }
 .sp-score b {
-  font: 800 30px/1 var(--round);
+  font: 700 30px/1 var(--round);
 }
 .sp-score span {
   font-size: 12px;
@@ -4589,7 +4594,8 @@ ul.plain b {
   font-size: 14px;
 }
 .hw-auto {
-  display: block;
+  display: flex;
+  width: fit-content;
   margin: 14px auto 4px;
 }
 .hw-auto-why {
@@ -4816,6 +4822,31 @@ ul.plain b {
 .sc-stats span {
   font-size: 12px;
   color: var(--label2);
+}
+/* 作業進度可以點（到學生頁的作業卡片） */
+.sc-stats > .sc-stat-btn {
+  background: var(--fill2);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+  color: var(--label);
+  cursor: pointer;
+}
+.sc-stat-btn span {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--blue) !important;
+}
+.sc-stat-btn span svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
 }
 .sc-acts {
   display: flex;
@@ -5472,12 +5503,42 @@ ul.plain b {
 .hw-locked[open] > summary .fold-chev {
   transform: rotate(90deg);
 }
-.hw-due-r {
-  display: flex;
-  align-items: center;
+/* 2.19（審查：手機上日期、時間被切掉）：標題在上、控制項整列寬；快速鍵一行、日期＋時間一行各占一半 */
+.row.field.hw-due-row,
+.row.field.hw-note-row {
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+}
+.hw-note-row input {
+  width: 100%;
+  text-align: left;
+  font-size: 16px;
+}
+.hw-due-r {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.hw-due-r #hw-quick button {
+  white-space: nowrap;
+}
+.hw-due-r #hw-quick {
+  grid-column: 1 / -1;
+  display: flex;
+}
+.hw-due-r #hw-quick button {
+  flex: 1;
+}
+.hw-due-r input {
+  width: 100%;
+  min-width: 0;
+  font-size: 16px;
+}
+.hw-due-row {
+  align-items: flex-start;
 }
 /* 視窗本身下方有 24px＋安全區域的留白：往下推到貼齊視窗底邊，下面才不會露出卡片 */
 .hw-foot {
@@ -5608,6 +5669,151 @@ ul.plain b {
   height: 16px;
   fill: currentColor;
 }
+/* ───────── 2.19 圖示系統（設計手冊：不要用 emoji 當介面圖示；Tabler Icons 線條圖示） ───────── */
+.ti {
+  display: inline-block; /* 全域 svg{display:block} 會把圖示擠到文字上一行（第二輪審查） */
+  width: 1.15em;
+  height: 1.15em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+  vertical-align: -0.2em;
+}
+/* 語意色（藍＝一般、綠＝完成、橘＝提醒、紅＝危險、灰＝次要） */
+.ic-blue { --ic: var(--blue); }
+.ic-green { --ic: var(--green); }
+.ic-orange { --ic: var(--orange); }
+.ic-red { --ic: var(--red); }
+.ic-gray { --ic: var(--label2); }
+.ic-indigo { --ic: var(--indigo); }
+.ic-pink { --ic: var(--pink); }
+.ic-purple { --ic: #af52de; }
+/* 標題、說明開頭的圖示：語意色；按鈕裡的跟著文字顏色 */
+.ti.ic-lead {
+  margin-right: 0.35em;
+  color: var(--ic, currentColor);
+}
+.btn .ti.ic-lead,
+.pill .ti.ic-lead,
+button .ti.ic-lead {
+  color: inherit;
+}
+/* 標題前的圖示一律灰色（顏色留給可以點的東西和狀態） */
+h2 > .ti.ic-lead,
+h3 > .ti.ic-lead {
+  color: var(--label2);
+}
+/* 圖示框（原本放 emoji 的地方）：單色線條圖示 */
+.icb {
+  color: var(--ic, var(--blue));
+}
+.row-ic.icb .ti,
+.mg-ic.icb .ti,
+.req-ic.icb .ti,
+.hp-ic.icb .ti,
+.pp-ic.icb .ti {
+  width: 22px;
+  height: 22px;
+  margin: 0 auto;
+  display: block;
+}
+.t-ic.icb .ti {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+/* 空畫面、加入狀態：淡色圓形底＋大圖示（Apple 空畫面的樣子） */
+.empty-ic.icb,
+.js-ic.icb {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 6px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--ic, var(--blue)) 13%, transparent);
+}
+.empty-ic.icb .ti,
+.js-ic.icb .ti {
+  width: 36px;
+  height: 36px;
+}
+.w-ic.icb .ti {
+  width: 28px;
+  height: 28px;
+}
+/* 歡迎畫面選身分：彩色方塊（這是分類） */
+.rp-ic.icb {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--ic, var(--blue));
+}
+.rp-ic.icb .ti {
+  width: 28px;
+  height: 28px;
+}
+/* 徽章：白色圖示（拿到的有彩色底） */
+.medal.icb {
+  color: var(--label2);
+}
+.badge-item.got .medal.icb {
+  color: #fff;
+}
+.medal.icb .ti {
+  width: 36px;
+  height: 36px;
+}
+/* 單元、活動：彩色圓角方塊＋白色線條圖示（像 iOS 設定；只用在分類） */
+.mod-ic {
+  color: #fff;
+  background: var(--mc, var(--indigo));
+  font-size: 0;
+}
+.mod-ic .ti {
+  width: 26px;
+  height: 26px;
+  stroke-width: 1.9;
+}
+.mod-ic.sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.mod-ic.sm .ti {
+  width: 18px;
+  height: 18px;
+}
+.mc-grammar { --mc: var(--indigo); }
+.mc-vocab { --mc: var(--orange-v); }
+.mc-read { --mc: #30b0c7; }
+.mc-listen { --mc: var(--pink); }
+.mc-review { --mc: var(--green-v); }
+.mc-kao { --mc: #af52de; }
+.mc-exam { --mc: var(--indigo); }
+.mc-speak { --mc: var(--pink); }
+.mc-book { --mc: var(--red-v); }
+.mc-flash { --mc: var(--orange-v); }
+.mc-notes { --mc: var(--green-v); }
+/* 派作業卡片、確認清單裡的單元圖示小一點 */
+.hp-card .mod-ic,
+.hw-cf-list .mod-ic {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+}
+.hp-card .mod-ic .ti,
+.hw-cf-list .mod-ic .ti {
+  width: 21px;
+  height: 21px;
+}
 /* 2.18.1 家長的學習進度重新排版（老師：「排版超醜」）：Apple「健康」摘要——大數字、彩色方塊圖示、一列一件事 */
 .parent-prog .pp-card {
   padding: 18px 18px 16px;
@@ -5621,8 +5827,7 @@ ul.plain b {
   color: var(--label2);
 }
 .pp-status.on {
-  color: var(--green);
-  font-weight: 600;
+  color: var(--label2);
 }
 .pp-new {
   display: flex;
@@ -5673,7 +5878,7 @@ ul.plain b {
   background: var(--fill);
 }
 .pp-stat b {
-  font: 800 28px/1.1 var(--round);
+  font: 700 28px/1.1 var(--round);
   letter-spacing: -0.01em;
   color: var(--label);
 }
@@ -5743,8 +5948,8 @@ ul.plain b {
   flex: none;
   padding: 3px 8px;
   border-radius: 8px;
-  background: var(--sel-bg);
-  color: var(--blue);
+  background: var(--fill);
+  color: var(--label2);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
@@ -5915,8 +6120,11 @@ ul.plain b {
   margin-left: auto;
   font-size: 14px;
 }
-.hw-top .hw-share + .hw-del {
+.hw-top .hw-share + .hw-del,
+.hw-top .hw-edit,
+.hw-top .hw-edit + .hw-del {
   margin-left: 12px;
+  font-size: 14px;
 }
 .stu-modlink {
   margin: 0 0 12px;
@@ -6568,13 +6776,16 @@ ul.plain b {
   margin: 4px 0;
   padding-left: 2px;
 }
+/* 2.19（審查：藍色只給可以點的東西）：重點字用粗體＋淡黃螢光筆，項目符號用灰色；可以點來聽的字（.say）才是藍色 */
 .note-pts li::marker {
-  color: var(--blue);
+  color: var(--label3);
   font-weight: 700;
 }
 .note-pts b,
 .note-show b {
-  color: var(--blue);
+  color: var(--label);
+  font-weight: 700;
+  background: linear-gradient(transparent 62%, rgba(255, 204, 0, 0.35) 62%);
 }
 .note-show table th:first-child {
   position: sticky;
@@ -6590,6 +6801,21 @@ ul.plain b {
 .notes-check summary {
   font-weight: 700;
   cursor: pointer;
+  list-style: none;
+}
+.notes-check summary::-webkit-details-marker {
+  display: none;
+}
+.notes-check summary::after {
+  content: '›';
+  float: right;
+  color: var(--label3);
+  font-size: 22px;
+  line-height: 1;
+  transition: transform 0.2s;
+}
+.notes-check[open] summary::after {
+  transform: rotate(90deg);
 }
 .notes-check[open] summary {
   margin-bottom: 6px;
@@ -6661,7 +6887,7 @@ ul.plain b {
 /* 2.11 首頁依段考分區、模擬段考選第幾次 */
 .exam-h {
   margin: 30px 4px 2px;
-  font: 800 24px var(--round);
+  font: 700 24px var(--round);
   letter-spacing: -0.01em;
   color: var(--label);
   display: flex;
