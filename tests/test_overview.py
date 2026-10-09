@@ -56,6 +56,11 @@ with sync_playwright() as p:
     T.click(".sheet [data-ok]")
     T.click(".sheet [data-send]")  # 派出前確認
     check(wait_until(lambda: "已派給 2 位學生" in txt(T, "#toast")), "homework sent to 2 students")
+    # 派出後：每位學生各一則 LINE 訊息（連結不一樣）
+    T.wait_for_selector(".sheet [data-copyone]")
+    check(T.locator(".sheet [data-copyone]").count() == 2, "share step: one message per student")
+    T.click(".sheet [data-close]")
+    time.sleep(0.4)
     check(wait_until(lambda: len(http("GET", f"/classes/{code}/hw/{amy}.json")[1] or {}) == 1 and len(http("GET", f"/classes/{code}/hw/{ben}.json")[1] or {}) == 1), "each student got one homework")
     check((http("GET", f"/classes/{code}/students/{amy}/units.json")[1] or {}).get("Unit 2") is True, "homework auto-opened Unit 2 for Amy")
     # 勾選多個 → 開放課程（設定成一樣）

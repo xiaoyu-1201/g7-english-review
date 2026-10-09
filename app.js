@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.17（10/9）'
+const VERSION = '2.18（10/9）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -5123,6 +5123,17 @@ const Sync = {
     await this.req('PUT', `hw/${sid}/${id}`, h)
     this.D = applyAt(this.D, ['hw', sid, id], h, 'put')
     onSyncChange('members')
+    return id // 作業連結要用
+  },
+  // 老師的話（給家長看；2.18）：存在作業同一個地方（hw/<學生>/<代號>，kind:'note'），學生、家長本來就讀得到，不用改資料庫規則
+  // tasks 只是為了通過規則的檢查（作業要有 title、tasks、at）；hwOf 會排除 kind:'note'
+  async addNote(sid, msg) {
+    const id = 'n' + Date.now().toString(36)
+    const n = { title: '老師的話', tasks: [{ k: 'note' }], at: Date.now(), kind: 'note', msg: String(msg).slice(0, 120) }
+    await this.req('PUT', `hw/${sid}/${id}`, n)
+    this.D = applyAt(this.D, ['hw', sid, id], n, 'put')
+    onSyncChange('members')
+    return id
   },
   async delHw(sid, id) {
     await this.req('DELETE', `hw/${sid}/${id}`)
@@ -5563,8 +5574,11 @@ function viewLive(keepScroll = false) {
   const care = today.filter((a) => a.r === 'care').length
   const l = studentsLive().sort((a, b) => b[1].ts - a[1].ts)[0]?.[1]
   const name = Sync.stu?.name || l?.name || '學生'
-  // 家長打開這一頁：回報上線（老師在成員管理看得到最後上線和 App 版本）；即時重畫時不用再送
-  if (!keepScroll) Sync.presence({ view: 'live' })
+  // 家長打開這一頁：回報上線（老師在成員管理看得到最後上線和 App 版本）、抓最新的作業；即時重畫時不用再做
+  if (!keepScroll) {
+    Sync.presence({ view: 'live' })
+    Sync.fetchHw()
+  }
   setView(
     `<div class="page narrow live-page">
       ${header('即時作答', '每答一題，這裡幾秒內就會更新。點一題可以看完整題目與解析。', syncPill(), true)}
@@ -5588,6 +5602,8 @@ function viewLive(keepScroll = false) {
 }
 // 家長：即時作答／學習進度（2.16，10/9 老師：家長也要看學習進度，但要非常清楚、容易操作，功能太多反而會誤導）
 const liveSegHTML = (tab) => `<div class="seg full stu-seg" role="tablist"><button role="tab" class="${tab === 'live' ? 'on' : ''}" aria-selected="${tab === 'live'}" data-tab="#/live">即時作答</button><button role="tab" class="${tab === 'home' ? 'on' : ''}" aria-selected="${tab === 'home'}" data-tab="#/live/home">學習進度</button></div>`
+// 家長上次打開學習進度的時間（這次打開時先記住上一次的，畫面顯示「上次你看之後」；即時重畫時不變）
+let PP_PREV = null
 function viewLiveHome(keepScroll = false) {
   if (teacherMode()) return viewStudents(keepScroll)
   if (!Sync.ready()) return viewLive(keepScroll)
@@ -5597,7 +5613,13 @@ function viewLiveHome(keepScroll = false) {
   // 家長裝置上的紀錄＝孩子的（家長自己在這個裝置上做的題目不算）
   const list = S.attempts.filter((a) => a.d !== S.profile.id)
   const sess = S.sessions.filter((s) => s.d !== S.profile.id)
-  if (!keepScroll) Sync.presence({ view: 'live' })
+  if (!keepScroll || PP_PREV == null) {
+    PP_PREV = S.ppSeen || 0
+    S.ppSeen = Date.now()
+    save()
+    Sync.presence({ view: 'live' })
+    Sync.fetchHw() // 老師的話、作業：打開就抓最新的（抓到會自動重畫）
+  }
   setView(
     `<div class="page narrow live-page parent-prog">
       ${header('學習進度', `${name}每一課做到哪裡、各項練習的成績`, syncPill(), true)}
@@ -5608,16 +5630,61 @@ function viewLiveHome(keepScroll = false) {
   if (keepScroll) window.scrollTo(0, y)
   $('.parent-prog').addEventListener('click', (e) => {
     const tb = e.target.closest('[data-tab]')
-    if (tb) switchTab(tb.dataset.tab)
+    if (tb) return switchTab(tb.dataset.tab)
+    if (e.target.closest('[data-latestrec]')) playLatestRec(Sync.sid())
   })
 }
+// 這段時間的學習摘要（家長的學習進度、老師複製給家長的 LINE 摘要共用）
+// 學會＝這段時間有作答、而且最後一次答對的題目；進步＝其中以前答錯過的
+function weekReport(list, sess, since = weekStart()) {
+  const known = list.filter((a) => ITEM[a.q])
+  const week = known.filter((a) => a.ts >= since)
+  const prevW = known.filter((a) => a.ts >= since - 7 * DAY && a.ts < since).length
+  const ok = week.filter((a) => a.r === 'ok').length
+  const firstBad = {}
+  for (const a of known) if (a.r !== 'ok' && !(a.q in firstBad)) firstBad[a.q] = a.ts
+  const learned = Object.values(lastByItem(known)).filter((a) => a.ts >= since && a.r === 'ok')
+  const fixed = learned.filter((a) => firstBad[a.q] != null && firstBad[a.q] < a.ts)
+  const byMod = (arr) => {
+    const c = {}
+    for (const a of arr) {
+      const mid = ITEM[a.q].mid
+      c[mid] = (c[mid] || 0) + 1
+    }
+    return Object.entries(c)
+      .sort((x, y) => y[1] - x[1])
+      .map(([mid, n]) => ({ mid, n, title: MODULES[mid].title, unit: MODULES[mid].unit, topics: MODULES[mid].items.filter((i) => i.t === 'learn').map((i) => i.title) }))
+  }
+  const exams = sess.filter((s) => s.k === 'exam')
+  const sp = sess.filter((s) => s.k === 'speak')
+  return { since, n: week.length, ok, pct: week.length ? Math.round((ok / week.length) * 100) : 0, prevW, learned, fixed, mods: byMod(learned), fixedMods: byMod(fixed), exams, examLast: exams[exams.length - 1], examPrev: exams[exams.length - 2], speakLast: sp[sp.length - 1] }
+}
+// 聽孩子最新的口說錄音（家長、老師；按了才下載）
+async function playLatestRec(sid) {
+  if (!sid) return
+  toast('載入錄音…', '🎤')
+  try {
+    const all = Object.values(await Rec.list(sid)).filter((r) => r?.d)
+    const r = all.sort((a, b) => b.ts - a.ts)[0]
+    if (!r) return toast('還沒有口說錄音', '🎤')
+    playURL(r.d)
+    toast(`「${r.en || ''}」${r.sc != null ? `・${r.sc} 分` : ''}`, '🔊')
+  } catch {
+    toast('錄音載入失敗，請檢查網路', '⚠️')
+  }
+}
 // 一頁看完、不用點進去；用家長看得懂的話（不用「精熟」「單元」這類詞）
+// 2.18（10/9 老師：要引起家長動機，每次點進來都看得到新東西、知道孩子在老師這邊學到什麼）：
+// 最上面＝上次你看之後多了什麼、老師的話、這週學會了什麼、進步、聽孩子念的
 function parentProgressHTML(list, sess, units, l, name) {
   const w0 = weekStart()
   const week = list.filter((a) => a.ts >= w0)
   const lastW = list.filter((a) => a.ts >= w0 - 7 * DAY && a.ts < w0).length
   const wOk = week.filter((a) => a.r === 'ok').length
   const last = list[list.length - 1]
+  const rep = weekReport(list, sess, w0)
+  const sinceSeen = PP_PREV ? weekReport(list, sess, PP_PREV) : null
+  const note = notesOf(Sync.sid())[0]?.[1]
   const lastItem = lastByItem(list)
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0)
   const live = isActive(l) ? l : null
@@ -5641,11 +5708,23 @@ function parentProgressHTML(list, sess, units, l, name) {
   const lastOf = (arr) => arr[arr.length - 1]
   const scores = (arr) => arr.slice(-5).reverse().map((s) => `<span class="pp-score${s.s >= 90 ? ' ok' : s.s < 60 ? ' bad' : ''}">${s.s} 分<small>${fmtDate(s.ts)}</small></span>`).join('')
   const row = (ic, title, body) => `<div class="pp-row"><span class="pp-ic">${ic}</span><div class="pp-t"><b>${title}</b><div>${body}</div></div></div>`
+  const modLine = (m) => `<li><b>${esc(m.unit)}｜${esc(m.title)}</b>${m.topics.length ? `：${esc(m.topics.join('、'))}` : ''}<span class="pp-n">答對 ${m.n} 題</span></li>`
+  const exTrend = rep.examLast && rep.examPrev ? `模擬段考 ${rep.examPrev.s} → <b>${rep.examLast.s}</b> 分${rep.examLast.s > rep.examPrev.s ? `<span class="pp-up">↑ ${rep.examLast.s - rep.examPrev.s}</span>` : ''}` : ''
+  const seenTxt = !sinceSeen
+    ? ''
+    : sinceSeen.n
+      ? `上次你看（${fmtTime(PP_PREV)}）之後：多練了 <b>${sinceSeen.n}</b> 題${sinceSeen.learned.length ? `，新學會 <b>${sinceSeen.learned.length}</b> 題` : ''}`
+      : `上次你看（${fmtTime(PP_PREV)}）之後，還沒有新的練習`
   return `
+    ${seenTxt ? `<div class="pp-new${sinceSeen?.n ? ' on' : ''}">${sinceSeen?.n ? '✨' : '🕒'} ${seenTxt}</div>` : ''}
+    ${note ? `<section class="card pp-card pp-note-card"><div class="pp-row"><span class="pp-ic">💬</span><div class="pp-t"><b>老師的話<small>${fmtDate(note.at)}</small></b><div class="pp-msg">${esc(note.msg)}</div></div></div></section>` : ''}
     <section class="card pp-card">
       ${row('🟢', '現在', live ? esc(liveText(live)) : last ? `最後一次練習：${esc(agoText(last.ts))}` : '還沒有練習紀錄')}
       ${row('📅', '這週', `練習 <b>${week.length}</b> 題${week.length ? `，答對 <b>${pct(wOk, week.length)}%</b>` : ''}${lastW ? `（上週 ${lastW} 題）` : ''}`)}
+      ${row('🌱', '這週學會了', rep.mods.length ? `<b>${rep.learned.length}</b> 題，學到這些重點：<ul class="pp-learn">${rep.mods.slice(0, 3).map(modLine).join('')}</ul>` : '這週還沒有新學會的題目')}
+      ${rep.fixed.length || exTrend ? row('📈', '進步', `${rep.fixed.length ? `以前答錯、這週答對了 <b>${rep.fixed.length}</b> 題${rep.fixedMods[0] ? `（最多在「${esc(rep.fixedMods[0].title)}」）` : ''}` : ''}${rep.fixed.length && exTrend ? '<br>' : ''}${exTrend}`) : ''}
     </section>
+    ${rep.speakLast ? `<section class="card pp-card"><div class="pp-row"><span class="pp-ic">🎤</span><div class="pp-t"><b>聽${esc(name)}念的英文</b><div>最近一次口說 <b>${rep.speakLast.s}</b> 分（${fmtDate(rep.speakLast.ts)}）</div><button class="btn primary pp-play" data-latestrec>${ICON.play}<span>播放最新的錄音</span></button></div></div></section>` : ''}
     <section class="card pp-card">
       <h2 class="pp-h">每一課的進度</h2>
       <p class="pp-note">「會了」＝最後一次作答答對的題目。</p>
@@ -5952,6 +6031,7 @@ function viewStudent(sid, keepScroll = false) {
       ${stuActionsHTML(sid)}
       ${stuSegHTML(sid, 'live')}
       ${hwTeacherHTML(sid)}
+      ${parentNoteCardHTML(sid)}
       ${recSectionHTML(sid)}
       <section class="card live-dev">
         <div class="ld-head"><span class="ld-dot${isActive(l) ? ' on' : ''}"></span><div class="ld-who"><b>即時作答</b><span>${esc(liveText(l))}</span></div>
@@ -5990,6 +6070,13 @@ function viewStudent(sid, keepScroll = false) {
     if (e.target.closest('[data-assign]')) return assignSheet(sid)
     if (e.target.closest('[data-units]')) return unitsSheet([sid])
     if (e.target.closest('[data-clear]')) return clearSheet(sid)
+    if (e.target.closest('[data-note]')) return noteSheet(sid)
+    if (e.target.closest('[data-report]')) return shareTextSheet('本週摘要（傳給家長）', weekReportText(sid), '把下面的訊息傳到家長的 LINE；連結點了就是孩子的學習進度。')
+    const shw = e.target.closest('[data-sharehw]')
+    if (shw) {
+      const h = Sync.D.hw?.[sid]?.[shw.dataset.sharehw]
+      return h && hwShareSheet([[sid, shw.dataset.sharehw]], h)
+    }
     const dh = e.target.closest('[data-delhw]')
     if (dh)
       return confirmSheet('刪除這份作業？', '學生那邊也會看不到這份作業（已經做的練習紀錄還在）。', '刪除', async () => {
@@ -6227,11 +6314,16 @@ function stuModSheet(sid, mid, list, sess) {
   const atts = list.filter((a) => ITEM[a.q]?.mid === mid) // 這個單元的題目（含在模擬段考裡做的；和上面的精熟度一致）
   const b = sheet(
     `<h2 class="sheet-title">${esc(m.unit)}｜${esc(m.title)}</h2><p class="sheet-p">精熟 ${s.mastered}／${s.total} 題${s.best ? `・最佳 ${s.best} 星` : ''}・練過 ${runs.length} 次</p>
+    <button class="btn ghost small-btn stu-modlink" data-modlink>🔗 傳這個單元給學生（LINE）</button>
     <div class="stu-sheet">${runs.length ? `<div class="list flat">${runs.map((r) => sessRowHTML(r)).join('')}</div>` : ''}
     <h3 class="stu-sheet-h">作答</h3>${atts.length ? feedHTML(atts, sid, { all: true }) : '<p class="muted pad">還沒做過這個單元。</p>'}</div>`,
     { wide: true },
   )
-  b.addEventListener('click', (e) => feedClick(e, list, sid))
+  b.addEventListener('click', (e) => {
+    if (e.target.closest('[data-modlink]'))
+      return shareTextSheet('傳這個單元給學生', `📘 請做：${m.unit}｜${m.title}（約 ${m.min} 分鐘）\n👉 點這裡開始：${goLink(sid, 'm-' + mid)}\n（平常用主畫面「英文段考」App 練習的話，直接打開 App 找這個單元）`, unitsOfStu(Sync.students[sid]).has(m.unit) ? '' : `⚠️ ${esc(m.unit)} 還沒開放給這位學生，請先開放。`)
+    feedClick(e, list, sid)
+  })
 }
 
 // 課堂檢視：學生用自己的裝置上課時，老師在自己的裝置上跟著看（現在這一題、題目、正確答案；學生一按檢查，答案和對錯馬上出現）
@@ -6358,12 +6450,29 @@ function hwStatus(h, sess, attempts) {
 function hwOf(sid) {
   const src = Sync.isAdmin() ? Sync.D.hw?.[sid] : Sync.hw || S.hwCache
   return Object.entries(src || {})
-    .filter(([, h]) => h && Array.isArray(h.tasks))
+    .filter(([, h]) => h && Array.isArray(h.tasks) && h.kind !== 'note')
     .sort((a, b) => b[1].at - a[1].at)
+}
+// 老師的話（新的在前）
+function notesOf(sid) {
+  const src = Sync.isAdmin() ? Sync.D.hw?.[sid] : Sync.hw || S.hwCache
+  return Object.entries(src || {})
+    .filter(([, h]) => h && h.kind === 'note' && h.msg)
+    .sort((a, b) => b[1].at - a[1].at)
+}
+// 截止時間的說法（老師 10/9：截止時間要可以選）：23:59＝「晚上 12 點」；其他照時間寫（上午／下午／晚上 幾點幾分）
+const clockText = (t) => {
+  const d = new Date(t)
+  const h = d.getHours()
+  const m = d.getMinutes()
+  if (h === 23 && m === 59) return '晚上 12 點'
+  const p = h < 12 ? '上午' : h < 18 ? '下午' : '晚上'
+  const h12 = h % 12 || 12
+  return `${p} ${h12}${m ? `:${String(m).padStart(2, '0')}` : ' 點'}`
 }
 const dueText = (t) => {
   const d = new Date(t)
-  return `${d.getMonth() + 1}/${d.getDate()}（${'日一二三四五六'[d.getDay()]}）前`
+  return `${d.getMonth() + 1}/${d.getDate()}（${'日一二三四五六'[d.getDay()]}）${clockText(t)}前`
 }
 // 學生首頁（和家長頁）的「老師的作業」：還沒做完、或做完不到一天的
 function hwCardHTML(readonly = false) {
@@ -6564,7 +6673,7 @@ function assignSheet(sids) {
     <div class="hw-confirm" hidden></div>
     <div class="hw-pickstep">
     <div class="list form">
-      <div class="row field hw-due-row"><span class="row-t">截止日</span><span class="hw-due-r"><span class="seg small" id="hw-quick">${[[1, '明天'], [3, '3 天後'], [7, '1 週後']].map(([d, t]) => `<button type="button" data-d="${d}" class="${d === 3 ? 'on' : ''}">${t}</button>`).join('')}</span><input type="date" id="hw-due" value="${ymd}"></span></div>
+      <div class="row field hw-due-row"><span class="row-t">截止日</span><span class="hw-due-r"><span class="seg small" id="hw-quick">${[[1, '明天'], [3, '3 天後'], [7, '1 週後']].map(([d, t]) => `<button type="button" data-d="${d}" class="${d === 3 ? 'on' : ''}">${t}</button>`).join('')}</span><input type="date" id="hw-due" value="${ymd}"><input type="time" id="hw-time" value="${S.ui?.hwTime || '23:59'}" aria-label="截止時間"></span></div>
       <label class="row field"><span class="row-t">給學生的話<small>可以不填</small></span><input id="hw-note" maxlength="60" placeholder="例如：複數字尾要特別注意" autocomplete="off"></label>
     </div>
     ${multi ? '' : '<button type="button" class="btn ghost hw-auto" data-auto>✨ 依最近的錯誤自動挑</button>'}
@@ -6583,9 +6692,11 @@ function assignSheet(sids) {
     { wide: true },
   )
   // 派出前確認（10/9 老師：「我要怎麼知道是不是有派到我想要的，我會怕我派錯」）：派給誰、截止、每一項做什麼、大約多久
+  // 截止＝日期＋時間（時間預設上次選的，第一次是 23:59＝晚上 12 點前）
   const due2 = () => {
     const d = $('#hw-due', b).value
-    return d ? new Date(d + 'T23:59:59').getTime() : 0
+    const t = /^\d{2}:\d{2}$/.test($('#hw-time', b).value) ? $('#hw-time', b).value : '23:59'
+    return d ? new Date(`${d}T${t}:${t === '23:59' ? '59' : '00'}`).getTime() : 0
   }
   const showConfirm = () => {
     const ks = [...sel]
@@ -6597,7 +6708,7 @@ function assignSheet(sids) {
     cf.innerHTML = `<p class="hw-cf-h">請確認要派出的作業</p>
       <div class="list hw-cf-meta">
         <div class="row static"><span class="row-t">派給</span><span class="row-r">${esc(multi ? sids.map((s) => Sync.students[s]?.name || '學生').join('、') : st.name || '學生')}</span></div>
-        <div class="row static"><span class="row-t">截止</span><span class="row-r">${dt ? `${fmtDate(dt)}（週${'日一二三四五六'[new Date(dt).getDay()]}）晚上 12 點前` : '沒有截止日'}</span></div>
+        <div class="row static"><span class="row-t">截止</span><span class="row-r">${dt ? `${fmtDate(dt)}（週${'日一二三四五六'[new Date(dt).getDay()]}）${clockText(dt)}前` : '沒有截止日'}</span></div>
         ${note ? `<div class="row static"><span class="row-t">給學生的話</span><span class="row-r">${esc(note)}</span></div>` : ''}
       </div>
       <div class="group-h">作業內容（${ks.length} 項・大約 ${mins} 分鐘）</div>
@@ -6652,19 +6763,188 @@ function assignSheet(sids) {
     if (e.target.closest('[data-send]') && sel.size) {
       const tasks = [...sel].map((k) => (k.startsWith('mod:') ? { k: 'mod', id: k.slice(4) } : k.startsWith('exam:') ? { k: 'exam', ex: k.slice(5) } : { k }))
       const dueTs = due2()
+      // 記住這次選的截止時間，下次預設用它
+      ;(S.ui ||= {}).hwTime = $('#hw-time', b).value || '23:59'
+      save()
       const h = { title: `${fmtDate(Date.now())} 的作業`, tasks, at: Date.now(), ...(dueTs ? { due: dueTs } : {}), ...($('#hw-note', b).value.trim() ? { note: $('#hw-note', b).value.trim().slice(0, 60) } : {}) }
       $('[data-send]', b).disabled = true
       try {
-        for (const s of sids) await Sync.addHw(s, h)
-        closeSheet()
+        const sent = []
+        for (const s of sids) sent.push([s, await Sync.addHw(s, h)])
         toast(`已派給 ${st.name || '學生'}：${tasks.length} 項`, '📌')
         if (multi) SEL.clear(), location.hash === '#/students' && viewStudents(true)
+        // 派出後：傳給學生（LINE 訊息＋作業連結；2.18 老師：沒派作業就沒有網址、沒有作業連結）
+        hwShareSheet(sent, h, true)
       } catch (err) {
         $('[data-send]', b).disabled = false
         toast(err.status === 401 || err.status === 403 ? '派作業需要先更新 Firebase 的資料庫規則' : '沒有成功，請檢查網路再試一次', '⚠️')
       }
     }
   })
+}
+// ── 連結與 LINE 訊息（2.18） ──
+// #/go/<班級>/<學生>/<要去哪>：hw-<作業>＝打開作業、m-<單元>＝開始單元、p＝家長的學習進度
+// 這個瀏覽器已經是那個學生（家長）：直接去；還沒連結：說明＋「在這裡加入」（加入完自動回來）
+const appBase = () => location.href.split('#')[0].split('?')[0]
+const goLink = (sid, target) => `${appBase()}#/go/${Sync.code()}/${sid}/${target}`
+async function copyText(text, done = '已複製，可以貼到 LINE') {
+  try {
+    await Promise.race([navigator.clipboard.writeText(text), new Promise((_, r) => setTimeout(r, 1500))])
+    toast(done, '📋')
+    return true
+  } catch {
+    toast('沒辦法自動複製，請長按文字選取', '⚠️')
+    return false
+  }
+}
+// 一段要傳出去的文字：預覽＋複製＋分享（iPhone、iPad 的分享面板可以直接選 LINE）
+function shareTextSheet(title, text, sub = '', onClose = null) {
+  const b = sheet(
+    `<h2 class="sheet-title">${esc(title)}</h2>${sub ? `<p class="sheet-p">${sub}</p>` : ''}<textarea class="share-ta" readonly rows="9">${esc(text)}</textarea>
+    <div class="sheet-actions"><button class="btn ghost" data-close>完成</button><button class="btn ${navigator.share ? 'ghost' : 'primary'}" data-copytext>複製</button>${navigator.share ? '<button class="btn primary" data-sharetext>分享到 LINE…</button>' : ''}</div>`,
+    { onClose },
+  )
+  $('[data-copytext]', b).onclick = () => copyText(text)
+  $('[data-sharetext]', b)?.addEventListener('click', () => navigator.share({ text }).catch(() => {}))
+  return b
+}
+// 作業的 LINE 訊息：截止、每一項（約幾分鐘）、老師的話、連結
+function hwMessage(sid, id, h) {
+  const items = (h.tasks || []).map((t, i) => {
+    const min = t.k === 'mod' ? MODULES[t.id]?.min : t.k === 'exam' ? 45 : t.k === 'speak' ? 3 : 10
+    return `${i + 1}. ${hwTaskName(t).replace(/^\S+\s/, '')}（約 ${min} 分鐘）`
+  })
+  return [
+    `📌 英文作業${h.due ? `・${fmtDate(h.due)}（週${'日一二三四五六'[new Date(h.due).getDay()]}）${clockText(h.due)}前完成` : ''}`,
+    ...items,
+    ...(h.note ? [`💬 ${h.note}`] : []),
+    `👉 點這裡開始：${goLink(sid, 'hw-' + id)}`,
+    '（平常用主畫面「英文段考」App 練習的話，直接打開 App，作業在首頁最上面）',
+  ].join('\n')
+}
+// sent：[[學生, 作業代號], …]；fresh：剛派出（標題寫「已派出」）
+function hwShareSheet(sent, h, fresh = false) {
+  // 視窗開著的時候頁面不會即時重畫：關掉就重畫一次（剛派出的作業才看得到）
+  const redraw = () => onSyncChange('hw')
+  if (sent.length === 1) {
+    const [sid, id] = sent[0]
+    return shareTextSheet(fresh ? '已派出 ✅ 傳給學生' : '傳作業給學生', hwMessage(sid, id, h), `${esc(Sync.students[sid]?.name || '學生')}的首頁已經看得到這份作業。要提醒的話，把下面的訊息傳到 LINE。`, redraw)
+  }
+  // 好幾個學生：每個人的連結不一樣，各複製各的
+  const b = sheet(
+    `<h2 class="sheet-title">${fresh ? '已派出 ✅ 傳給學生' : '傳作業給學生'}</h2><p class="sheet-p">每位學生的連結不一樣，請分別傳。</p>
+    <div class="list">${sent.map(([sid], i) => `<div class="row static"><span class="row-t">${esc(Sync.students[sid]?.name || '學生')}</span><button class="btn ghost small-btn" data-copyone="${i}">複製訊息</button></div>`).join('')}</div>
+    <div class="sheet-actions"><button class="btn primary" data-close>完成</button></div>`,
+    { onClose: redraw },
+  )
+  b.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-copyone]')
+    if (c) copyText(hwMessage(sent[+c.dataset.copyone][0], sent[+c.dataset.copyone][1], h), `已複製 ${Sync.students[sent[+c.dataset.copyone][0]]?.name || ''} 的訊息`)
+  })
+}
+function viewGo(code, sid, target) {
+  const parent = target === 'p'
+  if (S.sync?.code === code && Sync.isAdmin() && !ACTIVE) return go(parent ? `#/student/${sid}/home` : `#/student/${sid}`)
+  if (S.sync?.code === code && S.sync.sid === sid && !ACTIVE && Sync.paired()) {
+    if (myRole() === 'parent') return go(parent ? '#/live/home' : '#/live')
+    go('#/')
+    if (target.startsWith('hw-')) setTimeout(() => hwStartSheet(target.slice(3)), 350)
+    if (target.startsWith('m-')) {
+      const mid = target.slice(2)
+      setTimeout(() => (MODULES[mid] && modOpen(mid) ? startModule(mid) : toast('這一課老師還沒開放', '🔒')), 350)
+    }
+    return
+  }
+  // 這個瀏覽器還沒連結這個學生
+  setView(
+    `<div class="page narrow go-page">${header(parent ? '學習進度' : '老師的作業', '', '', false)}
+      <div class="card empty"><div class="empty-ic">${parent ? '📊' : '📌'}</div>
+        <h2>${parent ? '這是孩子的學習進度（家長用）' : '這是老師派的作業'}</h2>
+        <p class="muted">${parent ? '這個瀏覽器還沒有連結。按下面的按鈕加入，就能看到孩子每一課的進度。' : '平常用主畫面的「英文段考」App 練習的話，請直接打開那個 App，作業在首頁最上面。'}</p>
+        <button class="btn primary" data-join>${parent ? '加入並查看' : '就在這裡做（加入）'}</button>
+      </div></div>`,
+  )
+  $('[data-join]').onclick = () => {
+    try {
+      sessionStorage.setItem('g7review:after', `#/go/${code}/${sid}/${target}`)
+    } catch {}
+    go(`#/pair/${code}/${parent ? 'parent' : 'student'}/${sid}`)
+  }
+}
+// 學生點作業連結：這份作業的每一項＋「開始」第一個還沒做的
+async function hwStartSheet(id) {
+  let h = (Sync.hw || S.hwCache || {})[id]
+  if (!h) {
+    await Sync.fetchHw()
+    h = (Sync.hw || {})[id]
+  }
+  if (!h || h.kind === 'note' || !Array.isArray(h.tasks)) return toast('找不到這份作業（可能已經被老師刪掉）', '⚠️')
+  const st = hwStatus(h, S.sessions, S.attempts)
+  const next = st.res.find((x) => !x.ok)
+  const task = (t) => esc(JSON.stringify(t))
+  sheet(`<h2 class="sheet-title">📌 ${esc(h.title)}</h2><p class="sheet-p">${h.due ? `${dueText(h.due)}完成・` : ''}已完成 ${st.done}／${st.total}</p>${h.note ? `<p class="hw-note">💬 ${esc(h.note)}</p>` : ''}
+    <div class="list">${st.res.map(({ t, ok }) => `<button class="row hw-task${ok ? ' ok' : ''}" data-hw="${task(t)}"><span class="hw-chk">${ok ? ICON.check : ''}</span><span class="row-t">${esc(hwTaskName(t))}</span>${ICON.chev}</button>`).join('')}</div>
+    <div class="sheet-actions">${next ? `<button class="btn primary" data-hw="${task(next.t)}">開始：${esc(hwTaskName(next.t))}</button>` : '<button class="btn primary" data-close>全部完成了 🎉</button>'}</div>`)
+}
+// 老師的話（給家長）＋本週摘要（傳家長 LINE）
+function parentNoteCardHTML(sid) {
+  const n = notesOf(sid)[0]?.[1]
+  return `<section class="card note-card"><div class="sec-h"><div><h2>💬 給家長</h2><p>${n ? `上次寫：${fmtDate(n.at)}・家長在「學習進度」最上面看得到` : '寫一句話，家長在「學習進度」最上面看得到'}</p></div></div>
+    ${n ? `<p class="nc-last">${esc(n.msg)}</p>` : ''}
+    <div class="nc-acts"><button class="btn ghost small-btn" data-note>✏️ 寫給家長的話</button><button class="btn ghost small-btn" data-report>📋 本週摘要（傳 LINE）</button></div></section>`
+}
+function noteSheet(sid) {
+  const name = Sync.students[sid]?.name || '學生'
+  const r = weekReport(Sync.attemptsOf(sid), Sync.sessionsOf(sid))
+  const ideas = [
+    r.n ? `這週練了 ${r.n} 題，答對 ${r.pct}%，很認真！` : '',
+    r.mods[0] ? `這週學會了「${r.mods[0].title}」。` : '',
+    r.fixed.length ? `以前錯的題目，這週答對了 ${r.fixed.length} 題，進步很多。` : '',
+    r.examLast && r.examPrev && r.examLast.s > r.examPrev.s ? `模擬段考從 ${r.examPrev.s} 分進步到 ${r.examLast.s} 分！` : '',
+    '考前請再看一次重點總整理。',
+    '錯題本還有幾題，週末記得練完。',
+    '口說發音越來越清楚了 👍',
+  ].filter(Boolean)
+  const b = sheet(`<h2 class="sheet-title">寫給${esc(name)}的家長</h2><p class="sheet-p">家長打開「學習進度」，最上面就會看到。點下面的句子可以直接用。</p>
+    <textarea id="note-ta" class="share-ta" rows="3" maxlength="120" placeholder="例如：這週很認真，複數字尾進步很多！"></textarea>
+    <div class="chips note-ideas">${ideas.map((t, i) => `<button type="button" class="chip pick" data-idea="${i}">${esc(t)}</button>`).join('')}</div>
+    <div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn primary" data-sendnote>送出</button></div>`)
+  const ta = $('#note-ta', b)
+  b.addEventListener('click', async (e) => {
+    const i = e.target.closest('[data-idea]')
+    if (i) {
+      ta.value = (ta.value.trim() ? ta.value.trim() + ' ' : '') + ideas[+i.dataset.idea]
+      return ta.focus()
+    }
+    if (e.target.closest('[data-sendnote]')) {
+      const msg = ta.value.trim()
+      if (!msg) return ta.focus()
+      e.target.closest('[data-sendnote]').disabled = true
+      try {
+        await Sync.addNote(sid, msg)
+        closeSheet()
+        toast('已送出，家長看得到了', '💬')
+      } catch {
+        e.target.closest('[data-sendnote]').disabled = false
+        toast('沒有成功，請檢查網路再試一次', '⚠️')
+      }
+    }
+  })
+}
+// 本週摘要（傳家長 LINE）：數字＋學會什麼＋進步＋老師的話＋看完整進度的連結
+function weekReportText(sid) {
+  const name = Sync.students[sid]?.name || '孩子'
+  const r = weekReport(Sync.attemptsOf(sid), Sync.sessionsOf(sid))
+  const n = notesOf(sid)[0]?.[1]
+  const lines = [`【${name}這週的英文練習】${fmtDate(r.since)}～${fmtDate(Date.now())}`]
+  lines.push(r.n ? `✏️ 練習 ${r.n} 題，答對 ${r.pct}%${r.prevW ? `（上週 ${r.prevW} 題）` : ''}` : '✏️ 這週還沒有練習')
+  if (r.mods.length) lines.push(`🌱 學會了：${r.mods.slice(0, 3).map((m) => m.title).join('、')}（共 ${r.learned.length} 題）`)
+  if (r.fixed.length) lines.push(`📈 以前答錯、這週答對：${r.fixed.length} 題`)
+  if (r.examLast) lines.push(`📝 模擬段考：${r.examPrev ? `${r.examPrev.s} → ` : ''}${r.examLast.s} 分`)
+  if (r.speakLast) lines.push(`🎤 口說：最近 ${r.speakLast.s} 分`)
+  if (n && Date.now() - n.at < 14 * DAY) lines.push(`💬 老師：${n.msg}`)
+  lines.push(`👉 完整進度：${goLink(sid, 'p')}`)
+  return lines.join('\n')
 }
 // 學生頁的「作業」區塊（老師看）
 function hwTeacherHTML(sid) {
@@ -6676,7 +6956,7 @@ function hwTeacherHTML(sid) {
       .map(([id, h]) => {
         const st = hwStatus(h, sess, att)
         const late = !st.all && h.due && Date.now() > h.due
-        return `<div class="hw-item${st.all ? ' all' : ''}"><div class="hw-top"><b>${esc(h.title)}</b><span class="${late ? 'late' : ''}">${st.all ? '✓ 全部完成' : `${st.done}／${st.total}${h.due ? '・' + (late ? '已過期限' : dueText(h.due)) : ''}`}</span><button class="link hw-del" data-delhw="${id}">刪除</button></div>
+        return `<div class="hw-item${st.all ? ' all' : ''}"><div class="hw-top"><b>${esc(h.title)}</b><span class="${late ? 'late' : ''}">${st.all ? '✓ 全部完成' : `${st.done}／${st.total}${h.due ? '・' + (late ? '已過期限' : dueText(h.due)) : ''}`}</span><button class="link hw-share" data-sharehw="${id}">傳給學生</button><button class="link hw-del" data-delhw="${id}">刪除</button></div>
         ${h.note ? `<p class="hw-note">💬 ${esc(h.note)}</p>` : ''}
         <div class="list flat">${st.res
           .map(({ t, s, ok, empty }) => `<div class="row static hw-task${ok ? ' ok' : ''}"><span class="hw-chk">${ok ? ICON.check : ''}</span><span class="row-t">${esc(hwTaskName(t))}${s ? `<small>${fmtTime(s.ts)}${s.n ? `・${s.n} 題` : ''}</small>` : ''}</span><span class="row-r">${s ? `${s.s} 分` : empty ? '已清空' : '還沒做'}</span></div>`)
@@ -7013,6 +7293,14 @@ async function finishPair(code, role, opt = {}) {
   go(role === 'student' ? '#/' : '#/live')
   await Sync.pair(code, role, opt)
   if (Sync.ready()) {
+    // 從作業連結、家長摘要連結來的：加入完回到那個連結（作業、學習進度）
+    try {
+      const after = sessionStorage.getItem('g7review:after')
+      if (after && after.startsWith(`#/go/${code}/`)) {
+        sessionStorage.removeItem('g7review:after')
+        setTimeout(() => go(after), 400)
+      }
+    } catch {}
     if (role === 'teacher') return toast('加入完成！可以看到所有學生的練習', '📡')
     if (role === 'parent') return toast('連結完成！這裡可以即時看到孩子的練習', '📡')
     if (mine) return toast(`連結完成！正在把你之前的 ${mine} 筆作答同步上去`, '📡')
@@ -7112,6 +7400,7 @@ function route() {
   if (a === 'notes') return viewAllNotes(b ? decodeURIComponent(b) : '', h.split('/')[3] === 'listen')
   if (a === 'print' && b) return viewPrint(decodeURIComponent(b), h.split('/')[3] || '')
   if (a === 'live') return b === 'home' ? viewLiveHome() : viewLive()
+  if (a === 'go' && b) return viewGo(b, h.split('/')[3] || '', h.split('/')[4] || '')
   if (a === 'students') return viewStudents()
   if (a === 'student' && b) return h.split('/')[3] === 'home' ? viewStudentHome(b) : viewStudent(b)
   if (a === 'manage') return viewManage()

@@ -5534,6 +5534,124 @@ ul.plain b {
   width: 16px;
   height: 16px;
 }
+/* 2.18 家長動機：上次你看之後、老師的話、這週學會了、進步、聽孩子念的 */
+.pp-new {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--fill);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--label2);
+}
+.pp-new.on {
+  background: rgba(52, 199, 89, 0.14);
+  color: var(--label);
+}
+.pp-new b {
+  color: var(--green);
+}
+.pp-note-card {
+  background: var(--sel-bg);
+}
+.pp-t > b small {
+  margin-left: 8px;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--label2);
+}
+.pp-msg {
+  font-size: 17px;
+  line-height: 1.7;
+}
+.pp-learn {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.pp-learn li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+.pp-n {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 13px;
+  color: var(--green);
+  font-weight: 600;
+}
+.pp-up {
+  margin-left: 6px;
+  color: var(--green);
+  font-weight: 700;
+}
+.pp-play {
+  margin-top: 10px;
+  min-height: 46px;
+}
+.pp-play svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+/* 老師：給家長的話、傳給學生（LINE） */
+.note-card .nc-last {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fill);
+  font-size: 16px;
+  line-height: 1.6;
+}
+.nc-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.share-ta {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 0;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--sep);
+  font: 15px/1.6 var(--sans, inherit);
+  color: var(--label);
+  resize: vertical;
+}
+#note-ta.share-ta {
+  min-height: 84px;
+}
+.note-ideas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.note-ideas .chip {
+  height: auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+}
+.hw-top .hw-share {
+  margin-left: auto;
+  font-size: 14px;
+}
+.hw-top .hw-share + .hw-del {
+  margin-left: 12px;
+}
+.stu-modlink {
+  margin: 0 0 12px;
+}
+#hw-time {
+  width: auto;
+}
+.go-page .empty .btn {
+  margin-top: 10px;
+}
 /* 2.16 家長的學習進度：一頁看完、大字、不用點進去 */
 .pp-card {
   margin-bottom: 14px;

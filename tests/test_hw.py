@@ -83,6 +83,10 @@ with sync_playwright() as p:
     T.click(".sheet [data-ok]")
     T.click(".sheet [data-send]")
     check(wait_until(lambda: "已派給" in txt(T, "#toast")), "assigned toast")
+    # 派出後：傳給學生（LINE 訊息＋作業連結）；按「完成」關掉，頁面馬上看得到這份作業
+    T.wait_for_selector(".sheet .share-ta")
+    check("點這裡開始" in T.evaluate("document.querySelector('.sheet .share-ta').value"), "share step offers the LINE message")
+    T.click(".sheet [data-close]")
     check(wait_until(lambda: T.locator(".hw-card .hw-task").count() == 2), "teacher sees assignment with 2 tasks")
     # 學生首頁：作業卡（錯題本是空的 → 已算完成）
     A.goto(URL)
