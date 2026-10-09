@@ -7227,3 +7227,185 @@ h3 > .ti.ic-lead {
     height: 56px;
   }
 }
+/* ═══════════ 2.21 成長植物（花園）：一課一株，答對越多長越大；學生可以選植物種類 ═══════════ */
+.garden {
+  padding: 18px 18px 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(180deg, #e3f5ec 0%, var(--card) 55%);
+}
+@media (prefers-color-scheme: dark) {
+  .garden {
+    background: linear-gradient(180deg, #1f3a31 0%, var(--card) 60%);
+  }
+}
+.gd-main {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.gd-pot {
+  display: grid;
+  place-items: end center;
+  height: 170px;
+}
+.plant {
+  display: block;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.plant.big {
+  width: 150px;
+  height: 170px;
+  animation: gd-pop 0.5s ease-out;
+}
+@keyframes gd-pop {
+  from { transform: scale(0.92); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plant.big { animation: none; }
+}
+.gd-k {
+  margin: 0;
+  font-size: 14px;
+  color: var(--label2);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gd-change {
+  font-size: 14px;
+}
+.gd-stage {
+  margin: 2px 0 2px;
+  font: 700 30px/1.15 var(--round);
+}
+.gd-count {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--label2);
+}
+.gd-count b {
+  color: var(--label);
+  font-size: 17px;
+}
+.gd-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--fill);
+  overflow: hidden;
+}
+.gd-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--brand);
+  transition: width 0.6s ease;
+}
+.gd-next {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+.gd-next b {
+  color: var(--blue);
+  font-size: 18px;
+}
+.gd-next.done {
+  color: var(--green);
+  font-weight: 600;
+}
+.gd-today {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--label2);
+}
+.gd-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 14px -4px 0;
+  padding: 4px;
+  scrollbar-width: none;
+}
+.gd-row::-webkit-scrollbar {
+  display: none;
+}
+.gd-cell {
+  flex: none;
+  width: 76px;
+  padding: 8px 4px 6px;
+  border-radius: 16px;
+  background: var(--card2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--label2);
+}
+.gd-cell.on {
+  background: var(--brand-soft);
+  color: var(--blue);
+  font-weight: 600;
+}
+.gd-cell .plant.small {
+  width: 52px;
+  height: 58px;
+}
+.gd-cell small {
+  font-size: 11px;
+  color: var(--label3);
+  text-align: center;
+}
+.gd-row.parent .gd-cell {
+  width: 88px;
+}
+.garden .hero-acts {
+  margin-top: 14px;
+}
+/* 選植物 */
+.plant-pick {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.pp-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px 12px;
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--sep);
+}
+.pp-pick.on {
+  box-shadow: inset 0 0 0 2px var(--brand);
+  background: var(--brand-soft);
+}
+.pp-pick .plant {
+  width: 110px;
+  height: 120px;
+}
+.pp-pick small {
+  color: var(--label2);
+  font-size: 13px;
+}
+@media (min-width: 700px) {
+  .gd-main {
+    grid-template-columns: 220px 1fr;
+  }
+  .gd-pot,
+  .plant.big {
+    height: 230px;
+  }
+  .plant.big {
+    width: 210px;
+  }
+  .plant-pick {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

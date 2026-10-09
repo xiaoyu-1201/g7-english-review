@@ -2180,7 +2180,10 @@ function viewHome() {
       ${studentsCardHTML()}
 
       ${(() => {
-        // 2.20 今天的狀態（StressWatch 風格）：吉祥物＋狀態大字＋刻度條＋兩個大數字（和近 7 天平均比）＋吉祥物的一句話＋下一步
+        const nextBtn = resume ? `<button class="resume" data-resume="${esc(resume[0])}"><span class="resume-k">繼續上次</span><span class="resume-t">${esc(resume[1].title)}・第 ${resume[1].i + 1} 張</span>${ICON.chev}</button>` : nextStepHTML(book)
+        // 2.21 成長植物（老師 10/9 選的）：植物的圖到了才換成花園；還沒到就維持 2.20 的狀態區塊
+        if (gardenReady()) return gardenHTML(nextBtn)
+        // 2.20 今天的狀態：狀態大字＋刻度條＋兩個大數字（和近 7 天平均比）＋一句話＋下一步
         const ts = todayState()
         return `<section class="hero card">
           <div class="hero-art">${mascot(ts.mood)}</div>
@@ -2258,6 +2261,14 @@ function viewHome() {
     if (r) return go('#/run/' + encodeURIComponent(r.dataset.resume))
     const p = e.target.closest('[data-plan]')
     if (p) return planSheet(p.dataset.plan)
+    // 花園：點一課看那一課的植物；換植物
+    const gu = e.target.closest('[data-garden]')
+    if (gu) {
+      ;(S.ui ||= {}).gardenUnit = gu.dataset.garden
+      save()
+      return viewHome()
+    }
+    if (e.target.closest('[data-plantpick]')) return plantPickSheet()
     const f = e.target.closest('[data-fold]')
     if (f) {
       const sec = f.closest('.lesson')
@@ -2588,6 +2599,103 @@ function todayState(list = S.attempts) {
   const book = bookIds(list).length
   const tip = tag && TAG_HINTS[tag] ? `最近常錯「${TAGS[tag] || tag}」：${TAG_HINTS[tag]}` : book >= 5 ? `錯題本有 ${book} 題，先把它們練回來，分數最容易進步。` : !n ? '先做 5 題暖身，喚醒英文腦！' : level === 3 ? '今天的狀態很好，再完成一個單元就更穩了！' : '保持節奏，做完一題就檢查一次大寫和標點。'
   return { n, acc, avgN, avgAcc, level, word, mood, tip, nSeries: per.map((p) => p.length), accSeries: per.map((p) => (p.length ? Math.round((p.filter((a) => a.r === 'ok').length / p.length) * 100) : null)) }
+}
+// ───────────────────────── 成長植物（2.21，老師 10/9：圖片要有意義、能引起動機；植物要有好幾種、不同可愛風格讓學生選） ─────────────────────────
+// 一課一株：學會的題目（最後一次答對）越多，長得越大。5 個階段：種子、發芽、長葉、花苞、開花／結果
+// 圖：img/plant-<種類>-<1～5>.png（老師在 ChatGPT 生成，tools/split_plants.py 裁切）；PLANT_ART 列出已經有圖的種類
+const PLANTS = {
+  sun: { name: '向日葵', style: 'Q 版扁平風', last: '開花' },
+  cactus: { name: '仙人掌', style: '3D 黏土風', last: '開花' },
+  sakura: { name: '櫻花樹', style: '水彩風', last: '盛開' },
+  apple: { name: '蘋果樹', style: '毛絨玩偶風', last: '結果' },
+}
+const PLANT_ART = [] // 例如 ['sun', 'cactus']：有圖的種類才給學生選
+const STAGE_AT = [0, 0.01, 0.25, 0.6, 0.9] // 會了幾成就到這個階段
+const stageNames = (type) => ['種子', '發芽', '長葉', '花苞', PLANTS[type]?.last || '開花']
+const gardenReady = () => PLANT_ART.length > 0
+// 學生選的植物：自己的裝置存在 S.profile.plant；同步給老師、家長用練習紀錄 {k:'plant'}（最新的那筆）
+const myPlant = (sess = S.sessions) => {
+  const p = S.profile.plant || [...sess].reverse().find((s) => s.k === 'plant')?.type
+  return PLANT_ART.includes(p) ? p : PLANT_ART[0]
+}
+const plantOf = (sess) => {
+  const p = [...sess].reverse().find((s) => s.k === 'plant')?.type
+  return PLANT_ART.includes(p) ? p : PLANT_ART[0]
+}
+const plantImg = (type, stage, cls = '') => `<img class="plant ${cls}" src="img/plant-${type}-${stage + 1}.png" alt="${esc(PLANTS[type]?.name || '')}・${stageNames(type)[stage]}" draggable="false">`
+// 一課的狀況：會了幾題、在哪個階段、再答對幾題長大
+function unitGrowth(unit, list = S.attempts) {
+  const items = MOD_ORDER.filter((m) => MODULES[m].unit === unit).flatMap((m) => MODULES[m].scored)
+  const last = lastByItem(list)
+  const ok = items.filter((i) => last[i.id]?.r === 'ok').length
+  const total = items.length || 1
+  const r = ok / total
+  let stage = 0
+  STAGE_AT.forEach((t, i) => r >= t && (i === 0 || ok > 0) && (stage = i))
+  const nextAt = STAGE_AT[stage + 1]
+  const need = nextAt != null ? Math.max(1, Math.ceil(nextAt * total) - ok) : 0
+  return { unit, ok, total, stage, need, pct: Math.round(r * 100), toNext: nextAt != null ? Math.min(1, (r - STAGE_AT[stage]) / (nextAt - STAGE_AT[stage])) : 1 }
+}
+// 首頁上方：目前這一課的植物（大）＋再答對幾題長大＋各課的小植物（花園）＋今天練習＋下一步
+function gardenHTML(nextBtn) {
+  const type = myPlant()
+  const units = UNITS.filter((u) => myUnits().has(u))
+  const lastMod = [...S.attempts].reverse().find((a) => ITEM[a.q] && units.includes(MODULES[ITEM[a.q].mid]?.unit))
+  const cur = units.includes(S.ui?.gardenUnit) ? S.ui.gardenUnit : lastMod ? MODULES[ITEM[lastMod.q].mid].unit : units[0]
+  const g = unitGrowth(cur)
+  const names = stageNames(type)
+  const t = todayStats()
+  // 長大了：跟上次看到的階段比，慶祝一下（一課只慶祝一次）
+  // 第一次看到花園：先記下現在的階段，不要一打開就每一課都慶祝
+  if (!S.garden) {
+    S.garden = Object.fromEntries(units.map((u) => [u, unitGrowth(u).stage]))
+    save()
+  }
+  const seen = S.garden
+  const grown = units.filter((u) => unitGrowth(u).stage > (seen[u] ?? 0))
+  if (grown.length) {
+    setTimeout(() => {
+      celebrate?.()
+      toast(`${grown[0]} 的${PLANTS[type].name}長大了：${names[unitGrowth(grown[0]).stage]}！`, '🎉')
+    }, 600)
+    grown.forEach((u) => (seen[u] = unitGrowth(u).stage))
+    save()
+  }
+  return `<section class="garden card">
+    <div class="gd-main">
+      <div class="gd-pot">${plantImg(type, g.stage, 'big')}</div>
+      <div class="gd-info">
+        <p class="gd-k">${esc(cur)} 的${esc(PLANTS[type].name)}<button class="link gd-change" data-plantpick>換植物</button></p>
+        <h2 class="gd-stage">${names[g.stage]}</h2>
+        <p class="gd-count">會了 <b>${g.ok}</b>／${g.total} 題</p>
+        ${g.stage < 4 ? `<div class="gd-bar" role="progressbar" aria-valuenow="${Math.round(g.toNext * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(g.toNext * 100)}%"></i></div><p class="gd-next">再答對 <b>${g.need}</b> 題，就會${g.stage === 0 ? '發芽' : names[g.stage + 1] === '長葉' ? '長出葉子' : `${names[g.stage + 1]}`}</p>` : `<p class="gd-next done">這一課已經${names[4]}了！</p>`}
+        <p class="gd-today">今天練習 ${t.n} 題${t.n ? `・答對 ${Math.round(t.acc * 100)}%` : ''}</p>
+      </div>
+    </div>
+    <div class="gd-row" role="tablist" aria-label="各課的植物">${units
+      .map((u) => {
+        const x = unitGrowth(u)
+        return `<button class="gd-cell${u === cur ? ' on' : ''}" data-garden="${esc(u)}" role="tab" aria-selected="${u === cur}">${plantImg(type, x.stage, 'small')}<span>${esc(u)}</span></button>`
+      })
+      .join('')}</div>
+    <div class="hero-acts">${nextBtn}</div>
+  </section>`
+}
+// 選植物（第一次、或按「換植物」）：每種顯示開花的樣子＋名字＋風格
+function plantPickSheet() {
+  const cur = myPlant()
+  const b = sheet(`<h2 class="sheet-title">選一種植物</h2><p class="sheet-p">每一課會種一株。答對越多題，它就長得越大。</p>
+    <div class="plant-pick">${PLANT_ART.map((p) => `<button class="pp-pick${p === cur ? ' on' : ''}" data-plant="${p}">${plantImg(p, 4)}<b>${esc(PLANTS[p].name)}</b><small>${esc(PLANTS[p].style)}</small></button>`).join('')}</div>`)
+  b.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-plant]')
+    if (!c) return
+    S.profile.plant = c.dataset.plant
+    addSession({ k: 'plant', m: 'plant', type: c.dataset.plant, ts: Date.now(), d: S.profile.id }) // 老師、家長那邊也看得到同一種
+    save()
+    closeSheet()
+    toast(`換成${PLANTS[c.dataset.plant].name}了`, '🌱')
+    location.hash === '#/' || !location.hash ? viewHome() : route()
+  })
 }
 // 刻度條：4 格（還沒開始、暖身、穩定、很好），圓點停在現在的那格
 const scaleHTML = (level, labels = ['還沒開始', '暖身', '穩定', '很好']) =>
@@ -3235,7 +3343,7 @@ function viewStats() {
   const tc = tagCounts(list)
   const max = tc[0]?.[1] || 1
   const devices = new Set(S.attempts.map((a) => a.d))
-  const sess = S.sessions.filter((s) => s.k !== 'notes' && (!mine || s.d === S.profile.id)).slice(-12).reverse() // 看重點總整理的紀錄只給老師看
+  const sess = S.sessions.filter((s) => s.k !== 'notes' && s.k !== 'plant' && (!mine || s.d === S.profile.id)).slice(-12).reverse() // 看重點總整理的紀錄只給老師看
   setView(
     `<div class="page">
       ${header('學習紀錄', S.profile.name ? `${S.profile.name}・${S.profile.device || ''}` : '紀錄存在這個瀏覽器裡；可以匯出給老師或其他裝置。')}
@@ -5896,6 +6004,22 @@ function parentProgressHTML(list, sess, units, l, name) {
         ${stat(rep.learned.length, '新學會', '', 'ok')}
       </div></div>
     </section>
+    ${
+      gardenReady()
+        ? (() => {
+            // 2.21 孩子的花園：每一課一株植物，會了越多題長越大（家長看得到孩子的成長）
+            const type = plantOf(sess)
+            const names = stageNames(type)
+            return `<section class="card pp-card">${secH(`${esc(name)} 的花園`, `${esc(PLANTS[type].name)}・答對越多長越大`)}
+              <div class="gd-row parent">${UNITS.filter((u) => units.has(u))
+                .map((u) => {
+                  const x = unitGrowth(u, list)
+                  return `<div class="gd-cell">${plantImg(type, x.stage, 'small')}<span>${esc(u)}</span><small>${names[x.stage]}・${x.ok}／${x.total}</small></div>`
+                })
+                .join('')}</div></section>`
+          })()
+        : ''
+    }
     ${
       rep.mods.length
         ? `<section class="card pp-card">${secH('這週學會了', `共 ${rep.learned.length} 題`)}
