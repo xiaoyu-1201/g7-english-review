@@ -73,6 +73,15 @@ with sync_playwright() as p:
     time.sleep(0.2)
     T.screenshot(path=str(OUT / "f1-assign.png"))
     T.click(".sheet [data-ok]")
+    # 派出前確認（10/9 老師：怕派錯）：派給誰、截止、每一項、給學生的話
+    T.wait_for_selector(".sheet .hw-confirm:not([hidden]) [data-send]")
+    cf = txt(T, ".sheet .hw-confirm")
+    check("Amy" in cf and "截止" in cf and "情境單題" in cf and "錯題本複習" in cf and "情境題要先看答句" in cf and "2 項" in cf, f"confirm step lists who, due date, tasks and note: {cf[:80]!r}")
+    T.screenshot(path=str(OUT / "f1b-confirm.png"))
+    T.click(".sheet [data-edit]")
+    check(T.locator(".sheet .hw-pickstep:not([hidden]) .hw-pick.on").count() == 2, "修改 goes back with the selection kept")
+    T.click(".sheet [data-ok]")
+    T.click(".sheet [data-send]")
     check(wait_until(lambda: "已派給" in txt(T, "#toast")), "assigned toast")
     check(wait_until(lambda: T.locator(".hw-card .hw-task").count() == 2), "teacher sees assignment with 2 tasks")
     # 學生首頁：作業卡（錯題本是空的 → 已算完成）

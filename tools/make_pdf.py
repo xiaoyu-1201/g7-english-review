@@ -11,7 +11,9 @@ APP = pathlib.Path(__file__).resolve().parent.parent
 OUT = APP / "pdf"
 PORT = 5187
 URL = f"http://127.0.0.1:{PORT}/"
-SEED = "localStorage.setItem('g7review:v1', JSON.stringify({seen:{intro:1}}))"
+# 聽力重點的句子、藍色單字在 PDF 裡是音檔連結、QR Code 打開網頁版：都要指向正式網站（不是本機）
+LIVE = "https://xiaoyu-1201.github.io/g7-english-review/"
+SEED = "localStorage.setItem('g7review:v1', JSON.stringify({seen:{intro:1}})); window.__pdfBase = '" + LIVE + "';"
 # PDF 裡不要頁首、分頁列、課名列
 HIDE = ".lg-head, .tabbar, .notes-units { display: none !important } .page { padding-top: 0 }"
 
@@ -39,6 +41,7 @@ try:
             ids = [m for m in order if unit_of[m] in us]
             pg.goto(URL + f"?pdf={n}#/print/notes/" + ",".join(ids))  # 換 query 讓每一份都重新載入
             pg.wait_for_selector(".notes-print .notes-mod")
+            pg.wait_for_selector(".notes-print[data-links]")  # 音檔連結、QR Code 都換好了
             pg.add_style_tag(content=HIDE)
             pg.evaluate("document.fonts.ready")
             pg.wait_for_timeout(400)

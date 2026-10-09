@@ -54,6 +54,7 @@ with sync_playwright() as p:
     T.wait_for_selector(".hw-pick")
     T.click('.hw-pick[data-t="mod:u2a"]')
     T.click(".sheet [data-ok]")
+    T.click(".sheet [data-send]")  # 派出前確認
     check(wait_until(lambda: "已派給 2 位學生" in txt(T, "#toast")), "homework sent to 2 students")
     check(wait_until(lambda: len(http("GET", f"/classes/{code}/hw/{amy}.json")[1] or {}) == 1 and len(http("GET", f"/classes/{code}/hw/{ben}.json")[1] or {}) == 1), "each student got one homework")
     check((http("GET", f"/classes/{code}/students/{amy}/units.json")[1] or {}).get("Unit 2") is True, "homework auto-opened Unit 2 for Amy")
