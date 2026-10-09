@@ -38,6 +38,7 @@ with sync_playwright() as p:
     PA = page(b, 390, 844, "PA", seed=DBSEED)
     PA.goto(link(code, "parent", amy))
     check(wait_until(lambda: st(PA) == "member"), "Amy parent joins by link")
+    PA.goto(URL + "#/live")  # 2.21：家長加入後先到學習進度；這裡要看即時作答
     check(wait_until(lambda: PA.locator(".live-row").count() >= 1), "Amy parent sees Amy's answer")
     check(wait_until(lambda: "Amy" in txt(PA, ".ld-who b")), "parent page shows Amy's name")
 
@@ -95,6 +96,7 @@ with sync_playwright() as p:
     PB.fill("#cs-code", ben_code.lower())
     PB.click(".sheet [data-ok]")
     check(wait_until(lambda: st(PB) == "member"), "Ben parent joins by code")
+    PB.goto(URL + "#/live")  # 2.21：家長加入後先到學習進度
     check(wait_until(lambda: PB.locator(".live-row").count() >= 1), "Ben parent sees Ben's answer")
 
     # 隔離：家長只看得到自己的孩子；學生看不到名單

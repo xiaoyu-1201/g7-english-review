@@ -313,7 +313,7 @@ export const MODULES3 = {
         opts: ['人名', '時間', '地點'],
         a: 1,
         rule: '選項長什麼樣，問題就會問什麼。先看選項，再按播放。',
-        tip: "注意「更正」：Not at 3:00, at 4:00. 答案通常在 not 後面的那一個。",
+        tip: "注意「更正」：被 not 否定的那個是錯的，答案是另一個：Not at 3:00, at 4:00. → 4:00；At 12:00, not at 8:00. → 12:00。",
       },
       {
         t: 'mcq', id: 'k6-01', sec: '辨識句意', audio: 'The boy is washing his dog in the yard.',
@@ -651,7 +651,7 @@ export const MODULES3 = {
       {
         t: 'learn',
         title: '聽力的數字和日期',
-        show: '會考聽力常考數字：日期、人數、價錢。<br>容易混的：<b>thirteen／thirty</b>、<b>fifteenth／fiftieth</b>、<b>June／July</b>。<br>-teen 重音在後面（thirTEEN），-ty 重音在前面（THIRty）。<br>聽到日期，心裡馬上換成數字：May the fifth → 5/5。',
+        show: '會考聽力常考數字：日期、人數、價錢。<br>容易混的：<b>thirteen／thirty</b>、<b>fifteenth／fiftieth</b>、<b>June／July</b>。<br>-teen 重音在後面（thirTEEN），-ty 重音在前面（THIRty）。<br>聽到日期，心裡馬上換成數字：May the fifth → 5/5。<br>the second Sunday＝第二個星期日，不是 2 號。',
         ask: '聽到 "There are thirteen monkeys."，有幾隻猴子？',
         opts: ['13', '30'],
         a: 0,

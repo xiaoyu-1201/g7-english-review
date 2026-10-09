@@ -1,9 +1,10 @@
 """同步測試共用：本機網站 5181＋模擬 Firebase 5190；老師建立後台、新增學生、取連結"""
-import pathlib, time, json, urllib.request
+import pathlib, time, json, urllib.request, os
 
-URL = "http://127.0.0.1:5181/"
-DB = "http://127.0.0.1:5190"
-OUT = pathlib.Path(__file__).parent / "shots"
+# 試玩用（AI 試玩時開另一組連接埠）：環境變數 G7_URL、G7_DB、G7_OUT 可以換掉
+URL = os.environ.get("G7_URL", "http://127.0.0.1:5181/")
+DB = os.environ.get("G7_DB", "http://127.0.0.1:5190")
+OUT = pathlib.Path(os.environ.get("G7_OUT") or pathlib.Path(__file__).parent / "shots")
 DBSEED = f"localStorage.setItem('g7review:db', '{DB}');localStorage.setItem('g7review:authkey', 'testkey');localStorage.setItem('g7review:authurl', '{DB}');"
 SEED = "if (!localStorage.getItem('g7review:v1')) localStorage.setItem('g7review:v1', JSON.stringify({seen:{intro:1}}));" + DBSEED
 

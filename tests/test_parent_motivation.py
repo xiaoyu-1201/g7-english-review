@@ -53,9 +53,9 @@ with sync_playwright() as p:
     check(wait_until(lambda: T.evaluate("window.__clip") == rep) and "已複製" in txt(T, "#toast"), "summary copied to the clipboard")
     T.keyboard.press("Escape")
     time.sleep(0.4)
-    # 家長：學習進度最上面＝老師的話、這週學會了、進步、聽孩子念的
-    P.goto(URL + "#/live/home")
+    # 家長：學習進度最上面＝老師的話、這週學會了、進步、聽孩子念的（2.21：家長加入後就在學習進度，請 App 去抓老師的話）
     P.wait_for_selector(".parent-prog")
+    P.evaluate("window.__app.Sync.fetchHw()")
     check(wait_until(lambda: msg[:6] in txt(P, ".pp-note-card")), "parent sees the teacher's note at the top")
     pp = txt(P, ".parent-prog")
     check("這週學會了" in pp and "this / that / these / those" in pp, "parent sees what was learned this week")

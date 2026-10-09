@@ -18,13 +18,21 @@ with sync_playwright() as p:
     # 學生用「不同的開法」（沒有紀錄）
     S2 = page(b, 390, 844, "S2", seed=DBSEED)
     S2.goto(link(code, "student", amy))
-    check(wait_until(lambda: "沒有找到你之前的練習紀錄" in txt(S2, ".sheet")), "student without records gets warning sheet")
-    # 家長：點一下 → 直接看即時作答，沒有歡迎畫面
+    check(wait_until(lambda: "第一次使用的話" in txt(S2, ".sheet")), "student without records gets a gentle note (how to bring old records)")
+    # 家長：點一下 → 直接看學習進度（2.21：不是一串紅色 ✕ 的即時作答），沒有學生的歡迎畫面
     P = page(b, 390, 844, "P", seed=DBSEED)
     P.goto(link(code, "parent", amy))
-    check(wait_until(lambda: P.evaluate("location.hash") == "#/live"), "parent lands on live page")
+    check(wait_until(lambda: P.evaluate("location.hash") == "#/live/home"), "parent lands on 學習進度")
     check(P.locator(".welcome").count() == 0, "parent: no welcome sheet")
-    check(wait_until(lambda: P.locator(".live-row").count() >= 1), "parent sees answers")
+    P.click('.tabbar a[href="#/live"]')
+    check(wait_until(lambda: P.locator(".live-row").count() >= 1), "parent sees answers in 即時作答")
+    # 再點一次同一個連結（從 LINE）：不能卡在空白的「載入中」
+    P.goto(link(code, "parent", amy))
+    check(wait_until(lambda: P.evaluate("location.hash") == "#/live/home" and P.locator(".parent-prog").count() == 1, 15), "tapping the same parent link again opens 學習進度 (no blank 載入中)")
+    P2 = P.context.new_page()  # 從 LINE 再點一次＝重新打開頁面（這時還沒連上）
+    P2.goto(link(code, "parent", amy))
+    check(wait_until(lambda: P2.evaluate("location.hash") == "#/live/home" and P2.locator(".parent-prog").count() == 1, 15), "reopening the parent link in a fresh page opens 學習進度 (no blank 載入中)")
+    P2.close()
     check(sync_of(P).get("role") == "parent", "parent role saved")
     P.goto(link(code, "parent", amy))
     check(wait_until(lambda: "已經加入了" in txt(P, "#toast")), "re-tap says already joined")

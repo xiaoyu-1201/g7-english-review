@@ -1,4 +1,4 @@
-# 英文段考複習（國一・翰林版七上 Starter～Review 3）
+# 小宇英文：英文段考複習（國一・翰林版七上 Starter～Review 3）
 
 📱 **網址**：https://xiaoyu-1201.github.io/g7-english-review/
 （iPad 用 Safari 打開 → 分享 →「加入主畫面」，就像 App 一樣全螢幕使用）

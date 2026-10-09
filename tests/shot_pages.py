@@ -1,5 +1,5 @@
 """各主要頁面截圖（排版檢查、設計審查用，不是測試）：.\\tests\\run_tests.ps1 -Tests shot_pages.py
-手機 390×844（全部）＋平板 820×1180（最常用的幾頁）；資料：一個學生做過一些題目、考過模擬段考、練過口說
+手機 390×844（全部）＋平板 820×1180、1180×820＋電腦 1440×900（最常用的幾頁）；資料：一個學生做過一些題目、考過模擬段考、練過口說
 截圖存在 tests/shots/pages/<名稱>.png"""
 import os, time
 from playwright.sync_api import sync_playwright
@@ -86,18 +86,19 @@ with sync_playwright() as p:
     shot(T, "t-assign-sheet", full=False)
     T.keyboard.press("Escape")
     time.sleep(0.4)
-    # 平板
-    for pg, w_h, items in [
-        (A, (820, 1180), [("#/", ".home", "tab-s-home")]),
-        (T, (820, 1180), [("#/students", ".stu-page", "tab-t-students"), (f"#/student/{amy}", ".stu-detail", "tab-t-student"), (f"#/student/{amy}/home", ".stu-home", "tab-t-stuhome")]),
-        (P, (820, 1180), [("#/live/home", ".parent-prog", "tab-p-progress")]),
-    ]:
-        pg.set_viewport_size({"width": w_h[0], "height": w_h[1]})
-        for h, sel, name in items:
-            pg.goto(URL + h)
-            pg.wait_for_selector(sel)
-            shot(pg, name)
-    # 新裝置的歡迎畫面
+    # 平板（直、橫）＋電腦（10/9 老師：iPhone、iPad、電腦三種版型都要看）
+    for dev, w, h in [("tab", 820, 1180), ("land", 1180, 820), ("pc", 1440, 900)]:
+        for pg, items in [
+            (A, [("#/", ".home", "s-home"), ("#/notes/Unit 2", ".notes-page", "s-notes"), ("#/notes/mine", ".notes-page", "s-notes-mine"), ("#/book", ".page", "s-book")]),
+            (T, [("#/students", ".stu-page", "t-students"), (f"#/student/{amy}", ".stu-detail", "t-student"), (f"#/student/{amy}/home", ".stu-home", "t-stuhome")]),
+            (P, [("#/live/home", ".parent-prog", "p-progress")]),
+        ]:
+            pg.set_viewport_size({"width": w, "height": h})
+            for hh, sel, name in items:
+                pg.goto(URL + hh)
+                pg.wait_for_selector(sel)
+                time.sleep(0.3)
+                shot(pg, f"{dev}-{name}")    # 新裝置的歡迎畫面
     N = page(b, 390, 844, "N", seed="")
     N.goto(URL)
     time.sleep(0.8)

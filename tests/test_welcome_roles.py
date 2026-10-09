@@ -60,7 +60,7 @@ with sync_playwright() as p:
     P.screenshot(path=str(OUT / "a2-parent-start-dark.png"))
     P.fill("#pp-link", link(code, "parent", amy).replace(URL, "https://xiaoyu-1201.github.io/g7-english-review/"))
     P.dispatch_event("#pp-link", "change")
-    check(wait_until(lambda: P.evaluate("location.hash") == "#/live" and st(P) == "member"), "parent joined and on live page")
+    check(wait_until(lambda: P.evaluate("location.hash") == "#/live/home" and st(P) == "member"), "parent joined and on 學習進度 (2.21)")
     check(role_of(P) == "parent", "parent role saved")
     # 設定裡可以改身分
     S.goto(URL + "#/settings")

@@ -1,12 +1,14 @@
-"""把老師在 ChatGPT 生成的植物圖（一張 5 個成長階段排一排）裁成 5 張：img/plant-<種類>-<1～5>.png
+"""把老師在 ChatGPT 生成的植物圖（一張 5 個成長階段排一排）裁成 5 張：img/plant-<種類>-<1～5>.webp
 用法（在 App 資料夾）：python tools\\split_plants.py <圖檔> <種類：sun／cactus／sakura／apple>
-- 背景不是透明的（白色或很淡的顏色）：從四周往內把接近背景色的像素去掉
-- 依「有東西的直欄」切成 5 塊；每塊裁掉空白、等比例縮成高 360px、底部對齊放進同樣大小的畫布（5 張的盆子才會對齊）
+1. 清邊：ChatGPT 的去背會留一圈淺色的邊和半透明的霧（深色模式看得到）→ 半透明（alpha < 128）去掉、邊緣往內收 2 像素
+   背景如果不是透明的（白色或很淡的顏色）：先從四周往內把接近背景色的像素去掉
+2. 切成 5 塊：找植物之間最寬的 4 段空白，從中間切（掉下來的花瓣離樹很近，不會被切開）
+3. 每一塊裁掉空白；5 張用同一個比例縮到最高的那張高 360px，底部對齊放進同樣大小的畫布（盆子大小、位置都一樣，看得出長大）
 做完要到 app.js 把種類加進 PLANT_ART，例如 const PLANT_ART = ['sun']
 """
 import sys, pathlib
 from collections import deque
-from PIL import Image
+from PIL import Image, ImageFilter
 
 APP = pathlib.Path(__file__).resolve().parent.parent
 src, kind = sys.argv[1], sys.argv[2]
@@ -14,15 +16,11 @@ im = Image.open(src).convert("RGBA")
 W, H = im.size
 px = im.load()
 
-
-def is_bg(c, ref):
-    return c[3] < 20 or (abs(c[0] - ref[0]) + abs(c[1] - ref[1]) + abs(c[2] - ref[2]) < 36)
-
-
-# 1) 去背：四個角的顏色當背景，從邊框往內 flood fill
+# 背景不透明：四個角的顏色當背景，從邊框往內 flood fill
 corners = [px[0, 0], px[W - 1, 0], px[0, H - 1], px[W - 1, H - 1]]
 ref = max(corners, key=corners.count)
-if ref[3] > 200:  # 不透明的背景才需要去
+if ref[3] > 200:
+    near = lambda c: abs(c[0] - ref[0]) + abs(c[1] - ref[1]) + abs(c[2] - ref[2]) < 36
     seen = bytearray(W * H)
     q = deque([(x, 0) for x in range(W)] + [(x, H - 1) for x in range(W)] + [(0, y) for y in range(H)] + [(W - 1, y) for y in range(H)])
     while q:
@@ -31,49 +29,52 @@ if ref[3] > 200:  # 不透明的背景才需要去
         if seen[i]:
             continue
         seen[i] = 1
-        if not is_bg(px[x, y], ref):
+        if not near(px[x, y]):
             continue
         px[x, y] = (0, 0, 0, 0)
         for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
             if 0 <= nx < W and 0 <= ny < H and not seen[ny * W + nx]:
                 q.append((nx, ny))
 
-# 2) 找出有東西的直欄，切成 5 塊（取最寬的 5 段）
-cols = [any(px[x, y][3] > 30 for y in range(0, H, 2)) for x in range(W)]
-segs, start = [], None
-for x, on in enumerate(cols + [False]):
-    if on and start is None:
-        start = x
-    if not on and start is not None:
-        if x - start > W * 0.03:
-            segs.append((start, x))
-        start = None
-# 太近的段落合併（同一株植物的葉子之間可能有縫）
-merged = []
-for s in segs:
-    if merged and s[0] - merged[-1][1] < W * 0.015:
-        merged[-1] = (merged[-1][0], s[1])
-    else:
-        merged.append(s)
-if len(merged) != 5:
-    print(f"找到 {len(merged)} 段，不是 5 段；改用平均切成 5 等份")
-    merged = [(round(W * k / 5), round(W * (k + 1) / 5)) for k in range(5)]
+# 1. 清邊：半透明的霧去掉；邊緣往內收 2 像素（MinFilter 3×3 兩次）
+r, g, b, a = im.split()
+a = a.point(lambda v: 255 if v >= 128 else 0)
+a = a.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MinFilter(3))
+im = Image.merge("RGBA", (r, g, b, a))
+px = im.load()
 
-# 3) 每一塊裁掉空白，縮到同樣高度，底部對齊放進同樣大小的畫布
+# 2. 切成 5 塊：有東西的直欄 → 最寬的 4 段空白的中間
+occ = [sum(1 for y in range(0, H, 2) if px[x, y][3] > 200) > 1 for x in range(W)]
+first = occ.index(True)
+last = W - 1 - occ[::-1].index(True)
+gaps, s = [], None
+for x in range(first, last + 1):
+    if not occ[x] and s is None:
+        s = x
+    if occ[x] and s is not None:
+        gaps.append((x - s, s, x))
+        s = None
+cuts = sorted((st + en) // 2 for _, st, en in sorted(gaps, reverse=True)[:4])
+if len(cuts) != 4:
+    print(f"只找到 {len(cuts)} 段空白；改用平均切成 5 等份")
+    cuts = [first + (last - first) * k // 5 for k in range(1, 5)]
+bounds = list(zip([first] + cuts, cuts + [last + 1]))
+
+# 3. 每一塊裁掉空白，同一個比例縮放，底部對齊
 pieces = []
-for a, b in merged:
-    part = im.crop((a, 0, b, H))
+for x0, x1 in bounds:
+    part = im.crop((x0, 0, x1, H))
     bbox = part.getbbox()
     pieces.append(part.crop(bbox) if bbox else part)
 TH = 360
-scale = TH / max(p.height for p in pieces)  # 用最高的那一株當基準：小的就是小的，看得出長大
-CW = max(round(p.width * scale) for p in pieces)
+scale = TH / max(p.height for p in pieces)
+CW = max(round(p.width * scale) for p in pieces) + 8
 out = APP / "img"
 out.mkdir(exist_ok=True)
 for k, p in enumerate(pieces, 1):
-    r = p.resize((max(1, round(p.width * scale)), max(1, round(p.height * scale))), Image.LANCZOS)
+    rz = p.resize((max(1, round(p.width * scale)), max(1, round(p.height * scale))), Image.LANCZOS)
     canvas = Image.new("RGBA", (CW, TH), (0, 0, 0, 0))
-    canvas.paste(r, ((CW - r.width) // 2, TH - r.height), r)
-    f = out / f"plant-{kind}-{k}.png"
-    canvas.save(f, optimize=True)
-    print(f, canvas.size, f"{f.stat().st_size // 1024} KB")
+    canvas.paste(rz, ((CW - rz.width) // 2, TH - rz.height), rz)
+    f = out / f"plant-{kind}-{k}.webp"
+    canvas.save(f, "WEBP", quality=88, method=6)
+    print(f.name, canvas.size, f"{f.stat().st_size // 1024} KB")
