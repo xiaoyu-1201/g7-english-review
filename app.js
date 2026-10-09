@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.18（10/9）'
+const VERSION = '2.18.1（10/9）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -3414,7 +3414,7 @@ function viewSettings() {
 // 設定頁的「即時同步」區塊：依這台的狀態顯示（還沒加入／暫停加入或被移除／已加入／管理裝置）
 function syncSettingsHTML(role) {
   const st = Sync.state
-  const status = { on: '已連線', connecting: '連線中', error: '重新連線中', off: '未連線' }[Sync.status] || ''
+  const status = { on: '已連線', connecting: '更新中', error: '重新連線中', off: '未連線' }[Sync.status] || ''
   const dot = `<span class="row-ic"><i class="sync-dot" data-s="${Sync.status}"></i></span>`
   const pend = S.syncQ?.length ? `還有 ${S.syncQ.length} 筆待上傳` : '紀錄都已上傳'
   if (ACTIVE)
@@ -5026,6 +5026,16 @@ const Sync = {
   async unblock(uid) {
     await this.req('DELETE', 'blocked/' + uid)
   },
+  // 移除後按「復原」：把原本的成員資料放回去、從「已移除」拿掉（老師 10/9：怕刪錯）
+  async restore(uid, m) {
+    const keep = Object.fromEntries(Object.entries(m || {}).filter(([k]) => ['role', 'sid', 'name', 'dev', 'pid', 'at'].includes(k)))
+    await this.req('PUT', 'members/' + uid, { ...keep, at: keep.at || Date.now() })
+    await this.req('DELETE', 'blocked/' + uid)
+  },
+  // 成員管理：老師幫裝置取名字（例如「我的手機（測試）」），比較不會刪錯
+  async renameMember(uid, label) {
+    await this.req('PUT', `members/${uid}/dev`, String(label).slice(0, 40))
+  },
   async setOpen(v) {
     await this.req('PUT', 'open', !!v)
     this.D.open = !!v
@@ -5548,13 +5558,16 @@ function feedClick(e, list, sid = '', redraw = null) {
         }
       }, true)
 }
-const syncPill = () => `<span class="sync-pill"><i class="sync-dot" data-s="${Sync.status}"></i>${{ on: '已連線', connecting: '連線中', error: '重新連線中', off: '未連線' }[Sync.status] || ''}</span>`
+// 剛打開 App 跟雲端連線的那一兩秒：寫「更新中」，不要寫「連線中」（老師 10/9：每次都以為是網路不好、連線失敗）
+const syncPill = () => `<span class="sync-pill"><i class="sync-dot" data-s="${Sync.status}"></i>${{ on: '已連線', connecting: '更新中', error: '重新連線中', off: '未連線' }[Sync.status] || ''}</span>`
+// 真的有問題（暫停加入、被移出、連結失效、等老師那邊更新）才用整張卡片說明；只是還在連線就先顯示這個裝置上的資料
+const syncTrouble = () => ['closed', 'removed', 'invalid', 'wait'].includes(Sync.state)
 
 // 家長（和學生的其他裝置）：這個學生正在做哪一題、每一題答了什麼
 function viewLive(keepScroll = false) {
   if (teacherMode()) return viewStudents(keepScroll)
   const y = window.scrollY
-  if (!Sync.ready()) {
+  if (!Sync.ready() && (!Sync.paired() || syncTrouble())) {
     setView(
       `<div class="page narrow">${header('即時作答', '', '', true)}
       ${
@@ -5573,9 +5586,10 @@ function viewLive(keepScroll = false) {
   const ok = today.filter((a) => a.r === 'ok').length
   const care = today.filter((a) => a.r === 'care').length
   const l = studentsLive().sort((a, b) => b[1].ts - a[1].ts)[0]?.[1]
-  const name = Sync.stu?.name || l?.name || '學生'
+  const name = Sync.stu?.name || S.stuCache?.name || l?.name || '學生'
   // 家長打開這一頁：回報上線（老師在成員管理看得到最後上線和 App 版本）、抓最新的作業；即時重畫時不用再做
-  if (!keepScroll) {
+  // 剛打開還在連線：連上之後（會自動重畫）再送
+  if (Sync.ready() && (!keepScroll || Sync.last?.view !== 'live')) {
     Sync.presence({ view: 'live' })
     Sync.fetchHw()
   }
@@ -5606,10 +5620,10 @@ const liveSegHTML = (tab) => `<div class="seg full stu-seg" role="tablist"><butt
 let PP_PREV = null
 function viewLiveHome(keepScroll = false) {
   if (teacherMode()) return viewStudents(keepScroll)
-  if (!Sync.ready()) return viewLive(keepScroll)
+  if (!Sync.ready() && (!Sync.paired() || syncTrouble())) return viewLive(keepScroll)
   const y = window.scrollY
   const l = studentsLive().sort((a, b) => b[1].ts - a[1].ts)[0]?.[1]
-  const name = Sync.stu?.name || l?.name || '孩子'
+  const name = Sync.stu?.name || S.stuCache?.name || l?.name || '孩子'
   // 家長裝置上的紀錄＝孩子的（家長自己在這個裝置上做的題目不算）
   const list = S.attempts.filter((a) => a.d !== S.profile.id)
   const sess = S.sessions.filter((s) => s.d !== S.profile.id)
@@ -5617,8 +5631,11 @@ function viewLiveHome(keepScroll = false) {
     PP_PREV = S.ppSeen || 0
     S.ppSeen = Date.now()
     save()
+  }
+  // 回報上線、抓老師的話和作業（抓到會自動重畫）；剛打開還在連線的話，連上之後再做
+  if (Sync.ready() && (!keepScroll || Sync.last?.view !== 'live')) {
     Sync.presence({ view: 'live' })
-    Sync.fetchHw() // 老師的話、作業：打開就抓最新的（抓到會自動重畫）
+    Sync.fetchHw()
   }
   setView(
     `<div class="page narrow live-page parent-prog">
@@ -5707,37 +5724,60 @@ function parentProgressHTML(list, sess, units, l, name) {
   const max = (arr) => Math.max(...arr.map((s) => s.s || 0))
   const lastOf = (arr) => arr[arr.length - 1]
   const scores = (arr) => arr.slice(-5).reverse().map((s) => `<span class="pp-score${s.s >= 90 ? ' ok' : s.s < 60 ? ' bad' : ''}">${s.s} 分<small>${fmtDate(s.ts)}</small></span>`).join('')
-  const row = (ic, title, body) => `<div class="pp-row"><span class="pp-ic">${ic}</span><div class="pp-t"><b>${title}</b><div>${body}</div></div></div>`
-  const modLine = (m) => `<li><b>${esc(m.unit)}｜${esc(m.title)}</b>${m.topics.length ? `：${esc(m.topics.join('、'))}` : ''}<span class="pp-n">答對 ${m.n} 題</span></li>`
-  const exTrend = rep.examLast && rep.examPrev ? `模擬段考 ${rep.examPrev.s} → <b>${rep.examLast.s}</b> 分${rep.examLast.s > rep.examPrev.s ? `<span class="pp-up">↑ ${rep.examLast.s - rep.examPrev.s}</span>` : ''}` : ''
+  // 2.18.1（老師：「排版超醜」）：改成 Apple「健康」摘要的樣子——大數字、彩色方塊圖示（和首頁一樣）、一列一件事、補充說明用小字
+  const ico = (cls, svg) => `<span class="pp-ico ic-${cls}">${svg}</span>` // ic-：不要和 .exam、.flash 這些整頁的 class 撞名
+  const secH = (title, right = '') => `<div class="pp-sec-h"><h2>${title}</h2>${right ? `<span>${right}</span>` : ''}</div>`
+  const stat = (v, label, sub = '', cls = '') => `<div class="pp-stat${cls ? ' ' + cls : ''}"><b>${v}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</div>`
+  const line = (icon, title, body, extra = '') => `<div class="pp-line">${icon}<div class="pp-line-t"><b>${title}</b><span>${body}</span>${extra}</div></div>`
+  const exUp = rep.examLast && rep.examPrev ? rep.examLast.s - rep.examPrev.s : 0
   const seenTxt = !sinceSeen
     ? ''
     : sinceSeen.n
       ? `上次你看（${fmtTime(PP_PREV)}）之後：多練了 <b>${sinceSeen.n}</b> 題${sinceSeen.learned.length ? `，新學會 <b>${sinceSeen.learned.length}</b> 題` : ''}`
       : `上次你看（${fmtTime(PP_PREV)}）之後，還沒有新的練習`
   return `
-    ${seenTxt ? `<div class="pp-new${sinceSeen?.n ? ' on' : ''}">${sinceSeen?.n ? '✨' : '🕒'} ${seenTxt}</div>` : ''}
-    ${note ? `<section class="card pp-card pp-note-card"><div class="pp-row"><span class="pp-ic">💬</span><div class="pp-t"><b>老師的話<small>${fmtDate(note.at)}</small></b><div class="pp-msg">${esc(note.msg)}</div></div></div></section>` : ''}
+    <div class="pp-status${live ? ' on' : ''}"><i class="ld-dot${live ? ' on' : ''}"></i><span>${live ? esc(liveText(live)) : last ? `最後一次練習：${esc(agoText(last.ts))}` : '還沒有練習紀錄'}</span></div>
+    ${seenTxt ? `<div class="pp-new${sinceSeen?.n ? ' on' : ''}">${ICON.star}<span>${seenTxt}</span></div>` : ''}
+    ${note ? `<section class="card pp-card pp-note-card"><div class="pp-quote-h">老師的話<small>${fmtDate(note.at)}</small></div><p class="pp-msg">${esc(note.msg)}</p></section>` : ''}
     <section class="card pp-card">
-      ${row('🟢', '現在', live ? esc(liveText(live)) : last ? `最後一次練習：${esc(agoText(last.ts))}` : '還沒有練習紀錄')}
-      ${row('📅', '這週', `練習 <b>${week.length}</b> 題${week.length ? `，答對 <b>${pct(wOk, week.length)}%</b>` : ''}${lastW ? `（上週 ${lastW} 題）` : ''}`)}
-      ${row('🌱', '這週學會了', rep.mods.length ? `<b>${rep.learned.length}</b> 題，學到這些重點：<ul class="pp-learn">${rep.mods.slice(0, 3).map(modLine).join('')}</ul>` : '這週還沒有新學會的題目')}
-      ${rep.fixed.length || exTrend ? row('📈', '進步', `${rep.fixed.length ? `以前答錯、這週答對了 <b>${rep.fixed.length}</b> 題${rep.fixedMods[0] ? `（最多在「${esc(rep.fixedMods[0].title)}」）` : ''}` : ''}${rep.fixed.length && exTrend ? '<br>' : ''}${exTrend}`) : ''}
+      ${secH('這週', `${fmtDate(w0)}～${fmtDate(Date.now())}`)}
+      <div class="pp-stats">
+        ${stat(week.length, '練習題數', lastW ? `上週 ${lastW} 題` : '')}
+        ${stat(week.length ? `${pct(wOk, week.length)}<i>%</i>` : '—', '答對率')}
+        ${stat(rep.learned.length, '新學會的題目', '', 'ok')}
+      </div>
     </section>
-    ${rep.speakLast ? `<section class="card pp-card"><div class="pp-row"><span class="pp-ic">🎤</span><div class="pp-t"><b>聽${esc(name)}念的英文</b><div>最近一次口說 <b>${rep.speakLast.s}</b> 分（${fmtDate(rep.speakLast.ts)}）</div><button class="btn primary pp-play" data-latestrec>${ICON.play}<span>播放最新的錄音</span></button></div></div></section>` : ''}
+    ${
+      rep.mods.length
+        ? `<section class="card pp-card">${secH('這週學會了', `共 ${rep.learned.length} 題`)}
+          <div class="pp-mods">${rep.mods
+            .slice(0, 4)
+            .map((m) => `<div class="pp-mod"><span class="pp-tag">${esc(m.unit)}</span><div class="pp-mod-t"><b>${esc(m.title)}</b>${m.topics.length ? `<small>${esc(m.topics.join('・'))}</small>` : ''}</div><span class="pp-mod-n">${m.n} 題</span></div>`)
+            .join('')}</div></section>`
+        : ''
+    }
+    ${
+      rep.fixed.length || exUp
+        ? `<section class="card pp-card">${secH('進步')}<div class="pp-stats two">
+          ${rep.fixed.length ? stat(rep.fixed.length, '以前答錯、這週答對', rep.fixedMods[0] ? `最多在「${esc(rep.fixedMods[0].title)}」` : '', 'ok') : ''}
+          ${exUp ? stat(`${rep.examPrev.s} → ${rep.examLast.s}`, '模擬段考（分）', exUp > 0 ? `↑ ${exUp} 分` : `${exUp} 分`, exUp > 0 ? 'up' : '') : ''}
+        </div></section>`
+        : ''
+    }
+    ${rep.speakLast ? `<section class="card pp-card pp-rec">${line(ico('speak', ICON.mic), `聽${esc(name)}念的英文`, `最近一次口說 ${rep.speakLast.s} 分・${fmtDate(rep.speakLast.ts)}`)}<button class="btn primary pp-play" data-latestrec>${ICON.play}<span>播放</span></button></section>` : ''}
     <section class="card pp-card">
-      <h2 class="pp-h">每一課的進度</h2>
-      <p class="pp-note">「會了」＝最後一次作答答對的題目。</p>
+      ${secH('每一課的進度')}
+      <p class="pp-note">「會了」＝最後一次作答答對的題目</p>
       ${unitRows || '<p class="muted">還沒有開放的課。</p>'}
     </section>
-    <section class="card pp-card">
-      <h2 class="pp-h">各項練習的成績</h2>
-      ${row('📝', '模擬段考', ex.length ? `最近 ${ex.length > 5 ? '5' : ex.length} 次：<div class="pp-scores">${scores(ex)}</div>` : '還沒寫過')}
-      ${ls.length ? row('🎧', '聽力練習卷', `<div class="pp-scores">${scores(ls)}</div>`) : ''}
-      ${row('🎤', '口說練習', sp.length ? `最近一次 <b>${lastOf(sp).s}</b> 分（${fmtDate(lastOf(sp).ts)}），最高 ${max(sp)} 分，共 ${sp.length} 次${lastOf(sp).weak?.length ? `<small class="pp-sub">要再練的字：${esc(lastOf(sp).weak.slice(0, 4).join('、'))}</small>` : ''}` : '還沒練過')}
-      ${row('📕', '錯題本', book ? `還有 <b>${book}</b> 題答錯的題目要再練<small class="pp-sub">同一題答對 3 次，才會從錯題本移除</small>` : '目前沒有答錯的題目')}
-      ${row('⚡', '閃電挑戰', fl.length ? `最高 <b>${max(fl)}</b> 題（60 秒內答對的題數），共 ${fl.length} 次` : '還沒玩過')}
-      ${row('📒', '重點總整理', nt.length ? `最近看：${esc(lastOf(nt).u || '')}（${fmtDate(lastOf(nt).ts)}），共 ${nt.length} 次` : '還沒看過')}
+    <section class="card pp-card pp-acts">
+      ${secH('各項練習')}
+      ${line(ico('exam', ICON.doc), '模擬段考', ex.length ? `最近 ${Math.min(5, ex.length)} 次` : '還沒寫過', ex.length ? `<div class="pp-scores">${scores(ex)}</div>` : '')}
+      ${ls.length ? line(ico('listen', ICON.speaker), '聽力練習卷', `最近 ${Math.min(5, ls.length)} 次`, `<div class="pp-scores">${scores(ls)}</div>`) : ''}
+      ${line(ico('speak', ICON.mic), '口說練習', sp.length ? `最近 ${lastOf(sp).s} 分・最高 ${max(sp)} 分・共 ${sp.length} 次` : '還沒練過', sp.length && lastOf(sp).weak?.length ? `<small class="pp-sub">要再練的字：${esc(lastOf(sp).weak.slice(0, 4).join('、'))}</small>` : '')}
+      ${line(ico('book', ICON.book), '錯題本', book ? `還有 ${book} 題要再練` : '目前沒有答錯的題目', book ? '<small class="pp-sub">同一題答對 3 次，才會從錯題本移除</small>' : '')}
+      ${line(ico('flash', ICON.bolt), '閃電挑戰', fl.length ? `最高 ${max(fl)} 題（60 秒內答對）・共 ${fl.length} 次` : '還沒玩過')}
+      ${line(ico('notes', ICON.notes), '重點總整理', nt.length ? `最近看 ${esc(lastOf(nt).u || '')}・${fmtDate(lastOf(nt).ts)}・共 ${nt.length} 次` : '還沒看過')}
     </section>
     <p class="muted pad">每一題的作答在「即時作答」。${esc(name)}練習時，這一頁會自動更新。</p>`
 }
@@ -7029,6 +7069,12 @@ function viewManage(keepScroll = false) {
     const l = Sync.D.live?.[m.sid]?.[m.pid]
     return l?.ts ? `最後上線 ${agoText(l.ts)}` : '還沒上線'
   }
+  // 這台是什麼：身分（老師改過名稱的話）、裝置種類（iPhone、iPad…）、什麼時候加入
+  const devDesc = (m) => {
+    const l = Sync.D.live?.[m.sid]?.[m.pid]
+    const renamed = m.dev && !Object.values(ROLES).includes(m.dev)
+    return [renamed ? ROLES[m.role] || '' : '', l?.kind || '', `${fmtTime(m.at || 0)} 加入`].filter(Boolean).join('・')
+  }
   // 版本：這台裝置最後一次打開時的 App 版本（2.16 以前的版本不會回報）
   const ver = (m) => {
     const l = Sync.D.live?.[m.sid]?.[m.pid]
@@ -7037,7 +7083,7 @@ function viewManage(keepScroll = false) {
     return v === VERSION.replace(/（.*$/, '') ? `<span class="mg-ver ok">${ICON.check}最新版 ${esc(v)}</span>` : `<span class="mg-ver old">${v ? `舊版 ${esc(v)}` : '舊版'}・下次打開 App 會自動更新</span>`
   }
   const row = ([uid, m]) =>
-    `<div class="row mg-row"><span class="mg-ic">${ROLE_IC[m.role] || '❔'}</span><span class="row-t"><b>${esc(ROLES[m.role] || '成員')}${(m.at || 0) > seen ? '<em class="mg-new">新加入</em>' : ''}</b><small>${esc(m.dev || '裝置')}・${fmtDate(m.at || 0)} 加入・${last(m)}</small>${ver(m)}</span><button class="btn ghost small-btn danger-t" data-remove="${uid}">移除</button></div>`
+    `<div class="row mg-row"><span class="mg-ic">${ROLE_IC[m.role] || '❔'}</span><span class="row-t"><b>${esc(m.dev && !Object.values(ROLES).includes(m.dev) ? m.dev : ROLES[m.role] || '成員')}${(m.at || 0) > seen ? '<em class="mg-new">新加入</em>' : ''}</b><small>${esc(devDesc(m))}・${last(m)}</small>${ver(m)}</span><span class="mg-acts"><button class="btn ghost small-btn" data-rename="${uid}">改名稱</button><button class="btn ghost small-btn danger-t" data-remove="${uid}">移除</button></span></div>`
   const ids = studentIds()
   const loose = mems.filter(([, m]) => m.role !== 'teacher' && !Sync.students[m.sid])
   setView(
@@ -7082,17 +7128,48 @@ function viewManage(keepScroll = false) {
     const t = e.target.closest('button')
     if (!t) return
     try {
+      if (t.dataset.rename) {
+        const uid = t.dataset.rename
+        const m = Sync.members[uid] || {}
+        const b = sheet(`<h2 class="sheet-title">幫這台裝置取名稱</h2><p class="sheet-p">${esc(devDesc(m))}。取個好認的名字，例如「媽媽的手機」「我的手機（測試）」，之後就不會弄錯。只有你看得到。</p>
+          <div class="list form"><label class="row field"><span class="row-t">名稱</span><input id="mg-name" maxlength="20" value="${esc(m.dev && !Object.values(ROLES).includes(m.dev) ? m.dev : '')}" placeholder="例如：我的手機（測試）" autocomplete="off"></label></div>
+          <div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn primary" data-ok>儲存</button></div>`)
+        $('[data-ok]', b).onclick = async () => {
+          const v = $('#mg-name', b).value.trim()
+          if (!v) return $('#mg-name', b).focus()
+          try {
+            await Sync.renameMember(uid, v)
+            closeSheet()
+            toast('已改名稱', '✏️')
+          } catch {
+            toast('沒有成功，請檢查網路再試一次', '⚠️')
+          }
+        }
+        return
+      }
       if (t.dataset.remove) {
-        const m = Sync.members[t.dataset.remove] || {}
+        const uid = t.dataset.remove
+        const m = { ...(Sync.members[uid] || {}) }
         const sn = Sync.students[m.sid]?.name
+        // 移除前寫清楚是哪一台（老師 10/9：測試家長頁時加入了自己的手機，怕刪錯）；移除後可以復原
         return confirmSheet(
-          '移除這個成員？',
-          `${esc(ROLES[m.role] || '成員')}${sn ? `（${esc(sn)}）` : ''}・${esc(m.dev || '裝置')} 會立刻看不到任何資料，也不能自己再加回來（之後可以在「已移除」按允許重新加入）。`,
+          '移除這台裝置？',
+          `<b>${esc(m.dev && !Object.values(ROLES).includes(m.dev) ? m.dev : ROLES[m.role] || '成員')}</b>${sn ? `（${esc(sn)}）` : ''}<br>${esc(devDesc(m))}・${esc(last(m))}<br><br>這台會立刻看不到資料。練習紀錄不會被刪掉（紀錄存在學生名下）；移除後馬上可以按「復原」。`,
           '移除',
           async () => {
             try {
-              await Sync.remove(t.dataset.remove)
-              toast('已移除', '🚫')
+              await Sync.remove(uid)
+              // 視窗開著時名單不會重畫：關掉就重畫一次
+              const ub = sheet(`<h2 class="sheet-title">已移除</h2><p class="sheet-p">${esc(m.dev && !Object.values(ROLES).includes(m.dev) ? m.dev : ROLES[m.role] || '成員')}・${esc(devDesc(m))}</p><div class="sheet-actions"><button class="btn ghost" data-undo>復原</button><button class="btn primary" data-close>好</button></div>`, { onClose: () => onSyncChange('members') })
+              $('[data-undo]', ub).onclick = async () => {
+                try {
+                  await Sync.restore(uid, m)
+                  closeSheet()
+                  toast('已復原。那台如果顯示「已經被移出」，在那台按「再試一次」', '↩️')
+                } catch {
+                  toast('沒有成功，請檢查網路再試一次', '⚠️')
+                }
+              }
             } catch {
               toast('沒有成功，請檢查網路再試一次', '⚠️')
             }
