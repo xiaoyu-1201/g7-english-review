@@ -5250,6 +5250,51 @@ ul.plain b {
 .rr-pos {
   font-size: 15px;
 }
+/* 2.16 學生的學習進度（老師看）：分頁列、今天卡片的即時一列、正在做的卡片亮起來、歷史視窗 */
+.seg.full.stu-seg {
+  margin: 0 0 16px;
+}
+.stu-home .today {
+  margin-bottom: 14px;
+}
+.stu-home .today-live {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--label2);
+  font-size: 15px;
+}
+.qk.live,
+.mod.live {
+  outline: 2px solid var(--green-v);
+  outline-offset: -2px;
+}
+.qk-t .ld-dot,
+.mod-t .ld-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.stu-home .lock-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+.stu-sheet .rec-card {
+  margin-top: 14px;
+}
+.stu-sheet-h {
+  margin: 18px 4px 8px;
+  font-size: 17px;
+}
 /* 列印、做 PDF（tools/make_pdf.py）：正在關的視窗不印；每一課從新的一頁開始；一張卡不切成兩頁（老師 10/9：被紙張分割） */
 @media print {
   .sheet-wrap {

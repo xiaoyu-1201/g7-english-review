@@ -3,7 +3,7 @@
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 
-const VERSION = '2.15.1（10/9）'
+const VERSION = '2.16（10/9）'
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
@@ -213,14 +213,16 @@ const lvBarsHTML = (list) => {
   if (!rows.length) return ''
   return `<div class="bars lv-bars">${rows.map((x) => `<div class="bar-row static"><span class="bar-k"><span class="chip ${x.l === 3 ? 'lv3' : x.l === 2 ? 'lv2' : ''}">${x.name}</span></span><span class="bar-track"><i style="width:${Math.round((x.ok / x.n) * 100)}%"></i></span><span class="bar-v">${Math.round((x.ok / x.n) * 100)}%</span><span class="bar-n">${x.ok}／${x.n}</span></div>`).join('')}</div>`
 }
-function moduleStats(mid) {
-  const last = lastByItem()
+// 一個單元做到哪：自己的（moduleStats）或某個學生的（老師看「學習進度」時傳那個學生的 attempts、sessions）
+function moduleStatsOf(mid, attempts, sessions) {
+  const last = lastByItem(attempts)
   const sc = MODULES[mid].scored
   const done = sc.filter((i) => last[i.id]).length
   const mastered = sc.filter((i) => last[i.id]?.r === 'ok').length
-  const best = Math.max(0, ...S.sessions.filter((s) => s.m === mid && s.k === 'm:' + mid).map((s) => s.stars || 0))
+  const best = Math.max(0, ...sessions.filter((s) => s.k === 'm:' + mid).map((s) => s.stars || 0))
   return { total: sc.length, done, mastered, best }
 }
+const moduleStats = (mid) => moduleStatsOf(mid, S.attempts, S.sessions)
 function todayStats() {
   const t0 = dayStart()
   const list = S.attempts.filter((a) => a.ts >= t0)
@@ -1989,12 +1991,21 @@ function pdfSheet(unit, prepare) {
     }
   })
 }
+// 重點總整理看過的紀錄（老師在「學習進度」看得到哪一課、什麼時候看；10/9 老師：重點總整理也要有歷史資料）
+// 同一課 30 分鐘內只記一次；老師自己看不記；學生的「學習紀錄」頁不列這種紀錄
+function noteVisit(unit) {
+  if (teacherMode() || !unit) return
+  const last = [...S.sessions].reverse().find((s) => s.k === 'notes' && s.u === unit)
+  if (last && Date.now() - last.ts < 1800000) return
+  addSession({ k: 'notes', m: 'notes', title: '重點總整理', u: unit, ts: Date.now(), d: S.profile.id })
+  save()
+}
 // 重點總整理：一次看一課（上面一排課名可以切換，記住上次看的）；列印時全部印出來
 function viewAllNotes() {
   const mods = openMods()
   const units = [...new Set(mods.map((m) => MODULES[m].unit))]
   const cur = units.includes(S.profile.notesUnit) ? S.profile.notesUnit : units[0]
-  Sync.presence({ view: 'notes' })
+  Sync.presence({ view: 'notes', title: cur || '' }) // 老師看得到正在看哪一課
   setView(
     `<div class="page notes-page">
       ${header('重點總整理', '一次看一課，點上面切換；考前一天從頭看一遍。', `<button class="btn ghost" data-print>${ICON.doc}<span>${IS_IOS ? 'PDF' : '列印'}</span></button>`, true)}
@@ -2003,12 +2014,15 @@ function viewAllNotes() {
       <details class="callout notes-check"><summary>交卷前 30 秒檢查清單</summary><ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol></details>
     </div>`,
   )
+  noteVisit(cur)
   $('[data-print]').onclick = () => doPrint(() => $$('.notes-page details').forEach((d) => (d.open = true)), units.includes(S.profile.notesUnit) ? S.profile.notesUnit : cur)
   $('.notes-units').addEventListener('click', (e) => {
     const b = e.target.closest('[data-u]')
     if (!b) return
     S.profile.notesUnit = b.dataset.u
     save()
+    noteVisit(b.dataset.u)
+    Sync.presence({ view: 'notes', title: b.dataset.u })
     $$('.notes-units button').forEach((x) => {
       x.classList.toggle('on', x === b)
       x.setAttribute('aria-selected', x === b)
@@ -2964,6 +2978,11 @@ function viewFlash() {
       }, 750)
     }
     $('.flash-score').textContent = FL.n
+    // 老師即時看得到答對幾題（最多 1.5 秒送一次）
+    if (Date.now() - (FL.pt || 0) > 1500) {
+      FL.pt = Date.now()
+      Sync.presence({ view: 'flash', n: FL.n, of: FL.n + FL.miss.length })
+    }
   })
 }
 function drawFlash() {
@@ -3024,7 +3043,7 @@ function viewStats() {
   const tc = tagCounts(list)
   const max = tc[0]?.[1] || 1
   const devices = new Set(S.attempts.map((a) => a.d))
-  const sess = S.sessions.filter((s) => !mine || s.d === S.profile.id).slice(-12).reverse()
+  const sess = S.sessions.filter((s) => s.k !== 'notes' && (!mine || s.d === S.profile.id)).slice(-12).reverse() // 看重點總整理的紀錄只給老師看
   setView(
     `<div class="page">
       ${header('學習紀錄', S.profile.name ? `${S.profile.name}・${S.profile.device || ''}` : '紀錄存在這個瀏覽器裡；可以匯出給老師或其他裝置。')}
@@ -5185,7 +5204,7 @@ function onSyncChange(k) {
     if (kind === 'state' && teacherMode() && ['upgrade', 'login'].includes(Sync.state) && /^#\/(students|student\/|manage|watch\/)/.test(h)) return go('#/teacher')
     if (h === '#/live') return viewLive(true)
     if (h === '#/students') return viewStudents(true)
-    if (h.startsWith('#/student/')) return viewStudent(h.split('/')[2], true)
+    if (h.startsWith('#/student/')) return h.split('/')[3] === 'home' ? viewStudentHome(h.split('/')[2], true) : viewStudent(h.split('/')[2], true)
     if (h.startsWith('#/watch/')) return kind === 'members' ? undefined : viewWatch(h.split('/')[2], true)
     // 成員管理：只在名單變動時重畫（避免按鈕在手指下被換掉）
     if (h === '#/manage') return kind === 'members' || any ? viewManage(true) : undefined
@@ -5218,9 +5237,9 @@ function liveText(l) {
   const where = l.dev === '老師的裝置' || l.dev === '上課平板' ? '（在老師的裝置上）' : ''
   if (l.view === 'run' && fresh) return `正在做：${runLabel(l)}${l.sel ? `・已選「${l.sel}」` : ''}${where}`
   if (l.view === 'exam' && fresh) return `正在寫${l.listen ? '聽力練習卷' : '模擬段考'}${l.of ? `・已寫 ${l.n}／${l.of} 題` : ''}${where}`
-  if (l.view === 'notes' && fresh) return `在看重點總整理${where}`
+  if (l.view === 'notes' && fresh) return `在看重點總整理${l.title ? `（${l.title}）` : ''}${where}`
   if (l.view === 'book' && fresh) return `在看錯題本${where}`
-  if (l.view === 'flash' && fresh) return `正在玩閃電挑戰${where}`
+  if (l.view === 'flash' && fresh) return `正在玩閃電挑戰${l.n ? `・已答對 ${l.n} 題` : ''}${where}`
   if (l.view === 'speak' && fresh) return `正在練口說・第 ${l.n}／${l.of} 句${where}`
   if (l.view === 'away' || !fresh) return `離開 App（${agoText(l.ts)}）`
   return `在 App 裡${where}（${agoText(l.ts)}）`
@@ -5334,10 +5353,11 @@ const feedState = () => {
 }
 const modLabel = (a) => (a.x === 'e' ? '模擬段考' : MODULES[ITEM[a.q]?.mid] ? `${MODULES[ITEM[a.q].mid].unit}｜${MODULES[ITEM[a.q].mid].title}` : '')
 const dayLabel = (d, t0 = dayStart()) => (d === t0 ? '今天' : d === t0 - DAY ? '昨天' : `${fmtDate(d)}（${'日一二三四五六'[new Date(d).getDay()]}）`)
-function feedHTML(list, sid = '', { by = 'day', st = null, more = false } = {}) {
-  const only = FEED_ONLY && !!sid
+// all：全部列出、不套用「只看錯的」（學習進度裡的歷史視窗用）
+function feedHTML(list, sid = '', { by = 'day', st = null, more = false, all = false } = {}) {
+  const only = FEED_ONLY && !!sid && !all
   const src = list.filter((a) => ITEM[a.q] && (!only || a.r !== 'ok'))
-  const limit = by === 'day' ? FEED_PAGE * (1 + (FEED_MORE[sid] || 0)) : src.length
+  const limit = by === 'day' && !all ? FEED_PAGE * (1 + (FEED_MORE[sid] || 0)) : src.length
   const feed = src.slice(-limit).reverse()
   const mine = sid && Sync.isAdmin() && !ACTIVE ? myDevIds(sid) : new Set()
   if (!feed.length) return `<p class="muted pad">${only && list.length ? '沒有答錯的題目。' : '還沒有作答紀錄。'}</p>`
@@ -5802,12 +5822,8 @@ function viewStudent(sid, keepScroll = false) {
   setView(
     `<div class="page narrow stu-detail">
       ${header(st.name || '學生', `學生的裝置 ${nS} 台・家長的裝置 ${nP} 台`, syncPill(), true)}
-      <div class="stu-actions">
-        <button class="btn primary" data-go="#/watch/${sid}">${ICON.eye}<span>課堂檢視</span></button>
-        <button class="btn primary" data-assign>📌<span>派作業</span></button>
-        <button class="btn ghost" data-share="student">傳給學生</button>
-        <button class="btn ghost" data-share="parent">傳給家長</button>
-      </div>
+      ${stuActionsHTML(sid)}
+      ${stuSegHTML(sid, 'live')}
       ${hwTeacherHTML(sid)}
       ${recSectionHTML(sid)}
       <section class="card live-dev">
@@ -5838,6 +5854,8 @@ function viewStudent(sid, keepScroll = false) {
   )
   if (keepScroll) window.scrollTo(0, y)
   $('.stu-detail').addEventListener('click', (e) => {
+    const tb = e.target.closest('[data-tab]')
+    if (tb) return switchTab(tb.dataset.tab)
     feedClick(e, list, sid, () => viewStudent(sid, true))
     const sh = e.target.closest('[data-share]')
     if (sh) return shareStudent(sid, sh.dataset.share)
@@ -5889,6 +5907,206 @@ function viewStudent(sid, keepScroll = false) {
   })
 }
 
+// ───────────────────────── 學生的學習進度（老師看；2.16，10/9 老師：「學生做完的題目跟進度用首頁的方式呈現」） ─────────────────────────
+// 版面跟學生自己看到的首頁一樣（今天、五個活動卡、每堂課的單元卡），數字都是那個學生的；正在做的卡片亮起來；點卡片看歷史
+const stuActionsHTML = (sid) => `<div class="stu-actions">
+        <button class="btn primary" data-go="#/watch/${sid}">${ICON.eye}<span>課堂檢視</span></button>
+        <button class="btn primary" data-assign>📌<span>派作業</span></button>
+        <button class="btn ghost" data-share="student">傳給學生</button>
+        <button class="btn ghost" data-share="parent">傳給家長</button>
+      </div>`
+const stuSegHTML = (sid, tab) => `<div class="seg full stu-seg" role="tablist"><button role="tab" class="${tab === 'live' ? 'on' : ''}" aria-selected="${tab === 'live'}" data-tab="#/student/${sid}">即時作答</button><button role="tab" class="${tab === 'home' ? 'on' : ''}" aria-selected="${tab === 'home'}" data-tab="#/student/${sid}/home">學習進度</button></div>`
+// 分頁切換：取代目前這一筆瀏覽紀錄（「返回」直接回學生列表，不會在兩個分頁之間來回）
+function switchTab(h) {
+  if (location.hash === h) return
+  const st = history.state
+  location.replace(h)
+  history.replaceState(st, '')
+}
+const stuHeadSub = (sid) => {
+  const devs = Object.values(Sync.members).filter((m) => m?.sid === sid)
+  return `學生的裝置 ${devs.filter((m) => m.role === 'student').length} 台・家長的裝置 ${devs.filter((m) => m.role === 'parent').length} 台`
+}
+const STU_FOLD = {} // `${sid}/${堂課}` → 收起（只記這次打開 App 的期間）
+function viewStudentHome(sid, keepScroll = false) {
+  if (!Sync.isAdmin()) return viewStudents()
+  const st = Sync.students[sid]
+  if (!st) {
+    if (Sync.loaded) return go('#/students')
+    return setView(`<div class="page narrow">${header('學生', '', '', true)}<div class="empty card"><div class="empty-ic">📡</div><h2>載入中…</h2></div></div>`)
+  }
+  const y = window.scrollY
+  const list = Sync.attemptsOf(sid)
+  const sess = Sync.sessionsOf(sid)
+  const l = latestLive(sid)
+  setView(
+    `<div class="page narrow stu-detail stu-home">
+      ${header(st.name || '學生', stuHeadSub(sid), syncPill(), true)}
+      ${stuActionsHTML(sid)}
+      ${stuSegHTML(sid, 'home')}
+      ${stuHomeHTML(sid, list, sess, l)}
+    </div>`,
+  )
+  if (keepScroll) window.scrollTo(0, y)
+  $('.stu-home').addEventListener('click', (e) => {
+    const tb = e.target.closest('[data-tab]')
+    if (tb) return switchTab(tb.dataset.tab)
+    const sh = e.target.closest('[data-share]')
+    if (sh) return shareStudent(sid, sh.dataset.share)
+    if (e.target.closest('[data-assign]')) return assignSheet(sid)
+    if (e.target.closest('[data-units]')) return unitsSheet([sid])
+    const m = e.target.closest('[data-mod]')
+    if (m) return stuModSheet(sid, m.dataset.mod, list, sess)
+    const a = e.target.closest('[data-act]')
+    if (a) return stuActSheet(sid, a.dataset.act, list, sess)
+    const f = e.target.closest('[data-fold]')
+    if (f) {
+      const sec = f.closest('.lesson')
+      const folded = sec.classList.toggle('folded')
+      f.setAttribute('aria-expanded', !folded)
+      STU_FOLD[`${sid}/${f.dataset.fold}`] = folded
+      return
+    }
+    const g = e.target.closest('[data-go]')
+    if (g) return go(g.dataset.go)
+  })
+}
+function stuHomeHTML(sid, list, sess, l) {
+  const st = Sync.students[sid]
+  const units = unitsOfStu(st)
+  const open = (mid) => units.has(MODULES[mid].unit)
+  const live = isActive(l) ? l : null
+  const liveMid = live?.view === 'run' ? ITEM[live.q]?.mid : ''
+  const t0 = dayStart()
+  const today = list.filter((a) => a.ts >= t0)
+  const ok = today.filter((a) => a.r === 'ok').length
+  const care = today.filter((a) => a.r === 'care').length
+  const goal = 30
+  const sp = sess.filter((s) => s.k === 'speak')
+  const ex = sess.filter((s) => s.k === 'exam' || s.k === 'listen')
+  const fl = sess.filter((s) => s.k === 'flash')
+  const nt = sess.filter((s) => s.k === 'notes')
+  const book = bookIds(list).length
+  const mx = (arr) => Math.max(...arr.map((s) => s.s || 0))
+  const lastOf = (arr) => arr[arr.length - 1]
+  const dot = (on) => (on ? '<i class="ld-dot on"></i>' : '')
+  const act = (k, cls, icon, title, sub, on, wide = false) =>
+    wide
+      ? `<button class="qk ${cls}${on ? ' live' : ''}" data-act="${k}"><span class="qk-ic">${icon}</span><span class="qk-tt"><span class="qk-t">${title}${dot(on)}</span><span class="qk-s">${sub}</span></span>${ICON.chev}</button>`
+      : `<button class="qk ${cls}${on ? ' live' : ''}" data-act="${k}"><span class="qk-ic">${icon}</span><span class="qk-t">${title}${dot(on)}</span><span class="qk-s">${sub}</span></button>`
+  const exams = EXAMS.filter((e) => !e.kind && e.units.some((x) => units.has(x)))
+  const lessons = LESSONS.filter((L) => L.modules.some(open))
+  const locked = UNITS.filter((u) => !units.has(u))
+  return `
+    <section class="today card">
+      <div class="rings" aria-hidden="true">${ring(today.length / goal, 104, 11, 'r1')}<div class="ring-in">${ring(today.length ? ok / today.length : 0, 78, 11, 'r2')}</div><div class="ring-in2">${ring(ok + care ? ok / (ok + care) : 0, 52, 11, 'r3')}</div></div>
+      <div class="today-txt"><div class="today-h">今天</div>
+        <div class="today-row"><i class="dot r1"></i>練習<b>${today.length}</b><span>／${goal} 題</span></div>
+        <div class="today-row"><i class="dot r2"></i>正確率<b>${today.length ? Math.round((ok / today.length) * 100) : '—'}</b><span>${today.length ? '%' : ''}</span></div>
+        <div class="today-row"><i class="dot r3"></i>細心度<b>${ok + care ? Math.round((ok / (ok + care)) * 100) : '—'}</b><span>${ok + care ? '%' : ''}</span></div>
+      </div>
+      <div class="today-live"><span class="ld-dot${live ? ' on' : ''}"></span><span>${esc(live ? liveText(live) : list.length ? `最後練習：${agoText(list[list.length - 1].ts)}` : '還沒有練習紀錄')}</span></div>
+    </section>
+    <section class="quick">
+      ${act('speak', 'qk-speak', ICON.mic, '口說練習', live?.view === 'speak' ? esc(`正在練：${live.title || '口說練習'}・第 ${live.n}／${live.of} 句`) : sp.length ? `${sp.length} 回・最高 ${mx(sp)} 分・最近 ${lastOf(sp).s} 分（${fmtDate(lastOf(sp).ts)}）` : '還沒練過', live?.view === 'speak', true)}
+      ${act('exam', 'qk-exam', ICON.doc, '模擬段考', live?.view === 'exam' ? `正在寫・${live.n || 0}／${live.of || '?'} 題` : ex.length ? `${ex.length} 次・最高 ${mx(ex)} 分・最近 ${lastOf(ex).s} 分` : '還沒寫過', live?.view === 'exam')}
+      ${act('flash', 'qk-flash', ICON.bolt, '閃電挑戰', live?.view === 'flash' ? `正在玩${live.n ? `・已答對 ${live.n} 題` : ''}` : fl.length ? `最高 ${mx(fl)} 題・${fl.length} 回` : '還沒玩過', live?.view === 'flash')}
+      ${act('book', 'qk-book', ICON.book, '錯題本', live?.view === 'book' ? '正在看' : book ? `${book} 題待複習` : '目前沒有錯題', live?.view === 'book')}
+      ${act('notes', 'qk-notes', ICON.notes, '重點總整理', live?.view === 'notes' ? `正在看${live.title ? esc(live.title) : ''}` : nt.length ? `看過 ${nt.length} 次・最近 ${esc(lastOf(nt).u || '')}` : '還沒看過', live?.view === 'notes')}
+    </section>
+    ${lessons
+      .map((L, i, arr) => {
+        const mods = L.modules.filter(open)
+        const stats = mods.map((m) => moduleStatsOf(m, list, sess))
+        const allDone = stats.every((s) => s.done >= s.total)
+        const folded = STU_FOLD[`${sid}/${L.id}`] ?? allDone
+        const mastered = stats.reduce((n, s) => n + s.mastered, 0)
+        const total = stats.reduce((n, s) => n + s.total, 0)
+        return `${exams.length > 1 && L.exam !== arr[i - 1]?.exam ? `<h2 class="exam-h">${esc(EXAMS.find((e) => e.id === L.exam)?.title || '')}</h2>` : ''}<section class="lesson${folded ? ' folded' : ''}" data-lesson="${L.id}">
+          <div class="sec-h"><button type="button" class="lesson-h" data-fold="${L.id}" aria-expanded="${!folded}"><span class="fold-chev">${ICON.chev}</span><span><h2>${esc(L.title)}</h2><p>${mods.length} 個單元・精熟 ${mastered}／${total}${allDone ? '・已完成' : ''}</p></span></button></div>
+          <div class="mods">${mods
+            .map((mid) => {
+              const m = MODULES[mid]
+              const s = moduleStatsOf(mid, list, sess)
+              const on = liveMid === mid
+              return `<button class="mod${on ? ' live' : ''}" data-mod="${mid}"><span class="mod-ic">${m.icon}</span><span class="mod-body"><span class="eyebrow">${esc(m.unit)}・${m.min} 分鐘</span><span class="mod-t">${esc(m.title)}${dot(on)}</span><span class="mod-bar"><i style="width:${(s.mastered / s.total) * 100}%"></i></span><span class="mod-s">${on ? `正在做・第 ${live.n || 1}／${live.of || s.total} 題` : s.done ? `精熟 ${s.mastered}／${s.total}` : `${s.total} 題・還沒開始`}</span></span>${s.best ? stars(s.best) : ''}</button>`
+            })
+            .join('')}</div>
+        </section>`
+      })
+      .join('')}
+    ${locked.length ? `<button class="locked-note lock-row" data-units>🔒 還沒開放：${esc(locked.join('、'))}<span class="link">開放的課</span></button>` : ''}
+    <p class="muted pad">版面和學生的首頁一樣，數字都是這位學生的。點單元或活動卡，看歷史紀錄。</p>`
+}
+// 一次練習（單元、模擬段考、閃電、口說）的一列；btn：可以點（模擬段考看那次的作答）
+function sessRowHTML(s, extra = '', btn = '') {
+  const fl = s.k === 'flash'
+  const cnt = !s.n ? '' : fl ? `・答了 ${s.n} 題` : s.k === 'speak' ? `・${s.n} 句` : `・${s.n} 題・對 ${s.ok ?? 0}${s.care ? `・粗心 ${s.care}` : ''}`
+  const cls = fl || s.s == null ? '' : s.s >= 90 ? ' ok' : s.s < 60 ? ' bad' : ''
+  const inner = `<span class="row-t">${esc(s.title || '')}<small>${esc(fmtTime(s.ts))}${cnt}${extra}</small></span><span class="row-r${cls}">${s.s != null ? `${s.s} ${fl ? '題' : '分'}` : ''}</span>${s.stars && !fl ? stars(s.stars) : ''}`
+  return btn ? `<button class="row" ${btn}>${inner}${ICON.chev}</button>` : `<div class="row">${inner}</div>`
+}
+// 活動卡：這個學生的歷史（口說＝每回分數＋錄音；模擬段考＝每次分數，點一次看那次的作答；閃電；錯題本；重點總整理＝看過哪課）
+function stuActSheet(sid, k, list, sess) {
+  const name = Sync.students[sid]?.name || '學生'
+  const ex = sess.filter((s) => s.k === 'exam' || s.k === 'listen').slice(-30).reverse()
+  const T = { speak: '口說練習', exam: '模擬段考', flash: '閃電挑戰', book: '錯題本', notes: '重點總整理' }
+  let body = ''
+  if (k === 'speak') {
+    const sp = sess.filter((s) => s.k === 'speak').slice(-30).reverse()
+    body = (sp.length ? `<div class="list flat">${sp.map((s) => sessRowHTML(s, s.weak?.length ? `・要再練：${esc(s.weak.slice(0, 3).join('、'))}` : '')).join('')}</div>` : '<p class="muted pad">還沒練過。</p>') + recSectionHTML(sid)
+  } else if (k === 'exam') {
+    body = ex.length ? `<div class="list flat">${ex.map((s, i) => sessRowHTML(s, '', `data-sess="${i}"`)).join('')}</div>` : '<p class="muted pad">還沒寫過。</p>'
+  } else if (k === 'flash') {
+    const fl = sess.filter((s) => s.k === 'flash').slice(-30).reverse()
+    body = fl.length ? `<div class="list flat">${fl.map((s) => sessRowHTML(s, s.combo ? `・最多連對 ${s.combo}` : '')).join('')}</div>` : '<p class="muted pad">還沒玩過。</p>'
+  } else if (k === 'book') {
+    const bs = bookState(list)
+    const ids = Object.keys(bs)
+      .filter((q) => bs[q].inBook)
+      .sort((a, b) => bs[b].last.ts - bs[a].last.ts)
+    body = ids.length
+      ? `<p class="sheet-p">答對 3 次（或相隔 8 小時以上答對 2 次）才會從錯題本畢業。</p><div class="list flat">${ids
+          .map((q) => {
+            const wrong = list.filter((a) => a.q === q && a.r !== 'ok')
+            const last = wrong[wrong.length - 1]
+            return `<button class="row live-row" data-att="${esc(Sync.akey(last))}"><span class="lr-r bad">${ICON.x}</span><span class="row-t"><span class="lr-q">${esc(snippet(ITEM[q]))}</span><small>錯 ${wrong.length} 次・最近 ${esc(fmtDate(last.ts))}${bs[q].oks ? `・之後答對 ${bs[q].oks} 次` : ''}</small></span>${ICON.chev}</button>`
+          })
+          .join('')}</div>`
+      : '<p class="muted pad">目前沒有錯題。</p>'
+  } else if (k === 'notes') {
+    const nt = sess.filter((s) => s.k === 'notes').slice(-40).reverse()
+    body = nt.length ? `<div class="list flat">${nt.map((s) => `<div class="row"><span class="row-ic">${ICON.notes}</span><span class="row-t">${esc(s.u || '')}<small>${esc(fmtTime(s.ts))}</small></span></div>`).join('')}</div>` : '<p class="muted pad">還沒看過。</p>'
+  }
+  const b = sheet(`<h2 class="sheet-title">${esc(name)}的${T[k] || ''}</h2><div class="stu-sheet">${body}</div>`, { wide: true })
+  b.addEventListener('click', (e) => {
+    const r = e.target.closest('[data-sess]')
+    if (r) return stuExamSheet(sid, ex[+r.dataset.sess], list)
+    feedClick(e, list, sid)
+  })
+}
+// 一次模擬段考的作答：交卷時間往前推那次的時間長度
+function stuExamSheet(sid, s, list) {
+  const from = s.ts - (s.dur || 3600000) - 60000
+  const atts = list.filter((a) => a.x === 'e' && a.ts >= from && a.ts <= s.ts + 60000)
+  const b = sheet(`<h2 class="sheet-title">${esc(s.title || '模擬段考')}</h2><p class="sheet-p">${esc(fmtTime(s.ts))}・${s.s} 分・${s.n} 題對 ${s.ok}${s.care ? `・粗心 ${s.care}` : ''}</p><div class="stu-sheet">${atts.length ? feedHTML(atts, sid, { all: true }) : '<p class="muted pad">這次的作答沒有留下紀錄。</p>'}</div>`, { wide: true })
+  b.addEventListener('click', (e) => feedClick(e, list, sid))
+}
+// 一個單元：每次練習的分數＋這個單元的每一題作答
+function stuModSheet(sid, mid, list, sess) {
+  const m = MODULES[mid]
+  const s = moduleStatsOf(mid, list, sess)
+  const runs = sess.filter((x) => x.k === 'm:' + mid).slice(-20).reverse()
+  const atts = list.filter((a) => ITEM[a.q]?.mid === mid) // 這個單元的題目（含在模擬段考裡做的；和上面的精熟度一致）
+  const b = sheet(
+    `<h2 class="sheet-title">${esc(m.unit)}｜${esc(m.title)}</h2><p class="sheet-p">精熟 ${s.mastered}／${s.total} 題${s.best ? `・最佳 ${s.best} 星` : ''}・練過 ${runs.length} 次</p>
+    <div class="stu-sheet">${runs.length ? `<div class="list flat">${runs.map((r) => sessRowHTML(r)).join('')}</div>` : ''}
+    <h3 class="stu-sheet-h">作答</h3>${atts.length ? feedHTML(atts, sid, { all: true }) : '<p class="muted pad">還沒做過這個單元。</p>'}</div>`,
+    { wide: true },
+  )
+  b.addEventListener('click', (e) => feedClick(e, list, sid))
+}
+
 // 課堂檢視：學生用自己的裝置上課時，老師在自己的裝置上跟著看（現在這一題、題目、正確答案；學生一按檢查，答案和對錯馬上出現）
 let WAKE = null // 螢幕保持開著
 let watchFresh = ''
@@ -5926,9 +6144,9 @@ function viewWatch(sid, keepScroll = false) {
         : l.view === 'exam'
           ? `${name} 正在寫${l.listen ? '聽力練習卷' : '模擬段考'}${l.title ? `（${l.title}）` : ''}${l.of ? `，已寫 ${l.n}／${l.of} 題` : ''}。交卷後看得到作答。`
           : l.view === 'flash'
-            ? `${name} 正在玩閃電挑戰`
+            ? `${name} 正在玩閃電挑戰${l.n ? `，已答對 ${l.n} 題` : ''}`
             : l.view === 'notes'
-              ? `${name} 在看重點總整理`
+              ? `${name} 在看重點總整理${l.title ? `（${l.title}）` : ''}`
               : l.view === 'book'
                 ? `${name} 在看錯題本`
                 : `${name} 在 App 的首頁`
@@ -6629,7 +6847,7 @@ function route() {
   if (a === 'print' && b) return viewPrint(decodeURIComponent(b), h.split('/')[3] || '')
   if (a === 'live') return viewLive()
   if (a === 'students') return viewStudents()
-  if (a === 'student' && b) return viewStudent(b)
+  if (a === 'student' && b) return h.split('/')[3] === 'home' ? viewStudentHome(b) : viewStudent(b)
   if (a === 'manage') return viewManage()
   if (a === 'teacher') return viewTeacher()
   if (a === 'pair' && b) return viewPair(decodeURIComponent(b), h.split('/')[3], h.split('/')[4] || '')
