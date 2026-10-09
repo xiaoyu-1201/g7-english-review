@@ -4,7 +4,7 @@ import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, E
 import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 
-const VERSION = '2.19（10/9）'
+const VERSION = '2.19.1（10/9）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -3225,7 +3225,6 @@ function viewStats() {
           <button class="row" data-x="report"><span class="row-ic">${ICON.share}</span><span class="row-t">傳學習報告給老師<small>文字版，可以貼到 LINE</small></span>${ICON.chev}</button>
           <button class="row" data-x="export"><span class="row-ic">${ICON.doc}</span><span class="row-t">匯出備份檔<small>完整紀錄（.json），可以傳到另一台裝置</small></span>${ICON.chev}</button>
           <button class="row" data-x="import"><span class="row-ic">${ICON.list}</span><span class="row-t">匯入備份檔<small>把另一台裝置的紀錄合併進來</small></span>${ICON.chev}</button>
-          <button class="row danger" data-x="clear"><span class="row-t">清除所有紀錄</span></button>
         </div>
         <input type="file" accept=".json,application/json" class="file-in" hidden>
       </section>
@@ -3248,14 +3247,7 @@ function viewStats() {
     if (x === 'report') shareReport()
     if (x === 'export') exportData()
     if (x === 'import') $('.file-in').click()
-    if (x === 'clear') confirmSheet('清除所有紀錄？', '所有作答紀錄、錯題本、進度都會刪除，而且不能復原。建議先「匯出備份檔」。', '全部清除', () => {
-      const p = S.profile
-      S = DEF()
-      S.profile = p
-      save()
-      toast('已清除', '🗑️')
-      viewStats()
-    }, true)
+    // 紀錄頁不再有「清除所有紀錄」（老師 10/9：不要給學生這個權限）；老師要清自己的測試紀錄：設定 →「清除這個裝置的練習紀錄」
   })
   $('.file-in').addEventListener('change', importData)
 }
@@ -3456,7 +3448,8 @@ function viewSettings() {
     if (g) return go(g.dataset.go)
     const x = e.target.closest('[data-x]')?.dataset.x
     if (x === 'signout') return teacherSignOut()
-    if (x === 'wipe')
+    // 只有老師的裝置可以清（學生、家長沒有刪除權限）
+    if (x === 'wipe' && teacherMode())
       return confirmSheet('清除這個裝置的練習紀錄？', '這個裝置上的作答、錯題本、練習紀錄、徽章都會刪掉，沒辦法復原。', '清除', () => {
         Object.assign(S, { attempts: [], sessions: [], progress: {}, flash: { best: 0, runs: 0 }, badges: {}, hwDone: [] })
         for (const k of Object.keys(SNAPS)) delete SNAPS[k]

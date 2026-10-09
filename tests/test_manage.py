@@ -138,5 +138,10 @@ with sync_playwright() as p:
     A.goto(URL + "#/settings")
     A.wait_for_selector("#sync-sec")
     check(A.locator('[data-x="wipe"]').count() == 0 and A.locator("[data-delatt], [data-clear], [data-delrec]").count() == 0, "linked student has no delete buttons")
+    # 紀錄頁也沒有「清除所有紀錄」（老師 10/9：不要給學生這個權限）：學生（有連結、沒連結）都一樣
+    for pg, who in ((A, "linked student"), (W, "unlinked student")):
+        pg.goto(URL + "#/stats")
+        pg.wait_for_selector(".actions-card")
+        check(pg.locator('[data-x="clear"]').count() == 0 and "清除" not in txt(pg, ".actions-card"), f"{who}: no 清除所有紀錄 on the stats page")
     b.close()
 report()
