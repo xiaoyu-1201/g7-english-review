@@ -98,7 +98,7 @@ with sync_playwright() as p:
     N = page(b, 390, 844, "N", seed=FORCE)
     N.goto(URL)
     N.wait_for_selector(".home .garden")
-    check(wait_until(lambda: N.locator(".sheet .news-row").count() == 3, 5), "student sees the what's-new sheet with 3 items")
+    check(wait_until(lambda: N.locator(".sheet .news-row").count() >= 3, 5), "student sees the what's-new sheet (2.22 + 2.21 items)")
     check(N.locator(".sheet .pp-pick").count() == 4, "and can pick a plant right there")
     N.screenshot(path=str(OUT / "garden-6-news.png"))
     N.click('.sheet [data-plant="sakura"]')

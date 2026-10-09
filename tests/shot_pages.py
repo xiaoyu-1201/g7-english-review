@@ -67,7 +67,7 @@ with sync_playwright() as p:
     P.wait_for_selector(".parent-prog")
     shot(P, "p-progress")
     # 老師端（手機）
-    for h, sel, name in [("#/students", ".stu-page", "t-students"), (f"#/student/{amy}", ".stu-detail", "t-student"), (f"#/student/{amy}/home", ".stu-home", "t-stuhome"), ("#/manage", ".page", "t-manage")]:
+    for h, sel, name in [("#/students", ".stu-page", "t-students"), (f"#/student/{amy}", ".stu-detail", "t-student"), (f"#/student/{amy}/home", ".stu-home", "t-stuhome"), (f"#/student/{amy}/prep", ".stu-prep", "t-prep"), ("#/manage", ".page", "t-manage")]:
         T.goto(URL + h)
         T.wait_for_selector(sel)
         shot(T, name)
@@ -90,7 +90,7 @@ with sync_playwright() as p:
     for dev, w, h in [("tab", 820, 1180), ("land", 1180, 820), ("pc", 1440, 900)]:
         for pg, items in [
             (A, [("#/", ".home", "s-home"), ("#/notes/Unit 2", ".notes-page", "s-notes"), ("#/notes/mine", ".notes-page", "s-notes-mine"), ("#/book", ".page", "s-book")]),
-            (T, [("#/students", ".stu-page", "t-students"), (f"#/student/{amy}", ".stu-detail", "t-student"), (f"#/student/{amy}/home", ".stu-home", "t-stuhome")]),
+            (T, [("#/students", ".stu-page", "t-students"), (f"#/student/{amy}", ".stu-detail", "t-student"), (f"#/student/{amy}/home", ".stu-home", "t-stuhome"), (f"#/student/{amy}/prep", ".stu-prep", "t-prep")]),
             (P, [("#/live/home", ".parent-prog", "p-progress")]),
         ]:
             pg.set_viewport_size({"width": w, "height": h})

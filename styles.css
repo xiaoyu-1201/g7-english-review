@@ -7671,6 +7671,31 @@ h3 > .ti.ic-lead {
   --hl-ink: #8a5300;
   --shadow: none;
 }
+/* 講義外觀：PDF 永遠用淺色（深色模式按「存成 PDF」也是白紙黑字，不會深色字印在深色框上） */
+[data-skin='notebook'] .pdf-holder {
+  --card2: #fbf7ee;
+  --fill2: rgba(120, 100, 60, 0.055);
+  --blue: #23508f;
+  --brand: #2b2925;
+  --brand-soft: #fff1b8;
+  --pen: #c8372d;
+  --sel-bg: rgba(35, 80, 143, 0.1);
+  --green: #3b7a2a;
+  --green-v: #4f8a34;
+  --red: #c8372d;
+  --red-v: #c8372d;
+  --orange: #a35a0c;
+  --orange-v: #c27a1c;
+  --indigo: #4d5aa0;
+  --pink: #b84a62;
+  --teal: #2f7d8c;
+  --plum: #7a4f8f;
+  --ok-bg: rgba(59, 122, 42, 0.12);
+  --bad-bg: rgba(200, 55, 45, 0.08);
+  --care-bg: rgba(184, 102, 15, 0.1);
+  --sticky: #fff1b8;
+  --sticky-ink: #6b4e00;
+}
 .pdf-holder .pdf-block {
   margin: 0 0 4px;
   break-inside: avoid;
@@ -8356,4 +8381,1016 @@ p, small, .task, .wq-h, .qk-s, .sp-mode small {
 /* 320px 寬的手機：學生卡片不能撐出橫向捲動 */
 .sc-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+}
+/* ───────── 2.22 課前備課卡 ───────── */
+.prep-pt {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--sep, rgba(0, 0, 0, 0.08));
+}
+.sec-h + .prep-pt {
+  border-top: 0;
+}
+.prep-n {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--hl);
+  color: var(--hl-ink);
+  font-weight: 700;
+}
+.prep-pt-b {
+  min-width: 0;
+}
+.prep-line {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.prep-line mark {
+  background: var(--hl);
+  color: inherit;
+  border-radius: 4px;
+  padding: 0 3px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.prep-ans {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill, rgba(120, 120, 128, 0.12));
+  color: var(--label);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+.prep-ans span {
+  font-size: 15px;
+}
+.prep-ans small {
+  grid-column: 1;
+  font-size: 13px;
+  color: var(--red);
+}
+.prep-ans svg {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 16px;
+  height: 16px;
+  color: var(--label3);
+}
+.prep-tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.prep-go {
+  width: 100%;
+}
+.prep-tip {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--orange);
+}
+.warn-t {
+  color: var(--orange);
+}
+.stu-seg .new-tag {
+  margin-left: 4px;
+}
+/* 學生卡：需要關心 */
+.sc-flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.sc-flags span {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--care-bg, rgba(255, 149, 0, 0.14));
+  color: var(--orange);
+}
+.sc-flags em {
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--blue);
+}
+/* ═══════════ 2.22 講義筆記本風格（老師 10/10 選的 A：「小宇老師親手整理的講義」） ═══════════
+   紙張底＋淡淡的橫線、左邊紅色邊線、標題用霞鶩文楷、可以點的字用鋼筆藍、主按鈕用墨水黑、
+   重點用螢光筆、要注意的數字用紅筆圈、單元標籤像便利貼。<html data-skin="notebook">（index.html 設定） */
+:root[data-skin='notebook'] {
+  --bg: #f7f3ea;
+  --card: #fffdf8;
+  --card2: #fbf7ee;
+  --fill: rgba(120, 100, 60, 0.09);
+  --fill2: rgba(120, 100, 60, 0.055);
+  --label: #2b2925;
+  --label2: rgba(43, 41, 37, 0.66);
+  --label3: rgba(43, 41, 37, 0.5);
+  --sep: rgba(90, 75, 45, 0.14);
+  --blue: #23508f; /* 鋼筆藍：可以點的字 */
+  --brand: #2b2925; /* 墨水黑：主按鈕 */
+  --brand-soft: #fff1b8;
+  --green: #3b7a2a;
+  --green-v: #4f8a34;
+  --orange: #a35a0c;
+  --orange-v: #c27a1c;
+  --red: #c8372d;
+  --red-v: #c8372d;
+  /* 彩色筆：墨藍、朱紅、橄欖綠、赭色（不要粉彩） */
+  --indigo: #4d5aa0;
+  --pink: #b84a62;
+  --teal: #2f7d8c;
+  --mint: #4f8a34;
+  --ok-bg: rgba(59, 122, 42, 0.12);
+  --bad-bg: rgba(200, 55, 45, 0.08);
+  --care-bg: rgba(184, 102, 15, 0.1);
+  --ring1: #c8372d;
+  --ring2: #4f8a34;
+  --ring3: #23508f;
+  --sel-bg: rgba(35, 80, 143, 0.1);
+  --hl: rgba(255, 205, 60, 0.55);
+  --hl-edge: #e0a100;
+  --hl-ink: #7a4a00;
+  --paper-line: rgba(70, 105, 160, 0.07);
+  --margin-line: rgba(225, 120, 105, 0.55);
+  --sticky: #fff1b8;
+  --sticky-ink: #6b4e00;
+  --pen: #c8372d;
+  --r-xl: 18px;
+  --r-lg: 14px;
+  --r-md: 12px;
+  --r-sm: 10px;
+  --shadow: 0 1px 0 rgba(90, 75, 45, 0.12);
+  --bar-bg: rgba(255, 253, 248, 0.94);
+  --hand: 'LXGW WenKai TC', 'Kaiti TC', 'STKaiti', serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='notebook'] {
+    --bg: #1c1a17;
+    --card: #26231f;
+    --card2: #2c2924;
+    --fill: rgba(237, 228, 210, 0.1);
+    --fill2: rgba(237, 228, 210, 0.06);
+    --label: #efe8da;
+    --label2: rgba(239, 232, 218, 0.66);
+    --label3: rgba(239, 232, 218, 0.46);
+    --sep: rgba(239, 232, 218, 0.12);
+    --blue: #8fb5ef;
+    --brand: #efe8da;
+    /* 深色：綠、紅、橘要亮一點，不然答錯時看不到正確答案 */
+    --green: #8cc56f;
+    --green-v: #8cc56f;
+    --orange: #f0a24a;
+    --orange-v: #f0a24a;
+    --red: #ef7f72;
+    --red-v: #ef7f72;
+    --indigo: #a9b2ea;
+    --pink: #f09bb0;
+    --teal: #7fc4d4;
+    --mint: #8cc56f;
+    --ok-bg: rgba(140, 197, 111, 0.16);
+    --bad-bg: rgba(239, 127, 114, 0.14);
+    --care-bg: rgba(240, 162, 74, 0.16);
+    --ring1: #ef7f72;
+    --ring2: #8cc56f;
+    --ring3: #8fb5ef;
+    --brand-soft: rgba(255, 210, 90, 0.18);
+    --sel-bg: rgba(143, 181, 239, 0.14);
+    --hl: rgba(255, 200, 60, 0.26);
+    --hl-edge: #f0b93a;
+    --hl-ink: #ffd88a;
+    --paper-line: rgba(160, 190, 240, 0.05);
+    --margin-line: rgba(220, 110, 95, 0.4);
+    --sticky: rgba(255, 215, 100, 0.2);
+    --sticky-ink: #ffdc8a;
+    --pen: #ef7f72;
+    --shadow: none;
+    --bar-bg: rgba(38, 35, 31, 0.94);
+  }
+}
+/* 紙張：淡淡的橫線；左邊紅色邊線 */
+[data-skin='notebook'] body {
+  background-color: var(--bg);
+  background-image: repeating-linear-gradient(180deg, transparent 0 31px, var(--paper-line) 31px 32px);
+}
+/* 紅色邊線：固定在畫面上（短的頁面、練習頁也從頭畫到底；電腦換頁不會左右跳），在卡片後面 */
+[data-skin='notebook'] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: max(6px, calc(50% - 562px));
+  width: 1.5px;
+  background: var(--margin-line);
+  pointer-events: none;
+  z-index: -1;
+}
+/* 卡片：一張一張的紙（細框、不要大陰影、圓角小一點） */
+[data-skin='notebook'] .card,
+[data-skin='notebook'] .mod,
+[data-skin='notebook'] .note,
+[data-skin='notebook'] .fx-card,
+[data-skin='notebook'] .sheet {
+  background: var(--card);
+  border: 1px solid var(--sep);
+  box-shadow: var(--shadow);
+}
+/* 標題：霞鶩文楷（像老師手寫的講義標題） */
+[data-skin='notebook'] h1,
+[data-skin='notebook'] h2,
+[data-skin='notebook'] .sheet-title,
+[data-skin='notebook'] .gd-stage,
+[data-skin='notebook'] .hero-status,
+[data-skin='notebook'] .note h3,
+[data-skin='notebook'] .lesson-h h2,
+[data-skin='notebook'] .learn-title,
+[data-skin='notebook'] .exam-h,
+[data-skin='notebook'] .sum-hero h1,
+[data-skin='notebook'] .pp-stat b,
+[data-skin='notebook'] .ld-today b,
+[data-skin='notebook'] .sc-stats b,
+[data-skin='notebook'] .fx-group .group-h,
+[data-skin='notebook'] .fb-title,
+[data-skin='notebook'] .sc-name,
+[data-skin='notebook'] .wq-h,
+[data-skin='notebook'] .w-ask,
+[data-skin='notebook'] .ld-who b,
+[data-skin='notebook'] .tile-v,
+[data-skin='notebook'] .sum-pct b,
+[data-skin='notebook'] .sr-v,
+[data-skin='notebook'] .book-n,
+[data-skin='notebook'] .plan-count,
+[data-skin='notebook'] .today-row b,
+[data-skin='notebook'] .hm b,
+[data-skin='notebook'] .sec-h h2,
+[data-skin='notebook'] .pp-sec-h h2 {
+  font-family: var(--hand);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+[data-skin='notebook'] .lg-head h1 {
+  font-size: 36px;
+}
+/* 主按鈕：墨水黑底、紙色字；次要按鈕：紙＋細框 */
+[data-skin='notebook'] .btn.primary {
+  background: var(--brand);
+  color: var(--card);
+  border-radius: 12px;
+}
+[data-skin='notebook'] .btn.ghost {
+  background: var(--card);
+  border: 1px solid var(--sep);
+  color: var(--blue);
+  border-radius: 12px;
+}
+/* 分頁列：紙；選到的那格用螢光筆畫一下 */
+[data-skin='notebook'] .tabbar {
+  background: var(--bar-bg);
+  border: 1px solid var(--sep);
+  border-radius: 14px;
+  box-shadow: 0 1px 0 var(--sep), 0 2px 8px rgba(60, 45, 20, 0.06);
+}
+[data-skin='notebook'] .tabbar a {
+  border-radius: 10px;
+  font-size: 13px;
+}
+[data-skin='notebook'] .tabbar a.on {
+  color: var(--label);
+  background: none;
+}
+/* 螢光筆只畫在選到的那幾個字上 */
+[data-skin='notebook'] .tabbar a.on span {
+  padding: 0 2px;
+  background: linear-gradient(transparent 52%, var(--hl) 52%, var(--hl) 92%, transparent 92%);
+}
+@media (min-width: 700px) {
+  [data-skin='notebook'] .tabbar a {
+    font-size: 15px;
+  }
+}
+/* 分段切換：選到的像被螢光筆畫過 */
+[data-skin='notebook'] .seg {
+  background: var(--fill2);
+  border: 1px solid var(--sep);
+}
+[data-skin='notebook'] .seg button.on {
+  background: var(--card);
+  color: var(--label);
+  box-shadow: inset 0 -4px 0 var(--hl);
+}
+/* 單元標籤：便利貼 */
+[data-skin='notebook'] .fx-unit,
+[data-skin='notebook'] .pp-tag,
+[data-skin='notebook'] .eyebrow.unit,
+[data-skin='notebook'] .q-unit {
+  background: var(--sticky);
+  color: var(--sticky-ink);
+  border-radius: 3px;
+  box-shadow: 1px 1px 0 rgba(120, 90, 20, 0.12);
+}
+[data-skin='notebook'] .fx-unit {
+  transform: rotate(-1.5deg);
+}
+/* 紅筆：要注意的數字圈起來、錯幾題用紅筆字 */
+[data-skin='notebook'] .gd-next b {
+  color: var(--pen);
+  border: 1.5px solid var(--pen);
+  border-radius: 50%;
+  padding: 0 6px;
+  font-family: var(--hand);
+}
+[data-skin='notebook'] .fx-n,
+[data-skin='notebook'] .row-r.bad,
+[data-skin='notebook'] .row-t small.bad-t {
+  color: var(--pen);
+  font-family: var(--hand);
+}
+/* 首頁花園：紙上的貼紙，不用漸層 */
+[data-skin='notebook'] .garden {
+  background: var(--card);
+}
+[data-skin='notebook'] .gd-cell {
+  background: var(--card2);
+  border: 1px dashed var(--sep);
+}
+[data-skin='notebook'] .gd-cell.on {
+  background: var(--brand-soft);
+  border: 1px solid var(--hl-edge);
+}
+/* 「幫它長大」「繼續上次」：便利貼 */
+[data-skin='notebook'] .resume {
+  background: var(--sticky);
+  color: var(--sticky-ink);
+  border: 0;
+  border-radius: 4px;
+  box-shadow: 2px 3px 0 rgba(120, 90, 20, 0.1);
+}
+[data-skin='notebook'] .resume .resume-k {
+  color: var(--sticky-ink);
+  font-family: var(--hand);
+  font-weight: 700;
+}
+[data-skin='notebook'] .resume .resume-t {
+  color: var(--label);
+}
+/* 重點總整理：規則框像夾進來的便條、易錯提醒用紅筆框 */
+[data-skin='notebook'] .note-rule {
+  background: var(--card2);
+  border: 1px solid var(--sep);
+}
+[data-skin='notebook'] .note .tip {
+  background: transparent;
+  border: 1.5px dashed var(--pen);
+}
+[data-skin='notebook'] .note .tip b {
+  color: var(--pen);
+  font-family: var(--hand);
+}
+/* 新功能、新的標籤：紅筆寫的「新」 */
+[data-skin='notebook'] .new-tag {
+  background: transparent;
+  color: var(--pen);
+  border: 1.5px solid var(--pen);
+  font-family: var(--hand);
+}
+/* 備課卡的編號：紅筆圈 */
+[data-skin='notebook'] .prep-n {
+  background: transparent;
+  color: var(--pen);
+  border: 1.5px solid var(--pen);
+  font-family: var(--hand);
+}
+/* 進度條：鉛筆的感覺（細、墨水色） */
+[data-skin='notebook'] .gd-bar,
+[data-skin='notebook'] .bar-track {
+  background: var(--fill);
+}
+[data-skin='notebook'] .gd-bar i {
+  background: var(--green);
+}
+@media print {
+  [data-skin='notebook'] body {
+    background-image: none;
+  }
+  [data-skin='notebook'] body::before {
+    display: none;
+  }
+}
+/* 筆記本風格不能蓋掉錯題統整的螢光筆和外框（選擇器要比上面的紙張規則更明確） */
+[data-skin='notebook'] .note-rule.hl,
+[data-skin='notebook'] .note-show.hl,
+[data-skin='notebook'] .note .tip.hl {
+  background: var(--hl);
+  border: 0;
+  border-left: 4px solid var(--hl-edge);
+}
+[data-skin='notebook'] .note-pts li.hl {
+  background: var(--hl);
+}
+[data-skin='notebook'] .note.marked {
+  border: 1.5px solid var(--hl-edge);
+}
+/* 2.22 備課（老師試玩後）：電腦、橫放 iPad 兩欄，一個畫面看完；手機按鈕字不要斷行；做得好 */
+.cprep-grid {
+  display: grid; /* cprep-：.prep-grid 已經是介系詞圖的三欄（撞名過） */
+}
+@media (min-width: 1000px) {
+  .cprep-grid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 0 16px;
+    align-items: start;
+  }
+}
+.prep-good {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--ok-bg, rgba(52, 199, 89, 0.13));
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 600;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.nc-acts .btn {
+  white-space: nowrap;
+  font-size: 15px;
+  padding-inline: 10px;
+}
+.nc-acts.one {
+  grid-template-columns: 1fr;
+}
+.sc-flags span {
+  font-size: 13px;
+}
+/* 學生卡：同一排的卡，數字和按鈕對齊（有沒有提醒標籤都一樣） */
+.sc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sc .sc-stats {
+  margin-top: auto;
+}
+/* ═══════════ 2.22 講義外觀第二輪（排版審查 AI 的 30 項；不分外觀的排版問題也一起修） ═══════════ */
+/* ── 練習列：「上一題」「提示」「不太確定」不能斷成兩行，三顆一樣高；手機上主按鈕吃剩下的寬度 ── */
+.run-actions .pill {
+  min-height: 48px;
+  white-space: nowrap;
+}
+.ra-left {
+  flex: none;
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .ra-left {
+    gap: 6px;
+  }
+  .ra-left .pill {
+    padding: 0 9px;
+    gap: 3px;
+    font-size: 14px;
+  }
+  .ra-left .pill svg {
+    width: 16px;
+    height: 16px;
+  }
+  .run-actions .btn.primary {
+    flex: 1;
+    min-width: 0;
+    padding-inline: 12px;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 360px) {
+  .ra-left .pill[data-act='hint'] span {
+    display: none; /* 320 寬的手機：燈泡看得懂，按鈕有 aria-label */
+  }
+}
+/* ── 一兩個字掉到下一行：按鈕不斷行、說明文字平均分行 ── */
+.lg-sub,
+.qk-s,
+.sp-mode small,
+.row-t small,
+.badge-d,
+.sheet-p,
+.fx-intro,
+.prep-tip,
+.gd-today {
+  text-wrap: balance;
+  word-break: keep-all; /* 中文只在標點、空白斷行（「家／庭」「辨／音」不會被拆開）；太長才隨便斷 */
+  overflow-wrap: anywhere;
+}
+.nc-acts .btn,
+.sc-acts .btn,
+.fx-sum-acts .btn {
+  white-space: nowrap;
+}
+#toast {
+  text-wrap: balance;
+}
+/* ── 對齊：便利貼和標題同一條線；單數格最後一格撐滿；「錯在」的標籤排在右邊 ── */
+.fx-sum .fx-row {
+  align-items: start;
+}
+.fx-sum .fx-row .fx-unit,
+.fx-sum .fx-row .fx-n {
+  margin-top: 2px;
+}
+.sc-acts > :last-child:nth-child(odd),
+.sr-grid > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+.fx-mine {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+  row-gap: 10px;
+}
+.fx-mine .fx-k,
+.fx-kp.has-k .fx-k {
+  line-height: 1.4;
+  padding-top: 4px;
+}
+.fx-kp.has-k {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+}
+.fx-kps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fx-mine .fx-run {
+  grid-column: 1 / -1;
+  justify-self: end;
+  margin-left: 0;
+}
+@media (min-width: 600px) {
+  .fx-mine {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .fx-mine .fx-run {
+    grid-column: auto;
+  }
+}
+/* 備課的重點：「錯題本 N 題」放在標題下面，標題不會被擠成三行 */
+.prep-pt .fx-h {
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 2px;
+}
+.prep-pt .fx-h .fx-n {
+  grid-column: 2;
+  justify-self: start;
+  margin-left: 0;
+  font-size: 13px;
+}
+/* ── 家長的花園：手機一排 5 格；「種子」和「0／38」各一行，不會只掉一半 ── */
+.gd-row.parent {
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 6px;
+}
+.gd-row.parent .gd-cell small {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--label2);
+}
+.gd-cell span {
+  font-size: 13px;
+  white-space: nowrap;
+}
+/* ── 字小於 13px ── */
+.badge,
+.tabbar .badge,
+.fb-why li em,
+.mg-new,
+.new-tag,
+.fx-unit,
+.fb-k,
+.kp-k,
+.badge-d,
+.sc-stats span,
+.pp-stat small,
+.hp-body .eyebrow,
+.sr-sub,
+.gd-cell small,
+.notes-mode .nm-n {
+  font-size: 13px;
+}
+.follow-row .ava,
+.follow-row .ava small {
+  font-size: 13px;
+}
+/* ── 點擊區至少 44px（行內的字用透明的延伸區，不撐開行高） ── */
+.seg button,
+.seg.small button,
+.notes-units button,
+.chips-wrap button,
+.btn.small-btn,
+.gd-rule,
+.notes-check summary {
+  min-height: 44px;
+}
+.notes-check summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sc-ava {
+  width: 44px;
+  height: 44px;
+}
+:where(.say, .gd-change, .w-teacher, .back, .link, .sc-flags) {
+  position: relative; /* :where：別的規則有設 position（例如固定在角落的連結）就照它的 */
+}
+.say::after,
+.gd-change::after,
+.w-teacher::after,
+.back::after,
+.link::after,
+.sc-flags::after {
+  content: '';
+  position: absolute;
+  inset: -11px -4px;
+}
+.link::after,
+.sc-flags::after {
+  inset: -5px -2px;
+}
+/* 重點裡可以點來聽的單字：上下只延伸一點（不要蓋到上一行、下一行的字；也不要撐出捲動） */
+.say::after {
+  inset: -4px -3px;
+}
+.row.field input,
+.why-me .chip.pick,
+.feed-day > summary,
+.pp-card .btn {
+  min-height: 44px;
+}
+/* 再一輪量測：還小於 13px 的字 */
+.row-t small.inl,
+.pp-tag,
+.pp-score small,
+.today-mods .tm-h,
+.mg-ver,
+.role-pick button small {
+  font-size: 13px;
+}
+.pp-stat small {
+  color: var(--label2);
+}
+
+/* ═══ 下面只在講義外觀 ═══ */
+/* 答錯回饋：紅筆虛線框（不要粉紅大底）；對錯圖示是筆圈起來的 ✓ ✗ */
+[data-skin='notebook'] .fb.ok,
+[data-skin='notebook'] .fb.care,
+[data-skin='notebook'] .fb.bad {
+  background: transparent;
+  border: 1.5px dashed var(--pen);
+  border-radius: var(--r-md);
+}
+[data-skin='notebook'] .fb.ok {
+  border-color: var(--green);
+}
+[data-skin='notebook'] .fb.care {
+  border-color: var(--orange);
+}
+[data-skin='notebook'] .fb.ok .fb-icon,
+[data-skin='notebook'] .fb.care .fb-icon,
+[data-skin='notebook'] .fb.bad .fb-icon {
+  background: transparent;
+  border: 2px solid currentColor;
+  color: var(--pen);
+}
+[data-skin='notebook'] .fb.ok .fb-icon {
+  color: var(--green);
+}
+[data-skin='notebook'] .fb.care .fb-icon {
+  color: var(--orange);
+}
+[data-skin='notebook'] .fb-title {
+  font-size: 21px;
+}
+[data-skin='notebook'] .fb-ans {
+  border: 1px solid var(--sep);
+}
+[data-skin='notebook'] .kp-k {
+  background: var(--sticky);
+  color: var(--sticky-ink);
+  border-radius: 3px;
+}
+/* 選項解析：正確答案綠、選錯的紅，要一眼看得出來（老師 10/9） */
+[data-skin='notebook'] .fb-why li.ok {
+  background: rgba(59, 122, 42, 0.15);
+  box-shadow: inset 4px 0 0 var(--green);
+}
+[data-skin='notebook'] .fb-why li.mine {
+  background: rgba(200, 55, 45, 0.11);
+  box-shadow: inset 4px 0 0 var(--pen);
+}
+[data-skin='notebook'] .fb-why li em {
+  background: var(--pen);
+  color: var(--card);
+}
+[data-skin='notebook'] .fb-why li.ok b,
+[data-skin='notebook'] .fb-why li.ok span {
+  color: #2e6420;
+}
+[data-skin='notebook'] .fb-why li.mine b {
+  color: #a92a21;
+}
+[data-skin='notebook'] .opt.ok .opt-key {
+  background: var(--green);
+}
+/* 連續天數、學生卡的提醒：便利貼 */
+[data-skin='notebook'] .streak,
+[data-skin='notebook'] .sc-flags span {
+  background: var(--sticky);
+  color: var(--sticky-ink);
+}
+[data-skin='notebook'] .streak {
+  border-radius: 4px;
+}
+/* 題目卡、選項：一張紙、細框 */
+[data-skin='notebook'] .qcard {
+  border: 1px solid var(--sep);
+  border-radius: var(--r-lg);
+}
+:where([data-skin='notebook']) .opt {
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--sep);
+}
+:where([data-skin='notebook']) .opt-key {
+  background: var(--fill2);
+  color: var(--label2);
+}
+/* 觀念卡的規則框、說明框：夾進來的便條（不要冷藍色） */
+[data-skin='notebook'] .learn-rule {
+  background: var(--card2);
+  border: 1px solid var(--sep);
+  border-radius: var(--r-md);
+}
+[data-skin='notebook'] .callout {
+  background: var(--card2);
+  border-radius: var(--r-md);
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+[data-skin='notebook'] .callout.care {
+  background: var(--care-bg);
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+[data-skin='notebook'] .chip.lv2 {
+  background: rgba(77, 90, 160, 0.12);
+}
+/* 圖示：彩色筆畫的框（透明底、線條上色），不要粉彩色塊 */
+[data-skin='notebook'] .mod-ic,
+[data-skin='notebook'] .qk-ic,
+[data-skin='notebook'] .qk-speak .qk-ic,
+[data-skin='notebook'] .exam-ic,
+[data-skin='notebook'] .flash-ic,
+[data-skin='notebook'] .sp-big-ic,
+[data-skin='notebook'] .pp-ico {
+  background: transparent;
+  color: var(--mc, var(--label));
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  border-radius: 8px;
+}
+[data-skin='notebook'] .exam-ic,
+[data-skin='notebook'] .flash-ic,
+[data-skin='notebook'] .sp-big-ic {
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+[data-skin='notebook'] .mc-read {
+  --mc: var(--teal);
+}
+[data-skin='notebook'] .mc-kao {
+  --mc: var(--plum);
+}
+[data-skin='notebook'] .qk-exam,
+[data-skin='notebook'] .exam-ic,
+[data-skin='notebook'] .pp-ico.ic-exam {
+  --mc: var(--indigo);
+}
+[data-skin='notebook'] .qk-flash,
+[data-skin='notebook'] .flash-ic,
+[data-skin='notebook'] .pp-ico.ic-flash {
+  --mc: var(--orange-v);
+}
+[data-skin='notebook'] .qk-book,
+[data-skin='notebook'] .pp-ico.ic-book {
+  --mc: var(--red-v);
+}
+[data-skin='notebook'] .qk-notes,
+[data-skin='notebook'] .pp-ico.ic-notes {
+  --mc: var(--green-v);
+}
+[data-skin='notebook'] .qk-speak,
+[data-skin='notebook'] .sp-big-ic,
+[data-skin='notebook'] .pp-ico.ic-speak {
+  --mc: var(--pink);
+}
+[data-skin='notebook'] .pp-ico.ic-listen {
+  --mc: var(--blue);
+}
+:root[data-skin='notebook'] {
+  --plum: #7a4f8f;
+}
+/* 家長的狀態區塊：刻度是一條墨水線、目前的階段用紅筆圈；「上次你看之後」是便利貼 */
+[data-skin='notebook'] .hero-art {
+  background: var(--card2);
+}
+[data-skin='notebook'] .st-scale {
+  gap: 4px;
+}
+[data-skin='notebook'] .st-scale i {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--label3);
+  opacity: 0.6;
+}
+[data-skin='notebook'] .st-scale i.on {
+  background: var(--label);
+  opacity: 1;
+}
+[data-skin='notebook'] .st-knob {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 2px solid var(--pen);
+  box-shadow: none;
+}
+[data-skin='notebook'] .pp-new,
+[data-skin='notebook'] .pp-new.on {
+  background: var(--sticky);
+  color: var(--sticky-ink);
+  border-radius: 4px;
+  box-shadow: 2px 3px 0 rgba(120, 90, 20, 0.1);
+}
+[data-skin='notebook'] .pp-new b {
+  color: var(--sticky-ink);
+}
+[data-skin='notebook'] .pp-new.on svg {
+  color: var(--sticky-ink);
+}
+[data-skin='notebook'] .pp-stat {
+  background: var(--card2);
+  border: 1px solid var(--sep);
+}
+[data-skin='notebook'] .pp-stat.ok {
+  background: var(--card2);
+}
+/* 一般重點字：墨水粗體＋鋼筆藍底線；黃色螢光筆只留給「我錯的」 */
+[data-skin='notebook'] .note-pts b,
+[data-skin='notebook'] .note-show b {
+  background: none;
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+/* 重點總整理的課名：選到的像被螢光筆畫過（跟分段切換一樣） */
+[data-skin='notebook'] .notes-units button {
+  background: transparent;
+  border-radius: 4px;
+  color: var(--label2);
+}
+[data-skin='notebook'] .notes-units button.on {
+  background: transparent;
+  color: var(--label);
+  box-shadow: inset 0 -8px 0 var(--hl);
+}
+[data-skin='notebook'] .chips-wrap button.on,
+[data-skin='notebook'] .chip.pick.on,
+[data-skin='notebook'] .sort-chip.sel {
+  background: var(--blue);
+  color: var(--card);
+}
+/* 數字徽章：紅筆（白字在朱紅上 5:1） */
+[data-skin='notebook'] .badge,
+[data-skin='notebook'] .tabbar .badge,
+[data-skin='notebook'] .notes-mode .nm-n,
+[data-skin='notebook'] .mg-new {
+  background: var(--pen);
+  color: var(--card);
+}
+/* 學生頭像：墨水圈 */
+[data-skin='notebook'] .sc-ava {
+  background: var(--card2);
+  color: var(--label);
+  box-shadow: inset 0 0 0 1.5px var(--label);
+  font-family: var(--hand);
+}
+[data-skin='notebook'] .follow-row .ava.live span {
+  background: var(--blue);
+  color: var(--card);
+}
+/* 徽章：老師蓋的章（彩色筆圈＋圖），不要漸層和大陰影 */
+[data-skin='notebook'] .badge-item.got .medal {
+  background: var(--card);
+  box-shadow: inset 0 0 0 2.5px var(--md, var(--pen));
+  color: var(--md, var(--pen));
+}
+[data-skin='notebook'] .b-start { --md: var(--blue); }
+[data-skin='notebook'] .b-ten { --md: var(--orange-v); }
+[data-skin='notebook'] .b-careful { --md: var(--pen); }
+[data-skin='notebook'] .b-days { --md: var(--orange); }
+[data-skin='notebook'] .b-grad { --md: var(--indigo); }
+[data-skin='notebook'] .b-flash { --md: var(--orange-v); }
+[data-skin='notebook'] .b-lesson1 { --md: var(--label2); }
+[data-skin='notebook'] .b-lesson2 { --md: var(--orange); }
+[data-skin='notebook'] .b-exam { --md: var(--green); }
+/* 歡迎畫面的圖示、提示訊息：小陰影 */
+[data-skin='notebook'] .w-logo {
+  box-shadow: 0 0 0 1px var(--sep);
+  border-radius: 14px;
+}
+[data-skin='notebook'] #toast {
+  background: var(--label);
+  color: var(--card);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(40, 30, 10, 0.2);
+}
+[data-skin='notebook'] #toast .t-ic.icb {
+  color: var(--card);
+}
+[data-skin='notebook'] #toast .t-act {
+  background: transparent;
+  color: var(--card);
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+/* 深色講義：淺色的筆色當底時，上面的字改成深色（白字看不清楚） */
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='notebook'] {
+    --plum: #c9a3dd;
+  }
+  [data-skin='notebook'] .opt.sel .opt-key,
+  [data-skin='notebook'] .opt.ok .opt-key,
+  [data-skin='notebook'] .opt.bad .opt-key,
+  [data-skin='notebook'] .opt.sel .opt-box,
+  [data-skin='notebook'] .btn.play,
+  [data-skin='notebook'] .btn.danger,
+  [data-skin='notebook'] .chk.on .chk-box,
+  [data-skin='notebook'] .row.task.done .chk-box,
+  [data-skin='notebook'] .flash-opt.ok,
+  [data-skin='notebook'] .flash-opt.bad,
+  [data-skin='notebook'] .hw-pick.on,
+  [data-skin='notebook'] .hw-pick.on .hp-chk,
+  [data-skin='notebook'] .cal-h,
+  [data-skin='notebook'] .sp-opt.ok .sp-key,
+  [data-skin='notebook'] .sp-opt.bad .sp-key,
+  [data-skin='notebook'] .pv-msg.me .pv-bubble,
+  [data-skin='notebook'] .chips-row button.on,
+  [data-skin='notebook'] .sp-mic,
+  [data-skin='notebook'] .sp-mic.on,
+  [data-skin='notebook'] .rec-play,
+  [data-skin='notebook'] .ln-play,
+  [data-skin='notebook'] .rp-ic.icb,
+  [data-skin='notebook'] .row-badge,
+  [data-skin='notebook'] .chips-wrap button.on,
+  [data-skin='notebook'] .follow-row .ava.live span {
+    color: var(--bg);
+  }
+  [data-skin='notebook'] .fb-why li.ok {
+    background: rgba(140, 197, 111, 0.18);
+  }
+  [data-skin='notebook'] .fb-why li.ok b,
+  [data-skin='notebook'] .fb-why li.ok span {
+    color: #a5d68c;
+  }
+  [data-skin='notebook'] .fb-why li.mine b {
+    color: #f39a8f;
+  }
+  [data-skin='notebook'] .fb-why li.mine {
+    background: rgba(239, 127, 114, 0.16);
+  }
+  [data-skin='notebook'] .chip.lv2 {
+    background: rgba(169, 178, 234, 0.16);
+  }
 }

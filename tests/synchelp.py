@@ -7,6 +7,10 @@ DB = os.environ.get("G7_DB", "http://127.0.0.1:5190")
 OUT = pathlib.Path(os.environ.get("G7_OUT") or pathlib.Path(__file__).parent / "shots")
 DBSEED = f"localStorage.setItem('g7review:db', '{DB}');localStorage.setItem('g7review:authkey', 'testkey');localStorage.setItem('g7review:authurl', '{DB}');"
 SEED = "if (!localStorage.getItem('g7review:v1')) localStorage.setItem('g7review:v1', JSON.stringify({seen:{intro:1}}));" + DBSEED
+# 外觀（2.22）：G7_SKIN=old 拍舊的外觀（前後對照用）
+if os.environ.get("G7_SKIN"):
+    SEED += f"localStorage.setItem('g7review:skin', '{os.environ['G7_SKIN']}');"
+    DBSEED += f"localStorage.setItem('g7review:skin', '{os.environ['G7_SKIN']}');"
 
 errors, notes, fails = [], [], []
 

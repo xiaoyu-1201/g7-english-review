@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>小宇英文</title>
     <meta name="description" content="國一英文（翰林版七上）段考複習：觀念引導、粗心偵測、錯題本、模擬段考、口說練習。" />
-    <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f3ea" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1a17" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -14,6 +14,16 @@
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-v2.png" />
     <link rel="manifest" href="manifest-v2.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <!-- 2.22 講義筆記本風格：標題用霞鶩文楷（開源 SIL OFL；Google Fonts 依字切片，只下載用到的字） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- 不擋畫面：字型連不到（網路過濾、Wi-Fi 不穩）時先用系統字，App 照常打開 -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&display=swap" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&display=swap" /></noscript>
+    <script>
+      // 外觀：講義筆記本（2.22）；設 g7review:skin=old 可以看回舊的（拍前後對照用）
+      try { document.documentElement.dataset.skin = localStorage.getItem('g7review:skin') || 'notebook' } catch (e) { document.documentElement.dataset.skin = 'notebook' }
+    </script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
