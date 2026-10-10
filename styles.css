@@ -9417,27 +9417,75 @@ a.row:active {
 .w-legal {
   padding-bottom: env(safe-area-inset-bottom); /* iPhone 底部的橫條不要壓到連結 */
 }
-/* 2.22.3 手機的分頁列：貼齊螢幕底部、底色延伸到最下面（10/10 老師：Safari 裡分頁列浮起來，下面露出一截內容很怪）
-   按鈕的高度維持原樣（Safari 底部的觸控區會被瀏覽器拿走，10/8 修過），只是把底色往下鋪滿；iPad、電腦也一樣（浮著的分頁列下面會露出一條內容） */
-@media all {
-  .tabbar,
-  [data-skin='notebook'] .tabbar {
-    left: 0;
-    right: 0;
-    bottom: 0;
-    max-width: none;
-    margin: 0;
-    border: 0;
-    border-top: 1px solid var(--sep);
-    border-radius: 0;
-    box-shadow: none;
-    padding: 6px max(10px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+/* 2.22.4 分頁列：像 Instagram 手機版（10/10 老師給截圖）——浮在下面的膠囊、毛玻璃底、選到的那格一塊淡灰圓角底
+   手機只放圖示（省空間，文字留給讀螢幕的輔助功能）；iPad、電腦寬度夠，圖示旁邊保留文字
+   2.22.3 貼底的版本：Safari 裡按鈕下面空一大段，老師說「好浪費空間」 */
+.tabbar,
+[data-skin='notebook'] .tabbar {
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 5px;
+  gap: 2px;
+  border: 1px solid var(--sep);
+  border-radius: 999px;
+  background: var(--bar-bg);
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: saturate(180%) blur(22px);
+  box-shadow: 0 6px 24px rgba(40, 30, 10, 0.14);
+}
+.tabbar a,
+[data-skin='notebook'] .tabbar a {
+  min-height: 46px;
+  border-radius: 999px;
+  color: var(--label);
+}
+.tabbar a svg,
+[data-skin='notebook'] .tabbar a svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 1.8;
+  opacity: 0.6;
+}
+.tabbar a.on,
+[data-skin='notebook'] .tabbar a.on {
+  background: var(--fill);
+  color: var(--label);
+}
+.tabbar a.on svg,
+[data-skin='notebook'] .tabbar a.on svg {
+  stroke-width: 2.4;
+  opacity: 1;
+}
+[data-skin='notebook'] .tabbar a.on span {
+  padding: 0;
+  background: none;
+}
+@media (max-width: 699px) {
+  /* 手機：只有圖示；文字看不到，但讀螢幕的輔助功能還念得到 */
+  .tabbar a span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .tabbar .badge {
+    top: 3px;
+    left: calc(50% + 5px);
   }
 }
-@media (max-width: 699px) and (display-mode: browser) {
+@media (min-width: 700px) {
   .tabbar,
   [data-skin='notebook'] .tabbar {
-    bottom: 0;
-    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    max-width: 560px;
+  }
+  .tabbar a span,
+  [data-skin='notebook'] .tabbar a span {
+    font-size: 15px;
   }
 }
