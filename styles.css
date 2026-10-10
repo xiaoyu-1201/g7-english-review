@@ -9730,3 +9730,110 @@ a.row:active {
 .mg-stale {
   vertical-align: 2px; /* 跟「新加入」一樣高 */
 }
+
+/* ───────── 2.23 通知、麥克風收音 ───────── */
+/* 成員管理：這台有開通知 */
+/* 「要處理的事」的「知道了」×：線條圖示要描邊才看得到（QA 10/11）；點擊範圍 44px，看起來還是 32px 的灰圓 */
+.todo-x {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  margin: -6px -6px -6px 0;
+  background: transparent;
+}
+.todo-x::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--fill2);
+}
+.todo-x svg {
+  position: relative;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.mg-bell {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--sel-bg);
+  color: var(--blue);
+  white-space: nowrap;
+  vertical-align: 2px;
+}
+/* 口說的麥克風：聲音大小 → 後面的光圈放大縮小；每個音開始 → 一圈波紋往外擴（越大聲擴越大） */
+.sp-mic-box {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+}
+.sp-mic-box > .sp-mic {
+  position: relative;
+  z-index: 1;
+}
+.sp-lv,
+.sp-rip {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+/* 下面的「錄音中…」字要蓋在光圈、波紋上面（QA 10/11：大聲時光圈把字染成粉紅色） */
+.sp-mic-box + .sp-mic-label {
+  position: relative;
+  z-index: 2;
+  margin-top: 6px;
+}
+.sp-lv {
+  background: color-mix(in srgb, var(--red-v) 24%, transparent);
+  opacity: 0;
+  transform: scale(calc(1 + var(--lv, 0) * 0.45));
+  transition:
+    transform 0.08s linear,
+    opacity 0.2s ease;
+}
+.sp-mic-box.on .sp-lv {
+  opacity: 1;
+}
+/* 量得到音量：不用一直跳的「錄音中」脈動，改成跟著聲音動 */
+.sp-mic-box.lv > .sp-mic.on {
+  animation: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--red-v) 30%, transparent);
+}
+.sp-rip {
+  border: 3px solid color-mix(in srgb, var(--red-v) 60%, transparent);
+  animation: sp-rip 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes sp-rip {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(var(--to, 1.6));
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 不動：光圈固定比按鈕大一圈（不然被按鈕整個蓋住），用深淺表示音量 */
+  .sp-lv {
+    inset: -14px;
+    transform: none;
+    opacity: calc(0.25 + var(--lv, 0) * 0.75) !important;
+    transition: none;
+  }
+  .sp-mic-box:not(.on) .sp-lv {
+    opacity: 0 !important;
+  }
+  .sp-rip {
+    display: none;
+  }
+}

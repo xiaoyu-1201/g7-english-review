@@ -120,6 +120,32 @@ try:
     expect(False, db("GET", f"{R}/{amy}", S2), "other student cannot read recordings")
     expect(True, db("GET", f"{R}/{amy}", T), "teacher reads recordings")
     expect(True, db("DELETE", f"{R}/{amy}", T), "cleanup: recordings")
+    # 2.23 通知：每台寫自己的；身分、學生要跟名單一樣；老師只能寫 teacher；老師讀整個班級的；排程的紀錄誰都不能碰
+    PB = f"push/{code}"
+    pr = lambda role, sid=None: {"e": "https://fcm.googleapis.com/fcm/send/rt" + rnd(8), "p": "B" + "x" * 86, "a": "a" * 22, "role": role, "at": now, **({"sid": sid} if sid else {})}
+    expect(True, db("PUT", f"{PB}/{s1u}/d1", S1, pr("student", amy)), "Amy saves her push subscription")
+    expect(True, db("PUT", f"{PB}/{p1u}/d1", P1, pr("parent", amy)), "parent saves push subscription")
+    expect(True, db("PUT", f"{PB}/{tu}/d1", T, pr("teacher")), "teacher saves push subscription")
+    expect(False, db("PUT", f"{PB}/{s1u}/d2", S1, pr("parent", amy)), "push: student cannot claim parent")
+    expect(False, db("PUT", f"{PB}/{s1u}/d2", S1, pr("student", ben)), "push: student cannot use Ben's sid")
+    expect(False, db("PUT", f"{PB}/{s1u}/d2", S1, pr("teacher")), "push: student cannot be teacher")
+    expect(False, db("PUT", f"{PB}/{xu}/d1", X, pr("student", amy)), "push: non-member cannot save")
+    expect(False, db("PUT", f"{PB}/{s1u}/d3", P1, pr("parent", amy)), "push: cannot write under someone else's uid")
+    expect(False, db("PUT", f"{PB}/{s1u}/d2", S1, {**pr("student", amy), "e": "http://x.example.com/a"}), "push: endpoint must be https")
+    expect(False, db("PUT", f"{PB}/{s1u}/d2", S1, {**pr("student", amy), "zz": 1}), "push: unknown field rejected")
+    expect(True, db("GET", f"{PB}/{s1u}", S1), "push: device reads its own subscription")
+    expect(False, db("GET", PB, S1), "push: student cannot read the class's subscriptions")
+    expect(True, db("GET", PB, T), "push: teacher reads which devices get notifications")
+    expect(False, db("GET", "pushlog", T), "pushlog: not even the teacher (server only)")
+    expect(False, db("PUT", "pushlog/x", T, 1), "pushlog: nobody writes")
+    expect(False, db("PUT", f"{C}/notifyRun", T, now), "notifyRun: server only")
+    expect(True, db("PUT", f"{C}/notify", T, True), "teacher allows students/parents to turn on notifications")
+    expect(False, db("PUT", f"{C}/notify", S1, False), "student cannot flip notify")
+    expect(False, db("PUT", f"{C}/notify", T, "yes"), "notify must be true/false")
+    expect(True, db("GET", f"{C}/notify", S1), "student reads notify")
+    expect(False, db("DELETE", f"{PB}/{s1u}", P1), "push: parent cannot delete Amy's subscriptions")
+    expect(True, db("DELETE", f"{PB}/{s1u}/d1", S1), "push: student turns notifications off")
+    expect(True, db("DELETE", f"{PB}/{p1u}", T), "push: teacher removes a device's subscriptions")
     # 暫停加入
     expect(True, db("PUT", f"{C}/open", T, False), "teacher closes joining")
     expect(False, db("PUT", f"{C}/members/{xu}", X, m("parent", amy)), "closed: new parent rejected")
@@ -132,7 +158,7 @@ try:
     expect(False, db("DELETE", f"{C}/owner", T), "owner cannot drop ownership while class has data")
 finally:
     # 清理：代碼、資料、名單、學生，最後 owner；匿名帳號全部刪掉
-    paths = [f"codes/{k6}", f"teachers/{tu}"] + [f"{C}/{k}" for k in ("a", "s", "live", "hw", "del", "blocked", "open")]
+    paths = [f"codes/{k6}", f"teachers/{tu}", f"push/{code}/{tu}", f"push/{code}/{s1u}", f"push/{code}/{p1u}"] + [f"{C}/{k}" for k in ("a", "s", "live", "hw", "del", "blocked", "open", "notify")]
     paths += [f"{C}/members/{u}" for u in (s1u, p1u)] + [f"{C}/students/{s}" for s in (amy, ben)]
     for path in paths:
         expect(True, db("DELETE", path, T), "cleanup: " + path.split("/")[-1])

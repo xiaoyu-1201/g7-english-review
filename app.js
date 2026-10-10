@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.22.8（10/10）'
+const VERSION = '2.23（10/11）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2486,6 +2486,7 @@ function viewHome() {
         <p class="lg-sub">國中英語七上｜${esc(examLabel())}${cd ? '　·　' + cd : ''}</p>
       </header>
       ${a2hsCardHTML()}
+      ${pushCardHTML('student')}
       ${hwCardHTML(myRole() === 'parent') || '<section class="hw-card" hidden></section>'}
       ${studentsCardHTML()}
 
@@ -2632,6 +2633,20 @@ function warmIds() {
 // 不跳：做題中（只在首頁類的畫面）、第一次用 App 的人（先看歡迎畫面）、只修 bug 的版本（NEWS 只列有新功能的版本）
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
+  {
+    v: '2.23',
+    date: '10/11',
+    student: [
+      ['🎤', '麥克風看得到聲音', '念句子的時候，麥克風會跟著你的聲音往外擴，越大聲擴越大；有在動，就代表每個音都有收到。'],
+      ['🔔', '通知（老師開放後）', '晚上 7:30 提醒你今天還沒練習、或作業快到期了；一天最多一則。'],
+    ],
+    parent: [['🔔', '每週摘要通知（老師開放後）', '每週日晚上 8:00 收到孩子這週練了幾天、幾題、作業做完了沒。iPhone 要先加到主畫面。']],
+    teacher: [
+      ['🔔', '通知', '每天晚上 9:00 收到今天的學生摘要。到「設定」→「通知」打開；自己的手機試過沒問題，再打開「學生、家長也可以開通知」。'],
+      ['🎤', '麥克風看得到聲音', '學生念的時候，麥克風跟著聲音往外擴，學生知道每個音都有收到。'],
+      ['👥', '成員管理', '開了通知的裝置會標「🔔 收通知」。'],
+    ],
+  },
   {
     v: '2.22',
     date: '10/10',
@@ -2811,6 +2826,8 @@ function viewTeacher(mode) {
     btn.disabled = true
     err('')
     try {
+      // 2.23 這台原本是學生／家長、開了通知：登入前先用原本的身分把那份訂閱刪掉（登入後身分就換了）
+      if (pushOn() && Sync.code() && !Auth.isTeacher()) await pushDisable(true)
       if (mode === 'login') await Auth.signIn(e, p)
       else
         try {
@@ -2867,7 +2884,8 @@ function viewTeacher(mode) {
 }
 // 老師登出：這台回到一般（學生）畫面；雲端的學生資料都還在
 function teacherSignOut() {
-  confirmSheet('登出老師帳號？', '登出之後，這個裝置就看不到學生的資料。資料都還在雲端，再登入就能看到。', '登出', () => {
+  confirmSheet('登出老師帳號？', '登出之後，這個裝置就看不到學生的資料，也不會再收到通知。資料都還在雲端，再登入就能看到。', '登出', async () => {
+    if (pushOn()) await pushDisable(true) // 先用老師的身分把這台的通知刪掉，再登出
     Sync.unpair()
     Auth.signOut()
     lsSet(BETA_KEY, 'off') // 換另一個老師帳號登入：試用從關開始
@@ -4065,6 +4083,7 @@ function viewSettings() {
       </div><p class="group-f">「先說答案」：自己想出答案再對照，比直接看選項記得更牢（生成效應）。學生回家自己練時可以關掉。<br>有實體鍵盤時：按 1～4 選選項，Enter 檢查／下一題。</p></div>
 
       <div id="sync-sec">${syncSettingsHTML(role)}</div>
+      <div id="push-wrap">${pushSettingsHTML()}</div>
       ${betaSettingsHTML()}
 
       <div class="group"><div class="group-h">App</div><div class="list">
@@ -4112,6 +4131,24 @@ function viewSettings() {
         lsSet(BETA_KEY, b.dataset.v)
         toast(b.dataset.v === 'on' ? '這個裝置開始試用新功能（學生、家長看不到）' : '已關掉試用', '🧪')
         return viewSettings()
+      }
+      // 2.23 通知：開（要在按下去的這一刻跟系統要權限）／關
+      if (k === 'push') {
+        if (b.classList.contains('on')) return
+        return b.dataset.v === 'on' ? pushEnable() : pushDisable()
+      }
+      // 老師：學生、家長也可以開通知
+      if (k === 'notify') {
+        if (pushRole() !== 'teacher' || b.classList.contains('on')) return
+        const v = b.dataset.v === 'on'
+        Sync.req('PUT', 'notify', v)
+          .then(() => {
+            Sync.D.notify = v
+            toast(v ? '學生、家長的 App 會出現「開啟通知」' : '學生、家長不會再收到通知', '🔔')
+            redrawPush()
+          })
+          .catch(() => toast('沒有成功，請檢查網路再試一次', '⚠️'))
+        return
       }
       S.profile[k] = k === 'goal' ? +b.dataset.v : b.dataset.v
       save()
@@ -4305,7 +4342,7 @@ const SPEAK_ERR = {
 // 開始聽：念完整句就馬上給分；停下來 1.2 秒也算說完；最多 12 秒
 // 同時錄音（念完可以聽自己的聲音）；這台錄音和語音辨識搶麥克風的話，就只辨識不錄音
 let NO_REC = null
-async function listen(onInterim, target) {
+async function listen(onInterim, target, onLevel) {
   if (NO_REC === null) NO_REC = lsGet('g7review:norec') === '1'
   let rec = null
   let chunks = []
@@ -4329,7 +4366,14 @@ async function listen(onInterim, target) {
         const buf = new Uint8Array(an.fftSize)
         meter = setInterval(() => {
           an.getByteTimeDomainData(buf)
-          for (const v of buf) loud = Math.max(loud, Math.abs(v - 128))
+          let s = 0
+          for (const v of buf) {
+            loud = Math.max(loud, Math.abs(v - 128))
+            s += ((v - 128) / 128) ** 2
+          }
+          try {
+            onLevel?.(Math.sqrt(s / buf.length))
+          } catch {}
         }, 50)
       } catch {}
     } catch {
@@ -4452,6 +4496,50 @@ function to16k(x, sr) {
   }
   return y
 }
+// 2.23 麥克風收音的樣子（老師 10/11：收到聲音要往外擴，讓學生知道每個音都有收到、聲音大小）
+// 音量 → 麥克風後面的光圈跟著放大縮小；每個音一開始（音量突然變大）→ 一圈波紋往外擴，越大聲擴越大
+// 「減少動態效果」：不出波紋，光圈固定比按鈕大一圈、只變深淺（CSS）
+function micMeter() {
+  const box = $('.sp-mic-box')
+  const noop = () => {}
+  noop.end = noop
+  if (!box) return noop
+  let lv = 0
+  let prev = 0
+  let lastRip = 0
+  let raf = 0
+  box.classList.add('on')
+  const fn = (rms, floor = 0.004) => {
+    if (!box.isConnected) return
+    const L = Math.sqrt(Math.min(1, Math.max(0, (rms - Math.max(floor * 2, 0.008)) / 0.12))) // 0～1，開根號：小聲也看得出來
+    lv = L > lv ? lv + (L - lv) * 0.6 : lv * 0.85 // 變大快、變小慢（比較穩）
+    box.classList.add('lv')
+    const t = performance.now()
+    if (L >= 0.2 && (L - prev >= 0.12 || prev < 0.1) && t - lastRip > 140 && box.querySelectorAll('.sp-rip').length < 4 && !reduceMotion()) {
+      lastRip = t
+      const r = document.createElement('i')
+      r.className = 'sp-rip'
+      r.setAttribute('aria-hidden', 'true')
+      r.style.setProperty('--to', (1.35 + L * 0.75).toFixed(2))
+      r.addEventListener('animationend', () => r.remove())
+      box.append(r)
+    }
+    prev = L
+    if (!raf)
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        box.style.setProperty('--lv', lv.toFixed(3))
+      })
+  }
+  fn.end = () => {
+    cancelAnimationFrame(raf)
+    raf = 0
+    box.classList.remove('on', 'lv')
+    box.style.removeProperty('--lv')
+    box.querySelectorAll('.sp-rip').forEach((r) => r.remove())
+  }
+  return fn
+}
 // 開始聽：講完停 0.8 秒就結束（或再按一次麥克風）；最多 12 秒；7 秒都沒講話＝沒聽到
 // 同一條麥克風也錄音（念完可以聽自己的聲音），不會互搶
 // 拿 PCM 的方式：有 ScriptProcessor 就直接收；沒有（或壞掉）就用 AnalyserNode 量音量，PCM 事後從錄音檔解出來
@@ -4480,7 +4568,7 @@ async function decodeBlob(AC, blob) {
     ac.close?.().catch(() => {})
   }
 }
-async function listenLocal(onInterim) {
+async function listenLocal(onInterim, _target, onLevel) {
   const AC = window.AudioContext || window.webkitAudioContext
   const ctx = new AC() // 要在按下去的那一刻建立（iPhone 才會開聲音）
   ctx.resume?.().catch(() => {})
@@ -4525,6 +4613,9 @@ async function listenLocal(onInterim) {
     for (let i = 0; i < x.length; i++) s += x[i] * x[i]
     const rms = Math.sqrt(s / x.length)
     floor = Math.min(floor, Math.max(rms, 0.002))
+    try {
+      onLevel?.(rms, floor) // 畫面出錯也不能影響「講完自動停」
+    } catch {}
     const loud = rms > Math.max(0.012, floor * 3)
     run = loud ? run + 1 : 0
     if (run >= 2) {
@@ -4864,7 +4955,7 @@ function speakRun() {
           <div class="sp-listen"><button class="pill" data-act="play">${ICON.speaker}<span>${s.qa ? '播放問題' : '播放示範'}</span></button><button class="pill" data-act="slow">🐢<span>慢速</span></button>${hide ? '<button class="pill" data-act="peek">👀<span>顯示原文</span></button>' : ''}</div>
         </section>
         <div class="sp-mic-wrap">
-          <button class="sp-mic" data-act="mic" aria-label="${r ? '再念一次' : '開始錄音'}" ${s.pair && pick == null ? 'disabled' : ''}>${ICON.mic}</button>
+          <div class="sp-mic-box"><span class="sp-lv" aria-hidden="true"></span><button class="sp-mic" data-act="mic" aria-label="${r ? '再念一次' : '開始錄音'}" ${s.pair && pick == null ? 'disabled' : ''}>${ICON.mic}</button></div>
           <div class="sp-mic-label">${r ? '再念一次' : s.pair ? (pick == null ? '請先選出聽到的句子' : '按下麥克風，念出該句') : s.qa ? '按下麥克風，以英文回答' : hide ? '聽完示範後，按下麥克風複誦' : '按下麥克風，複誦句子'}</div>
           <div class="sp-live" aria-live="polite"></div>
         </div>
@@ -4937,9 +5028,18 @@ function speakRun() {
         start()
         return toast(`辨識模型下載中（${Math.round((ASR_MOD?.progress || 0) * 100)}%），完成後再按一次`, '⏳')
       }
-      L = await (engine === 'local' ? listenLocal : listen)((t) => (live.textContent = t), s.qa ? s.ans[0] : tg.en)
-      const { alts, err, blob, clash } = await L.done
-      L = null
+      const meter = micMeter()
+      let got
+      try {
+        L = await (engine === 'local' ? listenLocal : listen)((t) => (live.textContent = t), s.qa ? s.ans[0] : tg.en, meter)
+        got = await L.done
+      } catch {
+        got = { alts: [], err: 'error', blob: null } // 開不起來：光圈收掉、按鈕回到可以再按
+      } finally {
+        L = null
+        meter.end()
+      }
+      const { alts, err, blob, clash } = got
       mic.classList.remove('on')
       // 念到一半就離開、換下一句：這次不算（不然分數會記到別句，或把畫面拉回口說）
       if (SP.over || SP.i !== idx || !mic.isConnected) return
@@ -5355,6 +5455,12 @@ const Sync = {
     if (this.state === s) return
     this.state = s
     onSyncChange('state')
+    // 2.23：開了通知的裝置確認雲端那份還在；剛連上：首頁的「開啟通知」卡補上（第一次畫首頁時還不知道身分）
+    if (this.ready())
+      setTimeout(() => {
+        pushSync()
+        redrawPush()
+      }, 1500)
   },
   // 自己的作答＆練習紀錄：排進佇列（沒網路或還沒加入時先存著，之後一次送出）
   queue(kind, obj) {
@@ -5629,7 +5735,8 @@ const Sync = {
     if (ACTIVE && (!top || top === 'del')) applyDel(this.D.del?.[ACTIVE])
     if (!top || ['a', 's', 'members', 'tkey'].includes(top)) this.migrateSoon()
     if (!top || top === 's' || top === 'hw' || top === 'a') hwNotify(!top)
-    onSyncChange(!top ? 'all' : top === 'a' || top === 's' ? 'a' : top === 'live' ? 'live' : 'members')
+    // 2.23 notify、notifyRun（排程每天寫一次）：只更新「通知」區塊和學生總覽，不要把設定頁整頁重畫（老師可能正在打字）
+    onSyncChange(!top ? 'all' : top === 'a' || top === 's' ? 'a' : top === 'live' ? 'live' : top === 'notify' || top === 'notifyRun' ? 'notify' : 'members')
   },
   attemptsOf(sid) {
     const c = this.cache['a' + sid]
@@ -5744,6 +5851,9 @@ const Sync = {
   },
   // 連結：建立老師後台（owner）或加入（學生、家長帶學生代號 sid；老師帶鑰匙 tkey）
   pair(code, role, { owner = false, sid = '' } = {}) {
+    // 2.23 換到別的班級、別的學生或身分：舊的那份通知訂閱刪掉，加入後 pushSync 用新的身分重存（瀏覽器的訂閱留著）
+    if (pushOn() && S.sync?.code) pushForget()
+    delete S.notifyOk
     S.sync = { code, role, at: Date.now(), owner, ...(sid ? { sid } : {}) }
     S.profile.role = role
     if (!S.profile.device) S.profile.device = role === 'teacher' ? '老師平板' : ROLES[role]
@@ -5760,6 +5870,7 @@ const Sync = {
   },
   unpair() {
     this.presence({ view: 'away' })
+    if (pushOn()) pushDisable(true) // 退出、登出：這台不再收通知（路徑先記下來才清掉）
     this.stop()
     delete S.sync
     S.syncQ = []
@@ -5775,6 +5886,8 @@ const Sync = {
     const m = this.members[uid] || {}
     await this.req('PUT', 'blocked/' + uid, { role: m.role || '', name: m.name || '', dev: m.dev || '', sid: m.sid || '', at: Date.now() })
     await this.req('DELETE', 'members/' + uid)
+    this.req('DELETE', `push/${this.code()}/${uid}`, undefined, true).catch(() => {}) // 2.23：移除的裝置馬上不再收通知
+    if (PUSH_DEVS) delete PUSH_DEVS[uid] // 復原之後也不顯示 🔔（那台下次打開 App 才會重存）
   },
   async unblock(uid) {
     await this.req('DELETE', 'blocked/' + uid)
@@ -5820,7 +5933,11 @@ const Sync = {
   // 刪除學生：這個學生的裝置都移出，紀錄、代碼一起刪掉
   async deleteStudent(sid) {
     const st = this.students[sid] || {}
-    for (const [uid, m] of Object.entries(this.members)) if (m?.sid === sid) await this.req('DELETE', 'members/' + uid)
+    for (const [uid, m] of Object.entries(this.members))
+      if (m?.sid === sid) {
+        await this.req('DELETE', 'members/' + uid)
+        this.req('DELETE', `push/${this.code()}/${uid}`, undefined, true).catch(() => {})
+      }
     if (st.code) await this.req('DELETE', 'codes/' + st.code, undefined, true).catch(() => {})
     for (const k of ['a', 's', 'live', 'hw', 'del']) await this.req('DELETE', `${k}/${sid}`)
     await this.req('DELETE', `recs/${this.code()}/${sid}`, undefined, true).catch(() => {})
@@ -5911,6 +6028,16 @@ const Sync = {
       // 老師刪掉的紀錄：這個裝置上的也一起刪
       this.req('GET', 'del/' + sid)
         .then(applyDel)
+        .catch(() => {})
+      // 2.23 老師有沒有打開「學生、家長也可以開通知」
+      this.req('GET', 'notify')
+        .then((v) => {
+          if (S.notifyOk !== (v === true)) {
+            S.notifyOk = v === true
+            save()
+          }
+          redrawPush() // 卡片就地補上或拿掉（不整頁重畫：家長的「上次看之後」不會被重算）
+        })
         .catch(() => {})
       const st = await this.req('GET', 'students/' + sid)
       const had = !!(this.stu || S.stuCache)
@@ -6072,13 +6199,20 @@ function a2hsCardHTML() {
   // 只給已經加入老師後台的學生、家長（沒加入的人紀錄只在 Safari 裡，換到主畫面會像紀錄不見了）
   if (!IS_IOS || isStandalone() || ACTIVE || teacherMode() || myRole() === 'teacher' || !S.sync?.code || !S.seen?.intro) return ''
   if (Date.now() - (+lsGet(A2HS_KEY) || 0) < 7 * DAY) return ''
-  return `<section class="card a2hs"><div class="a2hs-t"><b>📱 加到主畫面，紀錄比較安全<em class="new-tag">新</em></b><p>從主畫面的圖示打開，Safari 就不會<span class="nowrap">清掉紀錄</span>。加好之後，要跟老師拿 <span class="nowrap">6 碼代碼再加入一次</span>。</p></div><div class="a2hs-acts"><button class="btn primary small-btn" data-a2hs="how">怎麼加</button><button class="btn ghost small-btn" data-a2hs="later">之後再說</button></div></section>`
+  return `<section class="card a2hs"><div class="a2hs-t"><b>📱 加到主畫面，紀錄比較安全<em class="new-tag">新</em></b><p>從主畫面的圖示打開，Safari 就不會<span class="nowrap">清掉紀錄</span>${S.notifyOk ? '，還能<span class="nowrap">收到通知</span>' : ''}。加好之後，要跟老師拿 <span class="nowrap">6 碼代碼再加入一次</span>。</p></div><div class="a2hs-acts"><button class="btn primary small-btn" data-a2hs="how">怎麼加</button><button class="btn ghost small-btn" data-a2hs="later">之後再說</button></div></section>`
 }
 function installSheet() {
   const who = myRole() === 'parent' ? '家長' : '學生'
+  const teacher = teacherMode() || Auth.isTeacher()
+  // 老師（2.23 加到主畫面才收得到通知）：從主畫面打開後登入老師帳號就好
+  const tip = teacher
+    ? '主畫面的 App 和 Safari 是分開的：從主畫面打開，在歡迎畫面最下面按「老師登入」，用老師帳號登入一次，再到「設定」→「通知」打開。'
+    : `主畫面的 App 和 Safari 的紀錄是分開的：從主畫面打開，在歡迎畫面按「有老師給的代碼？」，輸入老師給的 6 碼代碼，身分選「${who}」，作答紀錄就會回來。`
+  // 分享鈕的位置：iPad 在網址列右邊；iPhone 在下面（iOS 26 收在右下角「⋯」裡）
+  const share = deviceKind() === 'iPad' ? `點網址列右邊的<span class="nowrap">「分享」${ICON.share}</span>` : `點<span class="nowrap">「分享」${ICON.share}</span>（找不到就點右下角「⋯」→「分享」）`
   sheet(`<h2 class="sheet-title">加到主畫面</h2>
-    <ol class="plan"><li>先連上網路、打開一次這個 App，讓紀錄都傳上雲端。</li><li>用 <b>Safari</b> 打開這個網址，點<span class="nowrap">「分享」${ICON.share}</span>（找不到就點右下角「⋯」→「分享」）。</li><li>選「加入主畫面」，再按「新增」。</li></ol>
-    <div class="install-tip"><b>加好之後一定要做</b><p>主畫面的 App 和 Safari 的紀錄是分開的：從主畫面打開，在歡迎畫面按「有老師給的代碼？」，輸入老師給的 6 碼代碼，身分選「${who}」，作答紀錄就會回來。</p></div>
+    <ol class="plan">${teacher ? '' : '<li>先連上網路、打開一次這個 App，讓紀錄都傳上雲端。</li>'}<li>用 <b>Safari</b> 打開這個網址，${share}。</li><li>選「加入主畫面」，再按「新增」。</li></ol>
+    <div class="install-tip"><b>加好之後一定要做</b><p>${tip}</p></div>
     <p class="sheet-p install-p">Android 的 Chrome：右上角選單 →<span class="nowrap">「加到主畫面」。</span></p>`)
 }
 document.addEventListener('click', (e) => {
@@ -6097,6 +6231,247 @@ try {
       .then((p) => p || navigator.storage.persist())
       .catch(() => {})
 } catch {}
+// ───────── 2.23 通知（老師 10/11「想要做這種通知」：像 LINE、Instagram 一樣出現在鎖定畫面）─────────
+// 一天最多一則、固定時間；內容由 GitHub 的排程每天晚上算好再發（tools/push/send.mjs、.github/workflows/push.yml）：
+//   學生 19:30（今天還沒練、或作業快到期才提醒）、家長 週日 20:00（這週摘要）、老師 21:00（今天的學生摘要，有事才發）
+// iPhone／iPad 要「加到主畫面」、從主畫面打開才收得到（iOS 16.4 以上）；Android、電腦的瀏覽器直接可以
+// 訂閱存在 push/<班級>/<身分>/<裝置>（不放在 classes 底下：老師的串流不會變大）
+// 學生、家長要等老師打開「學生、家長也可以開通知」（classes/<班級>/notify）才看得到：老師先在自己的手機試
+const PUSH_KEY = 'BByEqnDBNV4FaV8mmJFlOUYkl-TFmXWK2ud54IIQWIBPPmCO5u1dm1utvDGfUEdBBA-c6NmAc_Q0-Fjoeqpb2oc' // 公鑰（私鑰只放在 GitHub Secrets 的 VAPID_PRIVATE）
+const PUSH_LS = 'g7review:push' // 這個裝置開了通知：上次存到雲端的時間（空的＝沒開）
+const PUSH_EP = 'g7review:pushep' // 上次存的推播位址（換了就重存）
+const PUSH_SINCE = 'g7review:pushsince' // 第一次打開的時間（排程停了的提醒用）
+const PUSH_LATER = 'g7review:pushlater'
+const PUSH_TIME = { student: '晚上 7:30', parent: '每週日晚上 8:00', teacher: '每天晚上 9:00' }
+const PUSH_NAME = { student: '練習提醒', parent: '練習摘要', teacher: '學生摘要' }
+const PUSH_WHAT = { student: '今天還沒練習、或作業快到期了才提醒', parent: '孩子這週練了幾天、幾題、作業做完了沒', teacher: '今天誰有練習、作業做完了沒' }
+// 卡片上的說明：一段一段不斷行（QA 10/11：手機上不要只剩一兩個字掉到下一行、也不要一行只有時間）
+const PUSH_CARD = {
+  student: ['老師開放了通知：', '晚上 7:30 提醒你', '今天還沒練習、', '或作業快到期了。', '一天最多一則。'],
+  parent: ['每週日晚上 8:00 ', '收到孩子這週的', '練習摘要，', '一週只發一則。'],
+  teacher: ['每天晚上 9:00 ', '收到今天的學生摘要：', '誰有練習、', '作業做完了沒。', '一天最多一則。'],
+  home: ['iPhone、iPad 要從', '主畫面的圖示打開，', '才收得到', '每天晚上 9:00 的', '學生摘要。'],
+}
+const nowrapParts = (parts) => parts.map((x) => `<span class="nowrap">${x}</span>`).join('')
+const PUSH_HOW_OFTEN = (role) => (role === 'parent' ? '一週一則' : '一天最多一則')
+const pushOK = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+const pushRole = () => (ACTIVE ? '' : teacherDevice() && Sync.isAdmin() ? 'teacher' : Sync.ready() && !Sync.isAdmin() && ['student', 'parent'].includes(myRole()) ? myRole() : '')
+const pushAllowed = (role) => role === 'teacher' || (!!role && S.notifyOk === true)
+const pushOn = () => !!lsGet(PUSH_LS)
+const pushPerm = () => (pushOK() ? Notification.permission : 'unsupported')
+const swReady = () => Promise.race([navigator.serviceWorker.ready, new Promise((_, no) => setTimeout(() => no(new Error('sw')), 8000))])
+const keyBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0))
+// 這個訂閱是不是用現在的金鑰（金鑰換過的話要重新訂閱）
+const samePushKey = (sub) => {
+  const k = sub.options?.applicationServerKey
+  if (!k) return true
+  const a = new Uint8Array(k)
+  const b = keyBytes(PUSH_KEY)
+  return a.length === b.length && a.every((x, i) => x === b[i])
+}
+const pushPath = () => `push/${Sync.code()}/${Auth.uid()}/${S.profile.id}`
+const pushSubscribe = (reg) => reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(PUSH_KEY) })
+async function pushSave(sub) {
+  const j = sub.toJSON()
+  const role = pushRole()
+  if (!role) throw new Error('role')
+  await Sync.req('PUT', pushPath(), { e: j.endpoint, p: j.keys.p256dh, a: j.keys.auth, role, k: PUSH_KEY.slice(0, 16), at: Date.now(), ...(role === 'teacher' ? {} : { sid: Sync.sid() }) }, true)
+  lsSet(PUSH_LS, String(Date.now()))
+  lsSet(PUSH_EP, j.endpoint)
+  if (!lsGet(PUSH_SINCE)) lsSet(PUSH_SINCE, String(Date.now()))
+}
+// 打開通知：要在按下去的那一刻跟系統要權限（iPhone 規定），所以這裡第一件事就是 requestPermission
+async function pushEnable() {
+  const role = pushRole()
+  if (!pushOK() || !role) return installSheet()
+  const perm = await new Promise((ok) => {
+    try {
+      const p = Notification.requestPermission(ok) // 舊的 Safari 用 callback
+      p?.then?.(ok, () => ok(Notification.permission))
+    } catch {
+      ok(Notification.permission)
+    }
+  })
+  if (perm !== 'granted') {
+    toast(perm === 'denied' ? '通知被擋住了：到「設定」看怎麼打開' : '沒有打開通知', '🔕')
+    return redrawPush()
+  }
+  try {
+    const reg = await swReady()
+    let sub = await reg.pushManager.getSubscription()
+    if (sub && !samePushKey(sub)) {
+      await sub.unsubscribe().catch(() => {})
+      sub = null
+    }
+    sub ||= await pushSubscribe(reg)
+    await pushSave(sub)
+    // 馬上跳一則給他看：之後的通知就長這樣
+    reg.showNotification?.('通知開好了', { body: `${PUSH_TIME[role]}：${PUSH_WHAT[role]}。${PUSH_HOW_OFTEN(role)}。`, icon: 'icon-192-v2.png', tag: 'welcome' })?.catch?.(() => {})
+    toast('通知開好了', '🔔')
+  } catch (e) {
+    toast(e?.status ? '沒有存到雲端，請檢查網路再試一次' : '這個裝置現在沒辦法開通知，請稍後再試', '⚠️')
+  }
+  redrawPush()
+}
+async function pushDisable(silent = false) {
+  const path = Sync.code() && Auth.uid() ? pushPath() : '' // 先記下來（登出、退出時馬上就清掉了）
+  lsSet(PUSH_LS, '')
+  lsSet(PUSH_EP, '')
+  lsSet(PUSH_SINCE, '')
+  const cloud = path ? Sync.req('DELETE', path, undefined, true).catch(() => {}) : null
+  try {
+    if (pushOK()) await (await (await swReady()).pushManager.getSubscription())?.unsubscribe()
+  } catch {}
+  await cloud
+  if (!silent) {
+    toast('已關掉通知', '🔕')
+    redrawPush()
+  }
+}
+// 換到別的班級／學生／身分（Sync.pair）：只刪雲端那份舊的，瀏覽器的訂閱留著，加入後 pushSync 用新的身分重存
+function pushForget() {
+  if (Sync.code() && Auth.uid()) Sync.req('DELETE', pushPath(), undefined, true).catch(() => {})
+  PUSH_SYNCED = false
+}
+// 打開 App 時檢查一次：權限被關掉了就收掉；推播位址換了、金鑰換了、雲端那份不見了或身分不對就重存；每 3 天也重存一次（更新時間）
+let PUSH_SYNCED = false
+async function pushSync() {
+  if (PUSH_SYNCED || !pushOn() || !pushOK() || !pushRole()) return
+  PUSH_SYNCED = true
+  if (Notification.permission !== 'granted') return pushDisable(true)
+  try {
+    const reg = await swReady()
+    let sub = await reg.pushManager.getSubscription()
+    const renew = !sub || !samePushKey(sub)
+    if (renew) {
+      await sub?.unsubscribe().catch(() => {})
+      sub = await pushSubscribe(reg)
+    }
+    // 雲端那份還在嗎（排程刪掉失效的、老師移除後又復原、換了身分）；讀不到（沒網路）就下次再說
+    const role = pushRole()
+    const mine = await Sync.req('GET', pushPath(), undefined, true).catch(() => undefined)
+    const wrong = mine && (mine.e !== sub.endpoint || mine.role !== role || (mine.sid || '') !== (role === 'teacher' ? '' : Sync.sid()))
+    const need = renew || mine === null || wrong || lsGet(PUSH_EP) !== sub.endpoint || Date.now() - (+lsGet(PUSH_LS) || 0) > 3 * DAY
+    if (need && pushOn()) await pushSave(sub) // 中間使用者按了「關」：不要再存回去
+  } catch {}
+}
+// 學生模式（老師的平板借學生用）：告訴 service worker，晚上 9 點的老師摘要不要把學生名字顯示在畫面上
+try {
+  caches
+    ?.open('xy-flags')
+    .then((c) => c.put('active', new Response(ACTIVE ? '1' : '')))
+    .catch(() => {})
+} catch {}
+// 設定頁的「通知」
+function pushSettingsHTML() {
+  const role = pushRole()
+  // 老師暫停了學生、家長的通知：已經開過的人還是看得到開關（可以自己關掉）
+  const paused = !!role && !pushAllowed(role) && pushOn()
+  if (!role || (!pushAllowed(role) && !paused)) return ''
+  const perm = pushPerm()
+  let row
+  if (perm === 'unsupported')
+    row =
+      IS_IOS && !isStandalone()
+        ? `<button class="row" data-push="home"><span class="row-ic">🔔</span><span class="row-t">加到主畫面才收得到通知<small>iPhone、iPad 要從主畫面的圖示打開（iOS 16.4 以上）</small></span>${ICON.chev}</button>`
+        : `<div class="row static"><span class="row-ic">🔕</span><span class="row-t">這個瀏覽器不能收通知<small>${IS_IOS ? '要 iOS 16.4 以上，請先更新系統' : '請改用最新版的 Chrome、Edge、Safari 或 Firefox'}</small></span></div>`
+  else if (perm === 'denied')
+    row = `<div class="row static"><span class="row-ic">🔕</span><span class="row-t">通知被擋住了<small>${IS_IOS ? '到 iPhone／iPad 的「設定」→「通知」→「小宇英文」，打開「允許通知」' : '瀏覽器：點網址列左邊的圖示 → 網站設定，把「通知」改成「允許」。裝成 App 的話：長按圖示 →「應用程式資訊」→「通知」'}</small></span></div>`
+  else {
+    const on = pushOn() && perm === 'granted'
+    row = `<div class="row field"><span class="row-t">${PUSH_TIME[role]} ${PUSH_NAME[role]}<small>${PUSH_WHAT[role]}</small></span><div class="seg small" data-seg="push"><button class="${on ? 'on' : ''}" data-v="on">開</button><button class="${on ? '' : 'on'}" data-v="off">關</button></div></div>`
+  }
+  const all = role === 'teacher' ? `<div class="row field"><span class="row-t">學生、家長也可以開通知<small>打開後，學生、家長的 App 會出現「開啟通知」</small></span><div class="seg small" data-seg="notify"><button class="${Sync.D.notify === true ? 'on' : ''}" data-v="on">開</button><button class="${Sync.D.notify === true ? '' : 'on'}" data-v="off">關</button></div></div>` : ''
+  const foot =
+    role === 'teacher'
+      ? nowrapParts(['一天最多一則，', '時間可能晚幾分鐘。']) + '<br>' + nowrapParts(['學生：晚上 7:30', '（今天還沒練習、', '或作業快到期了才提醒）；']) + nowrapParts(['家長：每週日晚上 8:00', '（這週摘要）。'])
+      : paused
+        ? nowrapParts(['老師暫停了通知，', '重新開放之前不會收到。', '不想收的話可以直接關掉。'])
+        : nowrapParts([`${PUSH_HOW_OFTEN(role)}，`, '時間可能晚幾分鐘。'])
+  return `<div class="group"><div class="group-h">通知<em class="new-tag">新</em></div><div class="list form">${row}${all}</div><p class="group-f">${foot}</p></div>`
+}
+// 首頁（學生）、學習進度（家長）、學生總覽（老師）最上面的「開啟通知」卡
+function pushCardHTML(role) {
+  if (role !== pushRole() || !pushAllowed(role) || pushOn() || Date.now() - (+lsGet(PUSH_LATER) || 0) < 14 * DAY) return ''
+  const perm = pushPerm()
+  // 學生、家長的 iPhone 還沒加到主畫面：已經有「加到主畫面」卡；老師沒有，這裡提醒
+  if (perm === 'unsupported' && !(role === 'teacher' && IS_IOS && !isStandalone())) return ''
+  if (perm !== 'default' && perm !== 'unsupported') return '' // 允許過或擋掉了：到設定看
+  const home = perm === 'unsupported'
+  return `<section class="card a2hs push-card"><div class="a2hs-t"><b>🔔 ${home ? '想收到通知？先加到主畫面' : '開啟通知'}<em class="new-tag">新</em></b><p>${nowrapParts(PUSH_CARD[home ? 'home' : role])}</p></div><div class="a2hs-acts"><button class="btn primary small-btn" data-push="${home ? 'home' : 'on'}">${home ? '怎麼加' : '開啟通知'}</button><button class="btn ghost small-btn" data-push="later">之後再說</button></div></section>`
+}
+// 現在這一頁要放哪一種卡（學生首頁、家長學習進度、老師學生總覽）
+function pushCardRole() {
+  const h = location.hash || '#/'
+  if (h === '#/live/home' && parentMode()) return 'parent'
+  if (h === '#/students' && !$('.stu-page.picking')) return 'teacher'
+  if ((h === '#/' || h === '') && !parentMode() && !teacherMode() && $('.home')) return 'student'
+  return ''
+}
+// 設定頁的「通知」重畫；卡片該有沒有就地補上或拿掉（QA 10/11：從主畫面打開時同步還沒連上，第一次畫首頁沒有卡 → 連上之後補）
+function redrawPush() {
+  const w = $('#push-wrap')
+  if (w) w.innerHTML = pushSettingsHTML()
+  const role = pushCardRole()
+  const html = role ? pushCardHTML(role) : ''
+  const c = $('.push-card')
+  if (c && !html) return c.remove()
+  if (c || !html) return
+  const page = $('#view .page')
+  const after = page && ($('.a2hs:not(.push-card)', page) || $(':scope > header.lg-head', page))
+  after?.insertAdjacentHTML('afterend', html)
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-push]')
+  if (!b) return
+  const v = b.dataset.push
+  if (v === 'on') return pushEnable()
+  if (v === 'home') return installSheet()
+  if (v === 'later') {
+    lsSet(PUSH_LATER, String(Date.now())) // 14 天後再問
+    b.closest('.push-card')?.remove()
+    toast('之後可以到「設定」→「通知」打開', '🔔')
+  }
+})
+// 排程停了（例如 GitHub 60 天沒更新會暫停、金鑰設定錯）：老師的裝置提醒
+const PUSH_RUNS = 'https://github.com/xiaoyu-1201/g7-english-review/actions/workflows/push.yml'
+function pushStopped() {
+  if (pushRole() !== 'teacher' || !pushOn()) return 0
+  const run = +Sync.D.notifyRun || 0
+  const since = Math.max(run, +lsGet(PUSH_SINCE) || 0)
+  return since && Date.now() - since > 2 * DAY ? run || -1 : 0
+}
+function pushStoppedSheet() {
+  sheet(`<h2 class="sheet-title">每日通知停了</h2>
+    <p class="sheet-p">通知是 GitHub 的排程每天晚上發的。最近 2 天都沒有跑，可能是：</p>
+    <ol class="plan"><li>GitHub 太久沒更新，自動暫停了排程：<span class="nowrap">打開下面的頁面，</span>有黃色的「Enable workflow」<span class="nowrap">就按下去。</span></li><li>金鑰過期或設定錯了：頁面上最近一次是<span class="nowrap">紅色叉叉的話，</span><span class="nowrap">點進去看錯誤訊息。</span></li></ol>
+    <div class="sheet-actions"><button class="btn ghost" data-close>關閉</button><a class="btn primary" href="${PUSH_RUNS}" target="_blank" rel="noopener">打開 GitHub</a></div>`)
+}
+// 成員管理：哪些裝置開了通知（老師打開成員管理時抓一次）
+let PUSH_DEVS = null
+let PUSH_DEVS_AT = 0
+function loadPushDevs() {
+  if (Date.now() - PUSH_DEVS_AT < 60000 || !Sync.isAdmin()) return
+  PUSH_DEVS_AT = Date.now()
+  // 只要知道「有沒有」：shallow 只拿名單，不下載推播位址和金鑰；老師自己那列另外看有幾台
+  Auth.token()
+    .then((t) => {
+      const q = (p) => fetch(`${dbBase()}/${p}.json?shallow=true&auth=${encodeURIComponent(t)}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      return Promise.all([q('push/' + Sync.code()), q(`push/${Sync.code()}/${Auth.uid()}`)])
+    })
+    .then(([all, mine]) => {
+      PUSH_DEVS = Object.fromEntries(Object.keys(all || {}).map((u) => [u, u === Auth.uid() ? mine || {} : true]))
+      if (location.hash === '#/manage') markPushDevs()
+    })
+    .catch(() => {})
+}
+// 抓到之後只在原本的列上補 🔔（不整頁重畫：「新加入」標籤會被收掉，按鈕也會在手指下換掉）
+function markPushDevs() {
+  const add = (b, html) => b && !$('.mg-bell', b) && b.insertAdjacentHTML('beforeend', html)
+  for (const uid of Object.keys(PUSH_DEVS || {})) add($(`.manage-page [data-remove="${CSS.escape(uid)}"]`)?.closest('.mg-row')?.querySelector('.row-t b'), '<em class="mg-bell">🔔 收通知</em>')
+  const mine = PUSH_DEVS?.[Auth.uid()]
+  if (mine) add($('.manage-page [data-me] .row-t b'), `<em class="mg-bell">🔔 ${Object.keys(mine).length} 台收通知</em>`)
+}
 // 管理裝置：還沒看過的新成員（首頁通知、設定分頁的紅點）
 function newMembers() {
   if (!Sync.isAdmin() || ACTIVE) return []
@@ -6114,6 +6489,7 @@ function onSyncChange(k) {
     const ks = syncKinds
     syncKinds = new Set()
     const kind = ks.has('state') ? 'state' : ks.has('all') ? 'all' : ks.has('members') ? 'members' : ks.has('a') || ks.has('s') ? 'a' : [...ks][0]
+    if (ks.has('notify') || kind === 'all') redrawPush()
     const h = location.hash || '#/'
     const tb = $('.tabbar a[href="#/settings"]')
     if (tb) {
@@ -6514,7 +6890,7 @@ function viewLiveHome(keepScroll = false) {
     `<div class="page narrow live-page parent-prog">
       ${header('學習進度', `${name} 每一課做到哪裡、各項練習的成績`, syncPill(true), !parentMode())}
       ${parentMode() ? '' : liveSegHTML('home')}
-      ${parentMode() ? a2hsCardHTML() : ''}
+      ${parentMode() ? a2hsCardHTML() + pushCardHTML('parent') : ''}
       ${parentProgressHTML(list, sess, myUnits(), l, name)}
     </div>`,
   )
@@ -6701,6 +7077,7 @@ function viewStudents(keepScroll = false) {
   setView(
     `<div class="page stu-page${picking ? ' picking' : ''}">
       ${header('學生', ids.length ? `${ids.length} 位・每個學生、每個家庭只看得到自己的紀錄` : '每個學生、每個家庭只看得到自己的紀錄', `<div class="hd-r">${syncPill()}${ids.length ? `<button class="btn ${picking ? 'primary' : 'ghost'} small-btn" data-pick>${picking ? '完成' : '選取'}</button>` : ''}</div>`)}
+      ${picking ? '' : pushCardHTML('teacher')}
       ${
         todos.length && !picking
           ? `<section class="card todo-card"><div class="sec-h"><div><h2>要處理的事</h2></div></div><div class="list flat">${todos
@@ -6777,7 +7154,7 @@ function viewStudents(keepScroll = false) {
     }
     if (card) return go('#/student/' + sid + (S.ui?.stuTab === 'prep' ? '/prep' : S.ui?.stuTab === 'home' ? '/home' : '')) // 上次用的分頁
     const ta = q('[data-todo-act]')
-    if (ta) return ta.dataset.todoAct === 'hw' ? assignSheet(ta.dataset.sid) : ta.dataset.todoAct === 'backup' ? backupAll() : go('#/student/' + ta.dataset.sid)
+    if (ta) return ta.dataset.todoAct === 'hw' ? assignSheet(ta.dataset.sid) : ta.dataset.todoAct === 'backup' ? backupAll() : ta.dataset.todoAct === 'pushstop' ? pushStoppedSheet() : go('#/student/' + ta.dataset.sid)
     const tx = q('[data-todo-x]')
     if (tx && tx.dataset.todoX === 'backup') {
       lsSet(BACKUP_SNOOZE, String(Date.now()))
@@ -6963,6 +7340,10 @@ function todoList(ids) {
     const lb = +lsGet(BACKUP_KEY) || 0
     out.push({ kind: 'warn', ic: '💾', text: '該備份學生資料了', sub: lb ? `這台裝置上次備份：${fmtDate(lb)}` : '還沒備份過（雲端沒有自動備份）', key: 'backup', act: 'backup', actText: '備份', sid: '', ts: Date.now() + DAY })
   }
+  // 2.23 每日通知的排程 2 天沒跑（這台有開通知才看）
+  const ps = pushStopped()
+  const pk = `pushstop:${Math.floor(Math.max(0, ps) / DAY)}`
+  if (ps && !done.has(pk)) out.push({ kind: 'warn', ic: '🔕', text: '每日通知停了', sub: ps > 0 ? `最後一次：${fmtDate(ps)}` : '還沒發過通知', key: pk, act: 'pushstop', actText: '看看', sid: '', ts: Date.now() + DAY })
   return out.sort((a, b) => b.ts - a.ts).slice(0, 6)
 }
 function addStudentSheet() {
@@ -8260,7 +8641,7 @@ function viewManage(keepScroll = false) {
     return v === VERSION.replace(/（.*$/, '') ? `<span class="mg-ver ok">${ICON.check}最新版 ${esc(v)}</span>` : `<span class="mg-ver old">${v ? `舊版 ${esc(v)}` : '舊版'}・下次打開 App 會自動更新</span>`
   }
   const row = ([uid, m]) =>
-    `<div class="row mg-row"><span class="mg-ic">${ROLE_IC[m.role] || '❔'}</span><span class="row-t"><b>${esc(m.dev && !Object.values(ROLES).includes(m.dev) ? m.dev : ROLES[m.role] || '成員')}${(m.at || 0) > seen ? '<em class="mg-new">新加入</em>' : ''}${stale(m) ? `<em class="mg-stale">${seenTs(m) === m.at ? '加入 ' : ''}${staleDays(m)} 天${seenTs(m) === m.at ? '還沒上線' : '沒上線'}</em>` : ''}</b><small>${esc(devDesc(m))}・${last(m)}</small>${ver(m)}</span><span class="mg-acts">${stale(m) ? `<button class="btn primary small-btn" data-resend="${esc(m.sid)}" data-role="${m.role === 'parent' ? 'parent' : 'student'}">重傳加入連結</button>` : ''}<button class="btn ghost small-btn" data-rename="${uid}">改名稱</button><button class="btn ghost small-btn danger-t" data-remove="${uid}">移除</button></span></div>`
+    `<div class="row mg-row"><span class="mg-ic">${ROLE_IC[m.role] || '❔'}</span><span class="row-t"><b>${esc(m.dev && !Object.values(ROLES).includes(m.dev) ? m.dev : ROLES[m.role] || '成員')}${(m.at || 0) > seen ? '<em class="mg-new">新加入</em>' : ''}${stale(m) ? `<em class="mg-stale">${seenTs(m) === m.at ? '加入 ' : ''}${staleDays(m)} 天${seenTs(m) === m.at ? '還沒上線' : '沒上線'}</em>` : ''}${PUSH_DEVS?.[uid] ? '<em class="mg-bell">🔔 收通知</em>' : ''}</b><small>${esc(devDesc(m))}・${last(m)}</small>${ver(m)}</span><span class="mg-acts">${stale(m) ? `<button class="btn primary small-btn" data-resend="${esc(m.sid)}" data-role="${m.role === 'parent' ? 'parent' : 'student'}">重傳加入連結</button>` : ''}<button class="btn ghost small-btn" data-rename="${uid}">改名稱</button><button class="btn ghost small-btn danger-t" data-remove="${uid}">移除</button></span></div>`
   const ids = studentIds()
   const loose = mems.filter(([, m]) => m.role !== 'teacher' && !Sync.students[m.sid])
   const nStale = mems.filter(([, m]) => stale(m)).length
@@ -8279,7 +8660,7 @@ function viewManage(keepScroll = false) {
         .join('')}
       ${loose.length ? `<div class="group"><div class="group-h">還沒分到學生（${loose.length}）</div><div class="list">${loose.map(row).join('')}</div></div>` : ''}
       <div class="group"><div class="group-h">老師</div><div class="list">
-        <div class="row static mg-row"><span class="mg-ic">📚</span><span class="row-t"><b>${esc(Auth.email())}</b><small>老師帳號・在其他手機或平板用這組 Email 和密碼登入，就能管理</small></span></div>
+        <div class="row static mg-row" data-me><span class="mg-ic">📚</span><span class="row-t"><b>${esc(Auth.email())}${PUSH_DEVS?.[me] ? `<em class="mg-bell">🔔 ${Object.keys(PUSH_DEVS[me]).length} 台收通知</em>` : ''}</b><small>老師帳號・在其他手機或平板用這組 Email 和密碼登入，就能管理</small></span></div>
       </div></div>
       ${
         blk.length
@@ -8294,6 +8675,7 @@ function viewManage(keepScroll = false) {
     </div>`,
   )
   if (keepScroll) window.scrollTo(0, y)
+  loadPushDevs() // 2.23：哪些裝置開了通知（抓到之後重畫一次）
   // 看過名單：新成員的通知就收起來
   if (S.sync) {
     const latest = Math.max(0, ...mems.map(([, m]) => m.at || 0))
@@ -8900,6 +9282,15 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
     applyUpdate()
   })
 }
+// 2.23 點了通知、App 本來就開著：換到通知說的那一頁（例如老師的學生總覽、家長的學習進度）
+navigator.serviceWorker?.addEventListener?.('message', (e) => {
+  if (e.data?.type !== 'go' || !/^#\/[a-z/]*$/.test(e.data.hash || '')) return
+  // 只聽自己的 service worker（同一個 github.io 網域底下可能有別的專案）
+  const from = e.source?.scriptURL
+  if (from && from !== new URL('sw.js', location.href).href) return
+  if (!idleView()) return // 正在做題、考試、口說、開著視窗：不要打斷
+  go(e.data.hash)
+})
 
 // 給測試用
-window.__app = { beta, teacherDevice, SPOTS, focusOf, lineText, spotsOf, S, ITEM, MODULES, MOD_ORDER, UNITS, EXAMS, SPEAK_PAIRS, pdfSlug, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }
+window.__app = { beta, teacherDevice, pushRole, pushSync, pushOn, pushStopped, micMeter, SPOTS, focusOf, lineText, spotsOf, S, ITEM, MODULES, MOD_ORDER, UNITS, EXAMS, SPEAK_PAIRS, pdfSlug, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }

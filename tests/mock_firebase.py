@@ -61,6 +61,13 @@ def can_read(ps, uid, legacy, prov):
         if legacy:
             return True
         return len(ps) >= 3 and bool(uid) and (is_admin(ps[1], uid, prov) or mem(ps[1], uid).get("sid") == ps[2])
+    # 2.23 通知：push/<班級>/<身分>/<裝置>（老師讀整個班級的，每台讀自己的）；pushlog 只有排程（服務帳戶）能讀寫
+    if ps and ps[0] in ("push", "pushlog"):
+        if legacy:
+            return True
+        if ps[0] == "pushlog" or len(ps) < 2:
+            return False
+        return is_admin(ps[1], uid, prov) or (len(ps) >= 3 and bool(uid) and ps[2] == uid)
     if not (len(ps) >= 2 and ps[0] == "classes" and len(ps[1]) >= 16):
         return False
     if legacy:
@@ -71,7 +78,7 @@ def can_read(ps, uid, legacy, prov):
     if len(ps) < 3:
         return False
     sec = ps[2]
-    if sec in ("owner", "open", "legacy"):
+    if sec in ("owner", "open", "legacy", "notify"):
         return bool(uid)
     if sec == "members" and len(ps) >= 4 and ps[3] == uid:
         return True
@@ -81,8 +88,26 @@ def can_read(ps, uid, legacy, prov):
 
 
 def can_write(ps, uid, val, legacy, prov):
-    if legacy and ps and ps[0] in ("codes", "recs", "teachers"):
-        return True  # 測試用：沒帶 auth 直接改
+    if legacy and ps and ps[0] in ("codes", "recs", "teachers", "push", "pushlog"):
+        return True  # 測試用：沒帶 auth 直接改（排程的服務帳戶也是這樣）
+    if ps and ps[0] == "pushlog":
+        return False
+    if ps and ps[0] == "push":
+        # 老師可以刪掉某一個身分的全部訂閱（移除裝置、刪除學生時）
+        if len(ps) == 3 and val is None and is_admin(ps[1], uid, prov):
+            return True
+        # 只能寫自己的裝置；老師（建立者、老師帳號）只能寫 role＝teacher；學生、家長的 role、sid 要跟名單一樣，被移除的不能寫
+        if len(ps) != 4 or not uid or ps[2] != uid or len(ps[3]) > 40:
+            return False
+        if val is None:
+            return True
+        if not isinstance(val, dict):
+            return False
+        c = ps[1]
+        if val.get("role") == "teacher":
+            return is_admin(c, uid, prov)
+        m = mem(c, uid)
+        return get_node(["classes", c, "blocked", uid]) is None and bool(m) and m.get("role") == val.get("role") and m.get("sid") == val.get("sid")
     if ps and ps[0] == "teachers":
         if len(ps) != 2 or not uid or ps[1] != uid or prov != "password":
             return False
@@ -120,7 +145,7 @@ def can_write(ps, uid, val, legacy, prov):
         return get_node(ps) is None and val == uid
     if sec == "tkey":
         return adm and val is None  # 老師連結已停用：只能刪掉
-    if sec in ("open", "legacy", "blocked", "hw", "del"):
+    if sec in ("open", "legacy", "blocked", "hw", "del", "notify"):
         return adm
     if sec == "students":  # 規則寫在 students/$sid：整個 students 不能一次刪
         return adm and len(ps) >= 4
@@ -158,8 +183,17 @@ STU_KEYS = {"name", "at", "code", "codeExp", "units"}
 MEM_KEYS = {"role", "sid", "name", "dev", "pid", "at"}
 
 
+PUSH_KEYS = {"e", "p", "a", "role", "sid", "k", "at"}
+
+
 def valid(ps, val):
     """對照 database.rules.json 的 .validate（只檢查有寫到的部分）"""
+    if val is not None and len(ps) == 4 and ps[0] == "push":
+        s = lambda k, n: isinstance(val.get(k), str) and len(val[k]) <= n
+        return (isinstance(val, dict) and set(val) <= PUSH_KEYS and {"e", "p", "a", "role", "at"} <= set(val) and s("e", 1000) and val["e"].startswith("https://")
+                and s("p", 200) and s("a", 100) and val["role"] in ("student", "parent", "teacher") and ("sid" not in val or s("sid", 20)) and ("k" not in val or s("k", 120)) and isinstance(val["at"], (int, float)))
+    if val is not None and len(ps) == 3 and ps[0] == "classes" and ps[2] == "notify":
+        return isinstance(val, bool)
     if val is None or len(ps) < 3 or ps[0] != "classes":
         return True
     sec, rest = ps[2], ps[3:]

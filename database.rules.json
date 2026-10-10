@@ -26,9 +26,35 @@
         }
       }
     },
+    "push": {
+      "$code": {
+        ".read": "auth != null && auth.provider === 'password' && root.child('classes/' + $code + '/owner').val() === auth.uid",
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.provider === 'password' && root.child('classes/' + $code + '/owner').val() === auth.uid && !newData.exists()",
+          "$dev": {
+            ".write": "auth != null && auth.uid === $uid && $dev.length <= 40 && (!newData.exists() || (auth.provider === 'password' && root.child('classes/' + $code + '/owner').val() === auth.uid && newData.child('role').val() === 'teacher') || (!root.child('classes/' + $code + '/blocked/' + auth.uid).exists() && newData.child('role').val() !== 'teacher' && root.child('classes/' + $code + '/members/' + auth.uid + '/role').val() === newData.child('role').val() && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === newData.child('sid').val()))",
+            ".validate": "newData.hasChildren(['e', 'p', 'a', 'role', 'at'])",
+            "e": { ".validate": "newData.isString() && newData.val().beginsWith('https://') && newData.val().length <= 1000" },
+            "p": { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "a": { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "role": { ".validate": "newData.isString() && newData.val().matches(/^(student|parent|teacher)$/)" },
+            "sid": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "k": { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "at": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    },
     "classes": {
       "$code": {
         ".read": "auth != null && auth.provider === 'password' && $code.length >= 16 && data.child('owner').val() === auth.uid",
+        "notify": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.provider === 'password' && root.child('classes/' + $code + '/owner').val() === auth.uid",
+          ".validate": "newData.isBoolean()"
+        },
         "owner": {
           ".read": "auth != null",
           ".write": "auth != null && auth.provider === 'password' && $code.length >= 16 && ((!data.exists() && newData.val() === auth.uid) || (data.val() === auth.uid && !newData.exists() && !data.parent().child('members').exists() && !data.parent().child('students').exists()))"

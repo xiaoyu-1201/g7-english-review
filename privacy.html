@@ -46,7 +46,7 @@
       <a class="legal-back" href="./">‹ 回到小宇英文</a>
       <header class="lg-head">
         <h1>隱私權說明</h1>
-        <p class="lg-sub">給學生和家長：這個 App 收了哪些資料、存在哪裡、誰看得到。<span style="display: block">最後更新：2026 年 10 月 10 日</span></p>
+        <p class="lg-sub">給學生和家長：這個 App 收了哪些資料、存在哪裡、誰看得到。<span style="display: block">最後更新：2026 年 10 月 11 日</span></p>
       </header>
 
       <section class="card">
@@ -66,6 +66,7 @@
           <li>作答紀錄：題目、你的答案、對錯、練習時間。</li>
           <li>正在練哪一頁、最後上線的時間。</li>
           <li>口說練習的錄音、辨識出來的文字和分數（每一句只留最新的一次）。</li>
+          <li>有打開通知的話：瀏覽器給的通知位址和解密用的鑰匙（只能用來傳通知給這個裝置），以及身分（學生／家長／老師）。關掉通知就刪除。</li>
           <li><b>不收</b>：電話、Email、地址、身分證字號、照片、定位。</li>
         </ul>
       </section>
@@ -83,6 +84,7 @@
         <h2>會傳給誰</h2>
         <ul>
           <li>Google：幫忙存資料（上面說的 Firebase）。</li>
+          <li>有打開通知的話：每天晚上由 GitHub 的排程服務讀取練習紀錄、算出通知內容（例如今天練了幾題），再經過你裝置的推播服務（Apple、Google、Mozilla 或 Microsoft）傳到裝置上。通知內容有加密，推播服務看不到內容。</li>
           <li>打開 App、第一次下載語音辨識模型時，網站主機（GitHub）、字型服務（Google Fonts）和模型下載服務（jsDelivr、Hugging Face）會收到一般連線資訊（例如 IP 位址），不含作答內容；「存成 PDF」時，程式下載服務（Cloudflare cdnjs）也會收到一般連線資訊。</li>
           <li>口說練習的語音辨識，預設在你的裝置上進行，錄音不會送到語音辨識服務。少數不支援的舊裝置會改用瀏覽器內建的辨識，這時聲音會由瀏覽器廠商（例如 Google、Apple、Microsoft）處理。</li>
         </ul>
