@@ -12,6 +12,21 @@
     <link rel="stylesheet" href="styles.css" />
     <style>
       /* 畫筆試寫頁（2.23 提案）：先給老師用 Apple Pencil 試，覺得夠細緻才放進 App */
+      /* 墨水顏色：深色模式換成看得到的顏色（黑筆變米白，像 Goodnotes 的深色模式） */
+      :root {
+        --ink-black: #2b2925;
+        --ink-red: #c8372d;
+        --ink-blue: #23508f;
+        --ink-hl: rgba(255, 200, 40, 0.55);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink-black: #efe8da;
+          --ink-red: #ef7f72;
+          --ink-blue: #8fb5ef;
+          --ink-hl: rgba(255, 205, 70, 0.5);
+        }
+      }
       .pen-page {
         max-width: 820px;
         padding-bottom: calc(150px + env(safe-area-inset-bottom));
@@ -174,6 +189,56 @@
       .pen-saved.show {
         opacity: 1;
       }
+      .pen-warn {
+        flex-basis: 100%;
+        margin: 2px 4px 0;
+        font-size: 13px;
+        color: var(--pen);
+        text-align: center;
+      }
+      .pen-warn[hidden] {
+        display: none;
+      }
+      .pen-fail {
+        position: fixed;
+        right: max(18px, env(safe-area-inset-right));
+        bottom: calc(86px + env(safe-area-inset-bottom));
+        z-index: 40;
+        max-width: 260px;
+        margin: 0;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: var(--card);
+        border: 1.5px solid var(--pen);
+        color: var(--pen);
+        font-size: 15px;
+        font-weight: 600;
+      }
+      /* 「已自動存好」浮在工具列上面，不佔工具列的位置 */
+      .pen-saved {
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 6px);
+        transform: translateX(-50%);
+        padding: 2px 10px;
+        border-radius: 99px;
+        background: var(--card);
+        border: 1px solid var(--sep);
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      /* 手機在 Safari 裡：底部附近的觸控會被瀏覽器拿走（分頁列 10/8 修過），工具列往上抬 */
+      @media (max-width: 480px) and (display-mode: browser) {
+        .pen-bar {
+          bottom: calc(26px + env(safe-area-inset-bottom));
+        }
+      }
+      .pen-bar button[aria-disabled='true'] {
+        opacity: 0.35;
+      }
+      .opt.sel {
+        box-shadow: inset 0 0 0 2px var(--blue);
+      }
       @media (max-width: 560px) {
         .pen-bar .txt {
           display: none; /* 手機：只留圖示（每顆都有 aria-label） */
@@ -190,19 +255,20 @@
       <section class="card pen-how">
         <h2>怎麼試</h2>
         <ol>
-          <li>按右下角的<b>筆</b>，下面會出現工具列。</li>
-          <li>用 <b>Apple Pencil</b> 在下面的卡片上寫；手指照常捲動、點選項。沒有筆就按「<b>用手指畫</b>」。</li>
-          <li>試試<b>螢光筆</b>畫在字上、<b>橡皮擦</b>（碰到哪一筆就擦掉哪一筆）、<b>復原</b>。</li>
-          <li>寫完<b>重新整理</b>這一頁，或關掉再打開：筆跡應該還在。</li>
+          <li><b>Apple Pencil 直接在卡片上寫</b>（不用先按任何按鈕），下面會出現工具列可以換顏色。</li>
+          <li>筆<b>點一下</b>藍色單字＝播放發音、點一下選項＝選它；筆<b>拖</b>＝寫字（從單字上開始拖也只會寫字）。</li>
+          <li>手指照常捲動、點按鈕；寫字時手掌靠在螢幕上，碰到的按鈕不會被按到。</li>
+          <li>試試<b>螢光筆</b>畫在字上、<b>橡皮擦</b>（碰到哪一筆就擦掉哪一筆）、<b>復原</b>（清除了也能復原）。</li>
+          <li>寫完<b>重新整理</b>這一頁，或關掉再打開：筆跡應該還在。沒有筆就按右下角的筆，再按「<b>用手指畫</b>」。</li>
         </ol>
       </section>
 
       <section class="note pen-target" data-ink="note-u2a-0">
         <h3>容易拼錯的房間與文具</h3>
         <ul class="note-pts">
-          <li><span class="say">kitchen</span>　<span class="say">bathroom</span>　<span class="say">bedroom</span>　<span class="say">living room</span>　<span class="say">dining room</span></li>
-          <li><span class="say">notebook</span>　<span class="say">marker</span>　<span class="say">pencil case</span>　<span class="say">eraser</span>　<span class="say">gift</span>　<span class="say">cookie</span></li>
-          <li>顏色：<span class="say">purple</span>　<span class="say">gray</span>　<span class="say">brown</span>　最喜愛的：<span class="say">favorite</span></li>
+          <li><button type="button" class="say">kitchen</button>　<button type="button" class="say">bathroom</button>　<button type="button" class="say">bedroom</button>　<button type="button" class="say">living room</button>　<button type="button" class="say">dining room</button></li>
+          <li><button type="button" class="say">notebook</button>　<button type="button" class="say">marker</button>　<button type="button" class="say">pencil case</button>　<button type="button" class="say">eraser</button>　<button type="button" class="say">gift</button>　<button type="button" class="say">cookie</button></li>
+          <li>顏色：<button type="button" class="say">purple</button>　<button type="button" class="say">gray</button>　<button type="button" class="say">brown</button>　最喜愛的：<button type="button" class="say">favorite</button></li>
         </ul>
         <div class="note-rule">複合名詞多半是兩個字拼起來：note＋book、bath＋room、bed＋room、pencil＋case。<br />living room、dining room、pencil case 中間要<b>空格</b>；notebook、bathroom、bedroom 是<b>一個字</b>。</div>
         <div class="tip"><b>易錯提醒</b>kitchen 中間是 t-c-h；favorite 拆成 fa-vo-rite 來記。</div>
@@ -233,9 +299,9 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2.83 2.83 0 0 0-4-4L4 16v4" /><path d="M13.5 6.5l4 4" /></svg>
     </button>
     <div class="pen-bar" role="toolbar" aria-label="畫筆工具" hidden>
-      <button type="button" data-tool="black" aria-label="黑筆" aria-pressed="true"><span class="dot" style="--c: #2b2925"></span></button>
-      <button type="button" data-tool="red" aria-label="紅筆" aria-pressed="false"><span class="dot" style="--c: #c8372d"></span></button>
-      <button type="button" data-tool="blue" aria-label="藍筆" aria-pressed="false"><span class="dot" style="--c: #23508f"></span></button>
+      <button type="button" data-tool="black" aria-label="黑筆" aria-pressed="true"><span class="dot" style="--c: var(--ink-black)"></span></button>
+      <button type="button" data-tool="red" aria-label="紅筆" aria-pressed="false"><span class="dot" style="--c: var(--ink-red)"></span></button>
+      <button type="button" data-tool="blue" aria-label="藍筆" aria-pressed="false"><span class="dot" style="--c: var(--ink-blue)"></span></button>
       <button type="button" data-tool="hl" aria-label="螢光筆" aria-pressed="false"><span class="hl-ic"></span><span class="txt">螢光筆</span></button>
       <button type="button" data-tool="eraser" aria-label="橡皮擦" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 20H8.5l-4.21-4.3a1 1 0 0 1 0-1.41l10-10a1 1 0 0 1 1.41 0l5 5a1 1 0 0 1 0 1.41L11.5 20" /><path d="M18 13.3L11.7 7" /></svg><span class="txt">橡皮擦</span>
@@ -250,33 +316,54 @@
       </button>
       <button type="button" data-finger aria-label="用手指畫" aria-pressed="false">☝️<span class="txt">用手指畫</span></button>
       <span class="pen-saved" aria-live="polite">已自動存好</span>
-      <button type="button" class="done" data-done>完成</button>
+      <button type="button" class="done" data-done aria-label="收起工具列（Apple Pencil 還是可以直接寫）">收起</button>
+      <p class="pen-warn" role="alert" hidden>這台裝置存不了筆跡（無痕模式或空間滿）：可以照常寫，但關掉就會不見。</p>
     </div>
 
+    <script>
+      // 畫線的程式從 jsDelivr 載入：4 秒還沒好（沒網路、網路擋掉），在筆按鈕旁邊說清楚，不要按了沒反應
+      setTimeout(() => {
+        if (window.__penReady) return
+        const fab = document.querySelector('.pen-fab')
+        fab.insertAdjacentHTML('beforebegin', '<p class="pen-fail" role="alert">畫筆載入失敗：請確認有網路，再重新整理這一頁</p>')
+      }, 4000)
+    </script>
     <script type="module">
       import { getStroke } from 'https://cdn.jsdelivr.net/npm/perfect-freehand@1.2.3/dist/esm/index.mjs'
 
       // 筆跡存在這台裝置（localStorage）：{ 卡片代號: [筆畫] }
-      // 一筆＝{ t: 'pen'|'hl', c: 顏色, w: 粗細, pr: 有沒有壓力, p: [[x, y, 壓力], ...] }
+      // 一筆＝{ t: 'pen'|'hl', k: 顏色代號, w: 粗細, pr: 有沒有壓力, p: [[x, y, 壓力], ...] }
       // x、y、粗細都除以「卡片寬度」存：轉向、換視窗大小時跟著卡片一起縮放
       const KEY = 'g7review:pentest'
-      const TOOLS = {
-        black: { t: 'pen', c: '#2b2925' },
-        red: { t: 'pen', c: '#c8372d' },
-        blue: { t: 'pen', c: '#23508f' },
-        hl: { t: 'hl', c: 'rgba(255, 200, 40, 0.55)' },
-      }
+      const TOOLS = { black: 'pen', red: 'pen', blue: 'pen', hl: 'hl' }
+      const OLD_HEX = { '#2b2925': 'black', '#c8372d': 'red', '#23508f': 'blue' } // 第一版存的是色碼
+      const colorOf = (s) => s.k || OLD_HEX[s.c] || (s.t === 'hl' ? 'hl' : 'black')
       const SIZES = [
         { k: '細', pen: 2.2, hl: 12, bar: 2 },
         { k: '中', pen: 3.2, hl: 18, bar: 4 },
         { k: '粗', pen: 4.8, hl: 26, bar: 7 },
       ]
-      const st = { on: false, tool: 'black', finger: false, size: 1 }
+      // 從這些東西上開始：筆「點一下」＝按它（播發音、選選項），筆「拖」＝寫字
+      const TAPPABLE = 'button, a, input, select, textarea, [role="button"]'
+      const TAP_MOVE = 8 // px：移動超過這個距離就算在寫字
+      const TAP_MS = 400
+      const PALM_MS = 600 // 筆正在寫或剛離開螢幕這段時間：手指／手掌碰到卡片上的按鈕不算
+      const st = { on: false, tool: 'black', lastPen: 'black', finger: false, size: 1 }
+      // 讀存檔：每一筆都檢查；讀不懂的原文另外留一份（不要被下一筆存檔蓋掉）
+      const okStroke = (s) => s && (s.t === 'pen' || s.t === 'hl') && Number.isFinite(s.w) && Array.isArray(s.p) && s.p.length > 0 && s.p.every((q) => Array.isArray(q) && q.length >= 2 && q.every(Number.isFinite))
       let ink = {}
       try {
-        ink = JSON.parse(localStorage.getItem(KEY) || '{}') || {}
+        const raw = localStorage.getItem(KEY)
+        let d = {}
+        try {
+          d = JSON.parse(raw || '{}')
+        } catch {
+          localStorage.setItem(`${KEY}:bad:${Date.now()}`, raw)
+        }
+        if (d && typeof d === 'object' && !Array.isArray(d)) for (const [k, l] of Object.entries(d)) if (Array.isArray(l)) ink[k] = l.filter(okStroke)
       } catch {}
       const undo = []
+      let cur = null // 正在畫的這一筆
       const $ = (s, r = document) => r.querySelector(s)
       const $$ = (s, r = document) => [...r.querySelectorAll(s)]
       const NS = 'http://www.w3.org/2000/svg'
@@ -323,15 +410,24 @@
       function pathEl(s, W) {
         const el = document.createElementNS(NS, 'path')
         el.setAttribute('d', strokeD(s, W))
-        el.setAttribute('fill', s.c)
+        el.style.fill = `var(--ink-${colorOf(s)})`
         return el
       }
+      // 筆跡的座標用「畫筆那一層」的位置算（卡片有 1px 邊框：用卡片的位置會偏 1px）
+      const box = (block) => layers(block).pen.getBoundingClientRect()
       function render(block) {
-        const W = block.getBoundingClientRect().width
+        if (!block) return
+        const W = box(block).width
         const { hl, pen } = layers(block)
         hl.replaceChildren()
         pen.replaceChildren()
-        for (const s of ink[block.dataset.ink] || []) (s.t === 'hl' ? hl : pen).append(pathEl(s, W))
+        for (const s of ink[block.dataset.ink] || []) {
+          try {
+            ;(s.t === 'hl' ? hl : pen).append(pathEl(s, W))
+          } catch {}
+        }
+        // 正在寫的那一筆：重畫（字型晚到、轉向、復原）時不能被拿掉
+        if (cur?.block === block) (cur.s.t === 'hl' ? hl : pen).append(cur.el)
       }
       const blocks = $$('.pen-target')
       blocks.forEach(render)
@@ -339,9 +435,10 @@
       const ro = new ResizeObserver((es) => es.forEach((e) => render(e.target)))
       blocks.forEach((b) => ro.observe(b))
 
-      // ── 存檔 ──
+      // ── 存檔：存不了（無痕模式、空間滿）就在工具列提醒一次，照常可以寫 ──
       let savedT
       function save() {
+        refreshUndo()
         try {
           localStorage.setItem(KEY, JSON.stringify(ink))
           const el = $('.pen-saved')
@@ -349,122 +446,198 @@
           clearTimeout(savedT)
           savedT = setTimeout(() => el.classList.remove('show'), 1200)
         } catch {
-          alert('存不下來（這台裝置的空間滿了，或是無痕模式）')
+          $('.pen-warn').hidden = false
+          setOn(true)
         }
       }
 
-      // ── 輸入：Apple Pencil 一律畫；手指只有開了「用手指畫」才畫；電腦的滑鼠也可以畫 ──
-      let cur = null // 正在畫的這一筆：{ block, s, el, W, rect, id }
-      let erasing = null // 正在擦：{ block, removed: [] }
-      let swallowClick = false
-      const canDraw = (e) => st.on && (e.pointerType === 'pen' || e.pointerType === 'mouse' || (st.finger && e.pointerType === 'touch'))
+      // ── 輸入 ──
+      // Apple Pencil 隨時都能寫（不用先按筆）；手指只有開了「用手指畫」才寫；電腦的滑鼠要先按筆
+      const canDraw = (e) => e.pointerType === 'pen' || (st.on && (e.pointerType === 'mouse' || (st.finger && e.pointerType === 'touch')))
+      let erasing = null // 正在擦
+      // 剛畫完一筆：同一張卡上接著來的 click 吞掉（筆畫在選項上不會變成選了它）；只吞 0.4 秒內、真的點擊
+      let swallowUntil = 0
+      let swallowBlock = null
+      let lastPenT = -1e9
+      let lastDownType = ''
       function pt(e, rect) {
         const W = rect.width
         return [r4((e.clientX - rect.left) / W), r4((e.clientY - rect.top) / W), e.pointerType === 'pen' ? r4(e.pressure || 0.5) : 0.5]
       }
+      const events = (e) => {
+        const ces = e.getCoalescedEvents?.() // 一次收齊筆的每一個點（iPadOS 18.2 以後；舊版只有一點）
+        return ces?.length ? ces : [e]
+      }
+      // 點到線段的距離（快速畫的線，點和點之間可能隔很遠：中間也要擦得到）
+      function segDist(px, py, ax, ay, bx, by) {
+        const dx = bx - ax
+        const dy = by - ay
+        const L = dx * dx + dy * dy
+        const t = L ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L)) : 0
+        return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+      }
+      // 橡皮擦：從上一個位置到這個位置整段都算（快速劃過也擦得到）
       function eraseAt(e) {
         const { block, removed } = erasing
-        const rect = block.getBoundingClientRect()
+        const rect = box(block)
         const W = rect.width
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
         const list = ink[block.dataset.ink] || []
-        const keep = list.filter((s) => {
-          const r = (s.w * W) / 2 + 10
-          const hit = s.p.some(([px, py]) => Math.hypot(px * W - x, py * W - y) < r)
-          if (hit) removed.push(s)
-          return !hit
-        })
-        if (keep.length !== list.length) {
-          ink[block.dataset.ink] = keep
-          render(block)
+        let changed = false
+        for (const ce of events(e)) {
+          const x = ce.clientX - rect.left
+          const y = ce.clientY - rect.top
+          const [lx, ly] = erasing.last || [x, y]
+          erasing.last = [x, y]
+          for (let i = list.length - 1; i >= 0; i--) {
+            const s = list[i]
+            const r = (s.w * W) / 2 + 10
+            const hit = s.p.some((a, j) => {
+              const b = s.p[j + 1] || a
+              // 筆畫的每一段 vs 橡皮擦這一段：取兩端和中間幾個點量距離
+              for (let k = 0; k <= 4; k++) {
+                const ex = lx + ((x - lx) * k) / 4
+                const ey = ly + ((y - ly) * k) / 4
+                if (segDist(ex, ey, a[0] * W, a[1] * W, b[0] * W, b[1] * W) < r) return true
+              }
+              return false
+            })
+            if (hit) {
+              removed.push(s)
+              list.splice(i, 1)
+              changed = true
+            }
+          }
         }
+        if (changed) render(block)
+      }
+      function dropCur() {
+        if (!cur) return
+        cancelAnimationFrame(cur.raf)
+        cur.el.remove()
+        cur = null
       }
       document.addEventListener(
         'pointerdown',
         (e) => {
+          lastDownType = e.pointerType
+          if (e.pointerType === 'pen') {
+            lastPenT = performance.now()
+            if (cur && cur.s.pr === 0) dropCur() // 筆優先：手指（或手掌）正在畫的那一筆丟掉
+            if (st.finger) setFinger(false) // 有 Apple Pencil 就不用手指畫（手掌才不會畫到）
+          }
           if (!canDraw(e) || e.button > 0 || cur || erasing) return
           const block = e.target.closest('.pen-target')
           if (!block) return
           e.preventDefault()
-          try {
-            block.setPointerCapture(e.pointerId) // 筆滑出卡片外也繼續畫這一筆
-          } catch {}
+          const tap = !!e.target.closest(TAPPABLE)
+          if (!st.on && !tap) setOn(true) // 筆開始寫：工具列出來（可以換顏色）；只是點按鈕就不用
           if (st.tool === 'eraser') {
-            erasing = { block, removed: [], id: e.pointerId }
+            erasing = { block, removed: [], id: e.pointerId, last: null }
             return eraseAt(e)
           }
-          const rect = block.getBoundingClientRect()
-          const tool = TOOLS[st.tool]
+          const rect = box(block)
+          const t = TOOLS[st.tool]
           const size = SIZES[st.size]
-          const s = { t: tool.t, c: tool.c, w: r4((tool.t === 'hl' ? size.hl : size.pen) / rect.width), pr: e.pointerType === 'pen' ? 1 : 0, p: [pt(e, rect)] }
+          const s = { t, k: st.tool, w: r4((t === 'hl' ? size.hl : size.pen) / rect.width), pr: e.pointerType === 'pen' ? 1 : 0, p: [pt(e, rect)] }
           const { hl, pen } = layers(block)
           const el = pathEl(s, rect.width)
-          ;(s.t === 'hl' ? hl : pen).append(el)
-          cur = { block, s, el, rect, id: e.pointerId, raf: 0 }
+          ;(t === 'hl' ? hl : pen).append(el)
+          cur = { block, s, el, rect, id: e.pointerId, raf: 0, x0: e.clientX, y0: e.clientY, t0: performance.now(), tap, moved: false }
         },
         { passive: false },
       )
-      document.addEventListener(
-        'pointermove',
-        (e) => {
-          if (erasing && e.pointerId === erasing.id) return eraseAt(e)
-          if (!cur || e.pointerId !== cur.id) return
-          e.preventDefault()
-          // 一次收齊筆的每一個點（Apple Pencil 移動很快時，瀏覽器會把好幾個點合成一個事件）
-          const ces = e.getCoalescedEvents?.()
-          for (const ce of ces?.length ? ces : [e]) cur.s.p.push(pt(ce, cur.rect))
-          if (!cur.raf)
-            cur.raf = requestAnimationFrame(() => {
-              if (!cur) return
-              cur.raf = 0
-              cur.el.setAttribute('d', strokeD(cur.s, cur.rect.width, false))
-            })
-        },
-        { passive: false },
-      )
+      document.addEventListener('pointermove', (e) => {
+        if (e.pointerType === 'pen' && e.buttons) lastPenT = performance.now() // 筆懸空（新款 iPad 會偵測）不算在寫
+        if (erasing && e.pointerId === erasing.id) return eraseAt(e)
+        if (!cur || e.pointerId !== cur.id) return
+        if (!cur.moved && Math.hypot(e.clientX - cur.x0, e.clientY - cur.y0) > TAP_MOVE) {
+          cur.moved = true
+          if (!st.on) setOn(true)
+        }
+        cur.rect = box(cur.block) // 頁面如果捲動了，這一筆不會跟著跑偏
+        for (const ce of events(e)) cur.s.p.push(pt(ce, cur.rect))
+        if (!cur.raf)
+          cur.raf = requestAnimationFrame(() => {
+            if (!cur) return
+            cur.raf = 0
+            cur.el.setAttribute('d', strokeD(cur.s, cur.rect.width, false))
+          })
+      })
       function end(e) {
+        if (e.pointerType === 'pen') lastPenT = performance.now()
         if (erasing && e.pointerId === erasing.id) {
           if (erasing.removed.length) {
             undo.push({ k: 'del', key: erasing.block.dataset.ink, list: erasing.removed })
             save()
           }
+          swallowUntil = performance.now() + 400
+          swallowBlock = erasing.block
           erasing = null
-          swallowClick = true
           return
         }
         if (!cur || e.pointerId !== cur.id) return
-        const { block, s, el } = cur
+        const { block, s, el, tap, moved, t0 } = cur
+        // 筆在按鈕上「點一下」：當成按它（播發音、選選項），不留點、不吞 click
+        if (tap && !moved && performance.now() - t0 < TAP_MS) return dropCur()
+        // 被系統取消：手指（多半是手掌）那一筆丟掉；筆寫到一半被取消，寫好的部分留著
+        if (e.type === 'pointercancel' && (s.pr === 0 || !moved)) return dropCur()
         cancelAnimationFrame(cur.raf)
         cur = null
-        el.setAttribute('d', strokeD(s, block.getBoundingClientRect().width))
+        el.setAttribute('d', strokeD(s, box(block).width))
         ;(ink[block.dataset.ink] ||= []).push(s)
         undo.push({ k: 'add', key: block.dataset.ink, s })
         save()
-        swallowClick = true // 筆畫在選項上：不要變成「點了這個選項」
+        swallowUntil = performance.now() + 400
+        swallowBlock = block
       }
       document.addEventListener('pointerup', end)
       document.addEventListener('pointercancel', end)
+      document.addEventListener('lostpointercapture', end) // 漏掉放開的事件也要收尾（不然之後都畫不了）
+      // 切到別的 App、鎖螢幕：寫到一半的那一筆先存起來
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && cur) end({ type: 'pointerup', pointerId: cur.id, pointerType: '' })
+      })
       document.addEventListener(
         'click',
         (e) => {
-          if (!swallowClick) return
-          swallowClick = false
-          if (e.target.closest('.pen-target')) {
+          const inCard = e.target.closest?.('.pen-target')
+          const stop = () => {
             e.preventDefault()
             e.stopPropagation()
           }
+          if (e.isTrusted && performance.now() < swallowUntil && swallowBlock?.contains(e.target)) {
+            swallowUntil = 0
+            return stop()
+          }
+          // 手掌：筆正在寫或剛寫完，手指／手掌碰到卡片上的按鈕不算
+          if (e.isTrusted && inCard && lastDownType === 'touch' && !st.finger && (cur || performance.now() - lastPenT < PALM_MS)) stop()
         },
         true,
       )
-      // 下一次真的點擊之前清掉（畫完之後手指點選項要能點）
-      document.addEventListener('pointerdown', (e) => {
-        if (!canDraw(e)) swallowClick = false
-      }, true)
-      // Apple Pencil 在卡片上：不要捲動頁面（手指照常捲動）
-      const stylus = (e) => st.on && [...e.touches].some((t) => t.touchType === 'stylus') && e.target.closest?.('.pen-target')
-      document.addEventListener('touchstart', (e) => stylus(e) && e.preventDefault(), { passive: false })
-      document.addEventListener('touchmove', (e) => stylus(e) && e.preventDefault(), { passive: false })
+      // Apple Pencil 在卡片上：不要捲動頁面（手指照常捲動）；只掛在卡片上，不拖慢整頁的捲動
+      const stylus = (e) => [...e.touches].some((t) => t.touchType === 'stylus')
+      for (const b of blocks) {
+        b.addEventListener('touchstart', (e) => stylus(e) && e.preventDefault(), { passive: false })
+        b.addEventListener('touchmove', (e) => (stylus(e) || cur) && e.preventDefault(), { passive: false })
+      }
+
+      // ── 試寫用：藍色單字點了會念、選項點了會標起來（App 裡本來就有） ──
+      document.addEventListener('click', (e) => {
+        const w = e.target.closest('.say')
+        if (w) {
+          w.classList.add('speaking')
+          setTimeout(() => w.classList.remove('speaking'), 700)
+          try {
+            speechSynthesis.cancel()
+            const u = new SpeechSynthesisUtterance(w.textContent)
+            u.lang = 'en-US'
+            speechSynthesis.speak(u)
+          } catch {}
+          return
+        }
+        const o = e.target.closest('.opt')
+        if (o) $$('.opt', o.parentElement).forEach((x) => x.classList.toggle('sel', x === o))
+      })
 
       // ── 工具列 ──
       const bar = $('.pen-bar')
@@ -475,8 +648,30 @@
       }
       function setTool(t) {
         st.tool = t
+        if (t !== 'eraser') st.lastPen = t
         $$('[data-tool]', bar).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tool === t)))
         document.body.classList.toggle('pen-eraser', t === 'eraser')
+      }
+      function setFinger(on) {
+        st.finger = on
+        $('[data-finger]', bar).setAttribute('aria-pressed', String(on))
+        document.body.classList.toggle('pen-finger', on)
+      }
+      // 沒有東西可以復原：復原鍵變淡
+      const refreshUndo = () => $('[data-undo]', bar).setAttribute('aria-disabled', String(!undo.length))
+      function doUndo() {
+        const u = undo.pop()
+        if (!u) return
+        if (u.k === 'clear') {
+          ink = u.prev
+          blocks.forEach(render)
+          return save()
+        }
+        const list = (ink[u.key] ||= [])
+        if (u.k === 'add') ink[u.key] = list.filter((s) => s !== u.s)
+        else list.push(...u.list)
+        render($(`.pen-target[data-ink="${u.key}"]`))
+        save()
       }
       $('.pen-fab').onclick = () => setOn(true)
       bar.addEventListener('click', (e) => {
@@ -488,33 +683,29 @@
           const z = SIZES[st.size]
           b.setAttribute('aria-label', `粗細：${z.k}`)
           $('.size-ic', b).style.height = z.bar + 'px'
-          if (st.tool === 'eraser') setTool('black')
+          if (st.tool === 'eraser') setTool(st.lastPen) // 換粗細＝要寫字：回到剛剛用的那支筆
           return
         }
-        if (b.hasAttribute('data-finger')) {
-          st.finger = !st.finger
-          b.setAttribute('aria-pressed', String(st.finger))
-          document.body.classList.toggle('pen-finger', st.finger)
-          return
-        }
-        if (b.hasAttribute('data-undo')) {
-          const u = undo.pop()
-          if (!u) return
-          const list = (ink[u.key] ||= [])
-          if (u.k === 'add') ink[u.key] = list.filter((s) => s !== u.s)
-          else list.push(...u.list)
-          render($(`.pen-target[data-ink="${u.key}"]`))
-          return save()
-        }
+        if (b.hasAttribute('data-finger')) return setFinger(!st.finger)
+        if (b.hasAttribute('data-undo')) return doUndo()
         if (b.hasAttribute('data-clear')) {
-          if (!confirm('把這一頁的筆跡全部清掉？')) return
+          if (!Object.values(ink).some((l) => l?.length) || !confirm('把這一頁的筆跡全部清掉？（按「復原」可以拿回來）')) return
+          undo.push({ k: 'clear', prev: ink })
           ink = {}
-          undo.length = 0
           blocks.forEach(render)
           return save()
         }
         if (b.hasAttribute('data-done')) return setOn(false)
       })
+      // 接鍵盤的 iPad、電腦：⌘Z／Ctrl+Z 復原
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+          e.preventDefault()
+          doUndo()
+        }
+      })
+      refreshUndo()
+      window.__penReady = true
     </script>
   </body>
 </html>
