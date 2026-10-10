@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.22.5（10/10）'
+const VERSION = '2.22.6（10/10）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -8505,6 +8505,118 @@ function setView(html, { tabs = true } = {}) {
       : ''
   }`
   $('[data-back]', root)?.addEventListener('click', navBack)
+  const nav = $('.tabbar', root)
+  if (nav) initTabbar(nav, list.map(([h]) => h).join('|'))
+}
+// ───────── 2.22.6 分頁列的玻璃珠（老師 10/10：像 iPhone 一樣，滑過去會跟著走；手機、iPad、電腦都要）─────────
+// 換頁：玻璃珠從上一頁的位置滑到新的那格（帶一點回彈）。按住左右拖：玻璃珠跟著手指（或滑鼠）走、稍微拉長變扁，
+// 經過的圖示稍微放大；放開就彈到最近的那一格並換頁。「減少動態效果」的人不動畫（CSS 處理）。
+let BEAD = null // 上一次玻璃珠的位置：{ key（這組分頁）, x, w }
+function initTabbar(nav, key) {
+  const bead = document.createElement('span')
+  bead.className = 'tb-bead'
+  bead.setAttribute('aria-hidden', 'true')
+  nav.prepend(bead)
+  nav.classList.add('has-bead')
+  const links = $$('a', nav)
+  const box = (a) => ({ x: a.offsetLeft, w: a.offsetWidth })
+  const place = (p, animate) => {
+    bead.classList.toggle('still', !animate)
+    bead.style.width = p.w + 'px'
+    bead.style.transform = `translateX(${p.x}px)`
+  }
+  const on = $('a.on', nav)
+  if (!on) {
+    bead.style.opacity = '0'
+    BEAD = null
+  } else {
+    const to = box(on)
+    if (BEAD && BEAD.key === key && (BEAD.x !== to.x || BEAD.w !== to.w)) {
+      place(BEAD, false) // 先放在上一頁的位置，下一格畫面再滑過去
+      requestAnimationFrame(() => requestAnimationFrame(() => place(to, true)))
+    } else place(to, false)
+    BEAD = { key, ...to }
+  }
+  // 轉向、視窗變大變小：直接對齊（不動畫）
+  const ro = new ResizeObserver(() => {
+    const a = $('a.on', nav)
+    if (!a || !nav.isConnected) return ro.disconnect()
+    const p = box(a)
+    if (BEAD && BEAD.key === key && BEAD.x === p.x && BEAD.w === p.w) return
+    place(p, false)
+    BEAD = { key, ...p }
+  })
+  ro.observe(nav)
+  // 按住拖曳
+  let drag = null
+  let swallow = false
+  const mags = (cx) => {
+    for (const a of links) {
+      const d = Math.abs(a.offsetLeft + a.offsetWidth / 2 - cx) / a.offsetWidth
+      a.style.setProperty('--mag', cx == null ? '1' : String(1 + 0.16 * Math.max(0, 1 - d)))
+    }
+  }
+  nav.addEventListener('pointerdown', (e) => {
+    if (e.button > 0 || !on) return
+    drag = { id: e.pointerId, x0: e.clientX, last: e.clientX, t: performance.now(), v: 0, moved: false, w: on.offsetWidth }
+    nav.classList.add('pressing')
+  })
+  nav.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return
+    if (!drag.moved && Math.abs(e.clientX - drag.x0) < 6) return
+    if (!drag.moved) {
+      drag.moved = true
+      nav.classList.add('dragging')
+      try {
+        nav.setPointerCapture(e.pointerId)
+      } catch {}
+    }
+    const now = performance.now()
+    drag.v = drag.v * 0.6 + ((e.clientX - drag.last) / Math.max(1, now - drag.t)) * 0.4 // px/ms，平滑一下
+    drag.last = e.clientX
+    drag.t = now
+    const r = nav.getBoundingClientRect()
+    const last = links[links.length - 1]
+    const cx = Math.max(links[0].offsetLeft + drag.w / 2, Math.min(last.offsetLeft + last.offsetWidth - drag.w / 2, e.clientX - r.left))
+    const s = Math.min(0.22, Math.abs(drag.v) * 0.12) // 越快拉得越長
+    const w = drag.w * (1 + s)
+    bead.classList.add('still')
+    bead.style.width = w + 'px'
+    bead.style.transform = `translateX(${cx - w / 2}px) scaleY(${1 - s * 0.35})`
+    mags(cx)
+  })
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return
+    const moved = drag.moved
+    drag = null
+    nav.classList.remove('pressing', 'dragging')
+    mags(null)
+    if (!moved) return // 只是點一下：照一般的連結換頁
+    swallow = true
+    setTimeout(() => (swallow = false), 400)
+    const x = e.clientX - nav.getBoundingClientRect().left
+    const mid = (a) => a.offsetLeft + a.offsetWidth / 2
+    const pick = links.reduce((b, a) => (Math.abs(mid(a) - x) < Math.abs(mid(b) - x) ? a : b))
+    const p = box(pick)
+    place(p, true)
+    BEAD = { key, ...p }
+    const h = pick.getAttribute('href')
+    if (h !== (location.hash || '#/')) setTimeout(() => go(h), 180) // 先讓玻璃珠彈過去，再換頁
+  }
+  nav.addEventListener('pointerup', end)
+  nav.addEventListener('pointercancel', end)
+  nav.addEventListener('dragstart', (e) => e.preventDefault()) // 電腦：連結不要被拖走（不然收不到移動）
+  // 拖曳放開時瀏覽器還會送一個 click：吞掉（上面已經換頁了）
+  nav.addEventListener(
+    'click',
+    (e) => {
+      if (!swallow) return
+      swallow = false
+      e.preventDefault()
+      e.stopPropagation()
+    },
+    true,
+  )
 }
 function go(h) {
   if (POP_PENDING) return void (PENDING_GO = h) // 剛關掉視窗、瀏覽紀錄還在退：退完再換頁
