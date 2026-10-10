@@ -34,7 +34,7 @@ with sync_playwright() as p:
     A.wait_for_selector(".home")
     check(wait_until(lambda: A.locator('[data-mod="u1a"]').count() == 0 and A.locator('.mod[data-mod="s1"]').count() == 1), "student sees only Starter")
     check("老師上課後開放" in txt(A, ".home"), "student sees locked note (no details)")
-    check("Who's That" not in txt(A, ".home"), "locked lesson title hidden")
+    check("家人與職業" not in txt(A, ".home"), "locked lesson title hidden")
     time.sleep(0.3)
     A.screenshot(path=str(OUT / "e2-student-locked.png"), full_page=True)
     # 開放下一課（一鍵）→ 學生回到 App 就看到，還會提醒

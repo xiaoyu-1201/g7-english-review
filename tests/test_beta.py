@@ -59,6 +59,6 @@ with sync_playwright() as p:
         pg.wait_for_selector(".page")
         check(not pg.evaluate("window.__app.teacherDevice()") and pg.locator(".beta-sec").count() == 0, f"{who}: a faked teacher e-mail alone is not enough")
     # 試用中的功能不會跳「新功能」視窗給學生（NEWS 最新版還是 2.22）
-    check(A.evaluate("window.__app.VERSION").startswith("2.22.1"), "version is 2.22.1")
+    check(A.evaluate("window.__app.VERSION") >= "2.22.1", "version is 2.22.1 or later")
     b.close()
 report()

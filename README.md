@@ -1,9 +1,9 @@
-# 小宇英文：英文段考複習（國一・翰林版七上 Starter～Review 3）
+# 小宇英文：英文段考複習（國一・國中英語七上 Starter～Review 3）
 
 📱 **網址**：https://xiaoyu-1201.github.io/g7-english-review/
 （iPad 用 Safari 打開 → 分享 →「加入主畫面」，就像 App 一樣全螢幕使用）
 
-家教上課與學生回家自學用的互動複習，範圍是第一次段考：Starter、Unit 1〈Who's That Handsome Boy?〉、Unit 2〈Where Are My Pencils?〉、Review 1。
+家教上課與學生回家自學用的互動複習，範圍是國中英語七上的三次段考（Starter～Review 3）。題目、文章、聽力稿都是自編，不含任何出版社課本原文。
 
 ## 有什麼
 
@@ -69,3 +69,8 @@
 純 HTML／CSS／JavaScript，沒有任何套件，不需要建置。本機預覽：`python -m http.server 5181`。
 
 參考用的教材有版權，放在 repo 外面，不放進這個 repo。
+
+## 版權與授權
+
+- 題目、文章、聽力稿、觀念卡、重點總整理：© 2026 小宇英文，保留所有權利。未經同意請勿轉載、複製或用於商業用途。
+- 用到的開放授權字型、程式和服務：見 [授權與致謝](licenses.html)。資料怎麼使用：見 [隱私權說明](privacy.html)。

@@ -9399,5 +9399,21 @@ a.row {
   text-decoration: none;
 }
 a.row:active {
-  background: var(--fill);
+  background: var(--fill2);
+}
+/* 2.22.2 歡迎畫面最下面：隱私權說明・授權與致謝 */
+.w-legal {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--label2);
+}
+.w-legal a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  color: var(--blue);
+}
+.w-legal {
+  padding-bottom: env(safe-area-inset-bottom); /* iPhone 底部的橫條不要壓到連結 */
 }

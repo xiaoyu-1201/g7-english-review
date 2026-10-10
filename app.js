@@ -1,11 +1,11 @@
-// 小宇英文：國一英文段考複習 App（翰林版七上 Starter～Review 3，三次段考；10/9 老師定名，學生叫他小宇老師）
+// 小宇英文：國一英文段考複習 App（國中英語七上 Starter～Review 3，三次段考；10/9 老師定名，學生叫他小宇老師）
 // 純前端：紀錄存在這台裝置（localStorage），可以匯出／匯入合併。
 import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, EXPLAIN, VOICE_SAMPLE, EXAMS, SPEAK_PAIRS, SPEAK_QA } from './content.js'
 import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.22.1（10/10）'
+const VERSION = '2.22.2（10/10）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2483,7 +2483,7 @@ function viewHome() {
     `<div class="page home">
       <header class="lg-head"><div class="eyebrow">${new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</div>
         <div class="lg-row"><h1>${hello}</h1>${sd ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
-        <p class="lg-sub">翰林版七上｜${esc(examLabel())}${cd ? '　·　' + cd : ''}</p>
+        <p class="lg-sub">國中英語七上｜${esc(examLabel())}${cd ? '　·　' + cd : ''}</p>
       </header>
       ${hwCardHTML(myRole() === 'parent') || '<section class="hw-card" hidden></section>'}
       ${studentsCardHTML()}
@@ -2557,7 +2557,7 @@ function viewHome() {
         <summary><div class="sec-h"><div><h2>交卷前 30 秒檢查</h2><p>每次寫完考卷，照順序看一遍。</p></div><span class="fold-chev">${ICON.chev}</span></div></summary>
         <ol class="check-ol">${CHECKLIST.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>
       </details>
-      <p class="foot">內容依翰林版七上課本範圍自編（不含課本原文）· 版本 ${VERSION}</p>
+      <p class="foot">內容依國中英語七上課程範圍自編（不含任何出版社課本原文）· 版本 ${VERSION}</p>
     </div>`,
   )
   const v = $('.home')
@@ -2688,6 +2688,7 @@ function parentIntro() {
       <div class="news-row"><span class="w-ic">🌱</span><div><b>孩子的花園＋要注意的重點<em class="new-tag">新</em></b><p>每一課一株植物，越大代表學會越多；孩子還沒練回來的地方，對照重點總整理畫出來。</p></div></div>
       <div class="news-row"><span class="w-ic">📱</span><div><b>加到主畫面</b><p>${IS_IOS ? '按 Safari 下面的「分享」→「加入主畫面」' : '在瀏覽器選單選「加到主畫面」'}，下次直接點圖示打開，不用再找 LINE。</p></div></div>
     </div>
+    <p class="w-legal"><a href="privacy.html">隱私權說明</a>・<a href="licenses.html">授權與致謝</a></p>
     <div class="sheet-actions"><button class="btn primary" data-close>知道了</button></div></div>`)
 }// all：設定頁的「更新紀錄」（每一版都列）
 function newsSheet(all = false) {
@@ -2724,7 +2725,7 @@ function newsSheet(all = false) {
     `<div class="welcome">
       <img class="w-logo" src="icon.svg" alt="" width="64" height="64">
       <h2>歡迎使用小宇英文</h2>
-      <p class="sheet-p">翰林版七上・段考複習與會考題型</p>
+      <p class="sheet-p">國中英語七上・段考複習與會考題型</p>
       <div class="w-rows">
         <div class="w-row"><span class="w-ic">💡</span><div><b>先猜，再看重點</b><p>每個單元先用觀念卡讓你猜規則，自己想過的記得更牢。</p></div></div>
         <div class="w-row"><span class="w-ic">🔎</span><div><b>抓出粗心</b><p>大寫、標點、空格寫錯都會被抓出來，養成「寫完檢查」的習慣。</p></div></div>
@@ -2737,6 +2738,7 @@ function newsSheet(all = false) {
       </div>
       <button class="link w-code" data-code>有老師給的代碼？點這裡輸入</button>
       <p class="w-note">選錯了沒關係，之後到「設定 → 身分」就能改。老師請按 <button class="link w-teacher" data-teacher>老師登入</button></p>
+      <p class="w-legal"><a href="privacy.html">隱私權說明</a>・<a href="licenses.html">授權與致謝</a></p>
     </div>`,
     { onClose: markSeen },
   )
@@ -4084,9 +4086,11 @@ function viewSettings() {
         <button class="row" data-x="update"><span class="row-t">檢查更新</span><span class="row-r">${VERSION}</span>${ICON.chev}</button>
         <button class="row" data-x="news"><span class="row-t">更新紀錄<small>每一版新增了什麼</small></span>${ICON.chev}</button>
         <button class="row" data-x="install"><span class="row-t">加到主畫面（像 App 一樣打開）</span>${ICON.chev}</button>
+        <a class="row" href="privacy.html"><span class="row-t">隱私權說明<em class="new-tag">新</em><small>收了哪些資料、存在哪裡、誰看得到</small></span>${ICON.chev}</a>
+        <a class="row" href="licenses.html"><span class="row-t">授權與致謝<em class="new-tag">新</em><small>用到的開放授權字型、程式和服務</small></span>${ICON.chev}</a>
         ${teacherMode() ? '<button class="row danger" data-x="wipe"><span class="row-t">清除這個裝置的練習紀錄</span></button>' : ''}
       </div>${teacherMode() ? '<p class="group-f">「清除」只會清掉在這個裝置上自己練習的紀錄（例如測試時做的題目）；學生的紀錄在雲端，不受影響。</p>' : ''}</div>
-      <p class="foot">題目、文章、聽力稿都是依翰林版七上各課的字彙與句型自編，不含課本原文。<br>紀錄存在這個瀏覽器裡；清除瀏覽器資料會一起刪除，記得定期匯出備份。</p>
+      <p class="foot">題目、文章、聽力稿都是依國中英語七上的字彙與句型自編，不含任何出版社課本原文。<br>紀錄存在這個瀏覽器裡；清除瀏覽器資料會一起刪除，記得定期匯出備份。</p>
     </div>`,
   )
   const v = $('.page')

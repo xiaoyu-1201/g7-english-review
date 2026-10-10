@@ -1,4 +1,4 @@
-// 第二、三次段考（翰林版七上 Unit 3～Review 3）
+// 第二、三次段考（國中英語七上 Unit 3～Review 3）
 // 文章、聽力稿、題目全部自編，只參考課本的單字和句型範圍，不是照抄課本。
 // 格式和 content.js 一樣；app 載入時由 content.js 合併進 MODULES、PASSAGES、LESSONS、SPEAK、TAGS。
 // 插圖：fig.k ＝ clock 時鐘｜clocks 三個時鐘｜cal 月曆｜signs 標誌｜people 人物在做什麼｜pic 場景；pic: true ＝ 選項是圖
@@ -105,7 +105,7 @@ export const PASSAGES2 = {
 
 // ── 單元 ──
 export const MODULES2 = {
-  // ───────────────────────── Unit 3：Open the Magic Door ─────────────────────────
+  // ───────────────────────── Unit 3：指令與能力 ─────────────────────────
   u3a: {
     unit: 'Unit 3',
     title: '單字：規則與標誌',
@@ -720,7 +720,7 @@ export const MODULES2 = {
     ],
   },
 
-  // ───────────────────────── Unit 4：What Time Is the Concert? ─────────────────────────
+  // ───────────────────────── Unit 4：星期與時間 ─────────────────────────
   u4a: {
     unit: 'Unit 4',
     title: '單字：星期與時間',
@@ -1460,7 +1460,7 @@ export const LESSONS2 = [
   {
     id: 'L4',
     title: 'Unit 3',
-    sub: "Open the Magic Door · 祈使句、Let's、can、受格",
+    sub: "指令與能力 · 祈使句、Let's、can、受格",
     exam: 'e2',
     modules: ['u3a', 'u3b', 'u3c', 'u3d', 'u3e'],
     plan: [
@@ -1474,7 +1474,7 @@ export const LESSONS2 = [
   {
     id: 'L5',
     title: 'Unit 4',
-    sub: 'What Time Is the Concert? · 星期、時間、現在進行式',
+    sub: '星期與時間 · 幾點、星期幾、現在進行式',
     exam: 'e2',
     modules: ['u4a', 'u4b', 'u4c', 'u4d', 'u4e'],
     plan: [
@@ -1546,7 +1546,7 @@ Object.assign(PASSAGES2, {
 })
 
 Object.assign(MODULES2, {
-  // ───────────────────────── Unit 5：What's the Date? ─────────────────────────
+  // ───────────────────────── Unit 5：月份與日期 ─────────────────────────
   u5a: {
     unit: 'Unit 5',
     title: '單字：月份與節日',
@@ -2091,7 +2091,7 @@ Object.assign(MODULES2, {
     ],
   },
 
-  // ───────────────────────── Unit 6：There Are Some Elephants Over There ─────────────────────────
+  // ───────────────────────── Unit 6：描述地點與數量 ─────────────────────────
   u6a: {
     unit: 'Unit 6',
     title: '單字：動物',
@@ -2798,7 +2798,7 @@ LESSONS2.push(
   {
     id: 'L7',
     title: 'Unit 5',
-    sub: "What's the Date? · 月份、序數、日期",
+    sub: "月份與日期 · 序數、日期的說法",
     exam: 'e3',
     modules: ['u5a', 'u5b', 'u5c', 'u5d', 'u5e'],
     plan: [
@@ -2812,7 +2812,7 @@ LESSONS2.push(
   {
     id: 'L8',
     title: 'Unit 6',
-    sub: 'There Are Some Elephants Over There · There is／are、some／any',
+    sub: '描述地點與數量 · There is／are、some／any',
     exam: 'e3',
     modules: ['u6a', 'u6b', 'u6c', 'u6d', 'u6e'],
     plan: [

@@ -1,4 +1,4 @@
-// 題庫與觀念卡（翰林版七上）：這個檔是第一次段考範圍（Starter～Review 1）；第二、三次段考在 content2.js，最下面合併
+// 題庫與觀念卡（國中英語七上）：這個檔是第一次段考範圍（Starter～Review 1）；第二、三次段考在 content2.js，最下面合併
 // 文章、聽力稿、題目都是依課本字彙與句型自編，不是照抄課本。
 // 題型：learn 觀念卡｜mcq 單選｜multi 複選｜fill 填空｜write 整句書寫｜order 重組｜spot 抓錯｜sort 分類｜place 放位置
 // [[word]] ＝ 可以點來聽的單字；\n ＝ 換行；___ ＝ 填空格
@@ -59,7 +59,7 @@ export const LESSONS = [
   {
     id: 'L1',
     title: '第 1 堂',
-    sub: 'Starter ＋ Unit 1 · Who\'s That Handsome Boy?',
+    sub: 'Starter ＋ Unit 1 · 字母、be 動詞、家人與職業',
     modules: ['s1', 's2', 's3', 'u1a', 'u1b', 'u1c', 'u1d', 'u1e'],
     plan: [
       '上課前到「設定」打開「先說答案，再看選項」：選擇題的選項會先遮住，學生要先口頭說出答案。',
@@ -72,7 +72,7 @@ export const LESSONS = [
   {
     id: 'L2',
     title: '第 2 堂',
-    sub: 'Unit 2 ＋ Review 1 · Where Are My Pencils?',
+    sub: 'Unit 2 ＋ Review 1 · 文具與房間、名詞複數、位置介系詞',
     modules: ['u2a', 'u2b', 'u2c', 'u2d', 'u2e', 'u2f', 'u2g', 'r1'],
     plan: [
       '開頭先開「錯題本」，把第 1 堂錯的題目重做一次（隔一段時間再做，記得最牢）。',
@@ -346,11 +346,11 @@ export const MODULES = {
       {
         t: 'mcq',
         id: 's2-04',
-        q: 'My family ___ very dear to me.',
+        q: 'My family ___ very important to me.',
         opts: ['am', 'is', 'are'],
         a: 1,
         why: { 2: 'family 在這裡是「一個家庭」，當單數用 is。' },
-        ex: 'family 指「一個家庭」時用單數 is。課本：My family is very dear to me.',
+        ex: 'family 指「一個家庭」時用單數 is：My family is very important to me.',
         tags: ['be'],
         lv: 2,
       },
