@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.22.7（10/10）'
+const VERSION = '2.22.8（10/10）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -5619,7 +5619,9 @@ const Sync = {
       for (const [uid, m] of Object.entries(this.members)) {
         if (before.has(uid) || uid === Auth.uid() || !m) continue
         const nm = this.students[m.sid]?.name
-        toast(`新成員加入：${ROLES[m.role] || '成員'}${nm ? `（${nm}）` : ''}・${m.dev || '裝置'}`, ROLE_IC[m.role] || '👋')
+        // 2.22.8：剛為了重傳連結打開加入 → 對方加回來時，提醒老師關掉（不然連結被轉傳也加得進來）
+        const reopened = Date.now() - (+lsGet(REOPEN_KEY) || 0) < 2 * DAY && this.open
+        toast(`新成員加入：${ROLES[m.role] || '成員'}${nm ? `（${nm}）` : ''}・${m.dev || '裝置'}${reopened ? '・要關掉開放加入嗎？' : ''}`, ROLE_IC[m.role] || '👋', reopened ? { label: '關掉', fn: () => closeJoining() } : null)
       }
     // 上課模式：把這個學生在其他裝置的紀錄也合併進這台
     if (ACTIVE && (!top || top === 'a')) this.mergeAttempts('/', this.D.a?.[ACTIVE])
@@ -8203,6 +8205,19 @@ function checkRecords(silent = false) {
 }
 
 // 成員管理（管理裝置才看得到）：依學生分組的名單、移除、允許重新加入、暫停加入、老師的其他裝置
+const STALE_DAYS = 10 // 一週一堂課：學生 10 天以上沒打開就算很久
+const STALE_DAYS_PARENT = 21 // 家長本來就一、兩週才看一次
+const REOPEN_KEY = 'g7review:reopened'
+async function closeJoining() {
+  try {
+    await Sync.setOpen(false)
+    lsSet(REOPEN_KEY, '0')
+    toast('已暫停加入：連結和代碼暫時不能用', '🔒')
+    if (location.hash === '#/manage') viewManage(true)
+  } catch {
+    toast('沒有成功，請到「成員管理」關掉', '⚠️')
+  }
+}
 function viewManage(keepScroll = false) {
   const y = window.scrollY
   if (!Sync.isAdmin()) {
@@ -8220,6 +8235,17 @@ function viewManage(keepScroll = false) {
     const l = Sync.D.live?.[m.sid]?.[m.pid]
     return l?.ts ? `最後上線 ${agoText(l.ts)}` : '還沒上線'
   }
+  // 2.22.8 很久沒上線（老師 10/10：學生、家長沒加到主畫面，Safari 清掉了怎麼辦）：STALE_DAYS 天以上沒打開 → 標出來、可以一鍵重傳加入連結
+  const seenTs = (m) => {
+    const own = (list) => list.reduce((t, x) => (x.d === m.pid && x.ts > t ? x.ts : t), 0)
+    // 有上線紀錄或這台的作答／練習就看最新的那個（清除紀錄後 live 不見也不會誤標）；完全沒有才用加入時間
+    return Math.max(Sync.D.live?.[m.sid]?.[m.pid]?.ts || 0, own(Sync.attemptsOf(m.sid)), own(Sync.sessionsOf(m.sid))) || m.at || 0
+  }
+  const staleDays = (m) => {
+    const t = m.role !== 'teacher' && Sync.students[m.sid] ? seenTs(m) : 0
+    return t ? daysAgo(t) : 0
+  }
+  const stale = (m) => staleDays(m) >= (m.role === 'parent' ? STALE_DAYS_PARENT : STALE_DAYS)
   // 這台是什麼：身分（老師改過名稱的話）、裝置種類（iPhone、iPad…）、什麼時候加入
   const devDesc = (m) => {
     const l = Sync.D.live?.[m.sid]?.[m.pid]
@@ -8234,15 +8260,17 @@ function viewManage(keepScroll = false) {
     return v === VERSION.replace(/（.*$/, '') ? `<span class="mg-ver ok">${ICON.check}最新版 ${esc(v)}</span>` : `<span class="mg-ver old">${v ? `舊版 ${esc(v)}` : '舊版'}・下次打開 App 會自動更新</span>`
   }
   const row = ([uid, m]) =>
-    `<div class="row mg-row"><span class="mg-ic">${ROLE_IC[m.role] || '❔'}</span><span class="row-t"><b>${esc(m.dev && !Object.values(ROLES).includes(m.dev) ? m.dev : ROLES[m.role] || '成員')}${(m.at || 0) > seen ? '<em class="mg-new">新加入</em>' : ''}</b><small>${esc(devDesc(m))}・${last(m)}</small>${ver(m)}</span><span class="mg-acts"><button class="btn ghost small-btn" data-rename="${uid}">改名稱</button><button class="btn ghost small-btn danger-t" data-remove="${uid}">移除</button></span></div>`
+    `<div class="row mg-row"><span class="mg-ic">${ROLE_IC[m.role] || '❔'}</span><span class="row-t"><b>${esc(m.dev && !Object.values(ROLES).includes(m.dev) ? m.dev : ROLES[m.role] || '成員')}${(m.at || 0) > seen ? '<em class="mg-new">新加入</em>' : ''}${stale(m) ? `<em class="mg-stale">${seenTs(m) === m.at ? '加入 ' : ''}${staleDays(m)} 天${seenTs(m) === m.at ? '還沒上線' : '沒上線'}</em>` : ''}</b><small>${esc(devDesc(m))}・${last(m)}</small>${ver(m)}</span><span class="mg-acts">${stale(m) ? `<button class="btn primary small-btn" data-resend="${esc(m.sid)}" data-role="${m.role === 'parent' ? 'parent' : 'student'}">重傳加入連結</button>` : ''}<button class="btn ghost small-btn" data-rename="${uid}">改名稱</button><button class="btn ghost small-btn danger-t" data-remove="${uid}">移除</button></span></div>`
   const ids = studentIds()
   const loose = mems.filter(([, m]) => m.role !== 'teacher' && !Sync.students[m.sid])
+  const nStale = mems.filter(([, m]) => stale(m)).length
   setView(
     `<div class="page narrow manage-page">
       ${header('成員管理', '看得到練習紀錄的裝置都列在這裡，可以隨時移除。大家都加入之後，把「開放加入」關掉，連結和代碼就算被轉傳也加不進來。', '', true)}
       <div class="group"><div class="list form">
         <div class="row field"><span class="row-t">開放加入<small>${Sync.open ? '現在用連結、QR Code、代碼都能加入' : '現在不能加入（已加入的不受影響）'}</small></span><div class="seg small" id="open-seg"><button class="${Sync.open ? 'on' : ''}" data-open="1">開</button><button class="${Sync.open ? '' : 'on'}" data-open="0">關</button></div></div>
       </div></div>
+      ${nStale ? `<section class="card mg-stale-card"><b>${nStale} 台裝置很久沒上線<em class="new-tag">新</em></b><p>學生 ${STALE_DAYS} 天以上、家長 ${STALE_DAYS_PARENT} 天以上沒打開。可能是很久沒打開，或 Safari 清掉了 App 的資料。按「重傳加入連結」傳給他們；重新加入後，雲端的作答紀錄會自己回來。舊的那台可以移除。</p></section>` : ''}
       ${ids
         .map((sid) => {
           const rows = mems.filter(([, m]) => m.sid === sid && m.role !== 'teacher')
@@ -8332,6 +8360,22 @@ function viewManage(keepScroll = false) {
         t.disabled = true
         await Sync.unblock(t.dataset.unblock)
         toast('已允許重新加入', '✅')
+      }
+      if (t.dataset.resend) {
+        const sid = t.dataset.resend
+        const role = t.dataset.role === 'parent' ? 'parent' : 'student'
+        if (Sync.open) return shareStudent(sid, role)
+        return confirmSheet('先打開「開放加入」？', '現在是暫停加入：對方點連結或輸入代碼也加不進來。打開之後再傳；大家都加回來之後，記得回到這裡關掉。', '打開並傳送', async () => {
+          try {
+            await Sync.setOpen(true)
+            lsSet(REOPEN_KEY, String(Date.now())) // 對方加回來時提醒老師關掉
+            viewManage(true)
+            toast('已開放加入', '🔓')
+            setTimeout(() => shareStudent(sid, role), 350)
+          } catch {
+            toast('沒有成功，請檢查網路再試一次', '⚠️')
+          }
+        })
       }
       if (t.dataset.open) {
         await Sync.setOpen(t.dataset.open === '1')

@@ -9666,3 +9666,67 @@ a.row:active {
     flex: 1;
   }
 }
+/* 2.22.8 成員管理：很久沒上線的裝置 */
+.mg-stale {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--sticky, var(--care-bg));
+  color: var(--sticky-ink, var(--orange));
+  white-space: nowrap;
+}
+.mg-stale-card {
+  margin-bottom: 16px;
+  background: var(--sticky, var(--care-bg));
+  color: var(--sticky-ink, var(--label));
+}
+.mg-stale-card b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 17px;
+}
+.mg-stale-card p {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+.mg-acts {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.mg-new,
+.mg-stale {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  /* 手機、分割畫面：按鈕排到文字下面，橫著放（不要把左邊的字擠成一條） */
+  .manage-page .mg-row > .btn {
+    margin-left: 44px;
+  }
+  .manage-page .mg-row {
+    flex-wrap: wrap;
+  }
+  .manage-page .mg-row .row-t {
+    flex: 1 1 calc(100% - 48px);
+  }
+  .manage-page .mg-acts {
+    flex: 1 1 100%;
+    flex-direction: row; /* 舊規則在手機上改成直排：這裡改回橫排 */
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 44px;
+    gap: 8px;
+  }
+  .manage-page .mg-acts .btn {
+    flex: 0 0 auto;
+    width: auto;
+  }
+}
+.mg-stale {
+  vertical-align: 2px; /* 跟「新加入」一樣高 */
+}
