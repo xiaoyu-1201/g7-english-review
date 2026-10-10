@@ -9417,3 +9417,27 @@ a.row:active {
 .w-legal {
   padding-bottom: env(safe-area-inset-bottom); /* iPhone 底部的橫條不要壓到連結 */
 }
+/* 2.22.3 手機的分頁列：貼齊螢幕底部、底色延伸到最下面（10/10 老師：Safari 裡分頁列浮起來，下面露出一截內容很怪）
+   按鈕的高度維持原樣（Safari 底部的觸控區會被瀏覽器拿走，10/8 修過），只是把底色往下鋪滿；iPad、電腦也一樣（浮著的分頁列下面會露出一條內容） */
+@media all {
+  .tabbar,
+  [data-skin='notebook'] .tabbar {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: none;
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--sep);
+    border-radius: 0;
+    box-shadow: none;
+    padding: 6px max(10px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  }
+}
+@media (max-width: 699px) and (display-mode: browser) {
+  .tabbar,
+  [data-skin='notebook'] .tabbar {
+    bottom: 0;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+}

@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.22.2（10/10）'
+const VERSION = '2.22.3（10/10）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
