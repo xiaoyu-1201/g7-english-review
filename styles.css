@@ -9393,4 +9393,11 @@ p, small, .task, .wq-h, .qk-s, .sp-mode small {
   [data-skin='notebook'] .chip.lv2 {
     background: rgba(169, 178, 234, 0.16);
   }
+}/* 2.22.1 試用新功能：設定頁第一個「連結列」——字不要變藍、按下去有回饋（跟按鈕列一樣） */
+a.row {
+  color: inherit;
+  text-decoration: none;
+}
+a.row:active {
+  background: var(--fill);
 }

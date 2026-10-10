@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.22（10/10）'
+const VERSION = '2.22.1（10/10）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2867,6 +2867,7 @@ function teacherSignOut() {
   confirmSheet('登出老師帳號？', '登出之後，這個裝置就看不到學生的資料。資料都還在雲端，再登入就能看到。', '登出', () => {
     Sync.unpair()
     Auth.signOut()
+    lsSet(BETA_KEY, 'off') // 換另一個老師帳號登入：試用從關開始
     S.profile.role = 'student'
     S.profile.device = ''
     save()
@@ -4077,6 +4078,7 @@ function viewSettings() {
       </div><p class="group-f">「先說答案」：自己想出答案再對照，比直接看選項記得更牢（生成效應）。學生回家自己練時可以關掉。<br>有實體鍵盤時：按 1～4 選選項，Enter 檢查／下一題。</p></div>
 
       <div id="sync-sec">${syncSettingsHTML(role)}</div>
+      ${betaSettingsHTML()}
 
       <div class="group"><div class="group-h">App</div><div class="list">
         <button class="row" data-x="update"><span class="row-t">檢查更新</span><span class="row-r">${VERSION}</span>${ICON.chev}</button>
@@ -4114,6 +4116,12 @@ function viewSettings() {
       const k = b.parentElement.dataset.seg
       if (k === 'role') {
         setRole(b.dataset.v)
+        return viewSettings()
+      }
+      if (k === 'beta') {
+        if (!teacherDevice()) return
+        lsSet(BETA_KEY, b.dataset.v)
+        toast(b.dataset.v === 'on' ? '這個裝置開始試用新功能（學生、家長看不到）' : '已關掉試用', '🧪')
         return viewSettings()
       }
       S.profile[k] = k === 'goal' ? +b.dataset.v : b.dataset.v
@@ -5131,6 +5139,11 @@ const lsGet = (k) => {
     return ''
   }
 }
+const lsSet = (k, v) => {
+  try {
+    localStorage.setItem(k, v)
+  } catch {}
+}
 const dbBase = () => (lsGet('g7review:db') || SYNC_DB).replace(/\/+$/, '')
 const ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789' // 沒有 0／o、1／l／i，念、抄都不會看錯
 const randStr = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => ALPHA[b % 31]).join('')
@@ -5975,6 +5988,26 @@ async function lookupCode(raw) {
 }
 // 這台是老師後台（建立後台或用老師連結加入），而且不在上課模式
 const teacherMode = () => !ACTIVE && !!S.sync?.code && myRole() === 'teacher'
+// ───────── 試用新功能（2.22.1，老師 10/10：大功能先在老師自己的 iPad 試，確認了才對學生、家長開放） ─────────
+// 只有「老師帳號登入、管理後台」的裝置看得到開關；功能本身每次也檢查是不是老師的裝置（有人改了學生裝置的紀錄也打不開）
+// 「新功能」視窗不會提試用中的功能（對所有人開放的那一版才寫進 NEWS）
+const BETA_KEY = 'g7review:beta'
+const BETA_LIST = [
+  // ready：已經放進 App、打開開關就會出現；link：還在獨立的試寫頁
+  { k: 'pen', ic: '✏️', name: '畫筆（像 Goodnotes）', desc: 'Apple Pencil 直接在重點卡、題目卡上寫；現在先在試寫頁試手感', link: 'pen-test.html' },
+]
+const teacherDevice = () => teacherMode() && Auth.isTeacher() && !!S.sync?.owner // teacherMode：學生模式（把 iPad 借學生）時不算
+// 功能真的打開：還要雲端確認過這台是老師後台（Sync.isAdmin）；只改裝置上的紀錄沒有用。沒網路時試用功能先不出現
+const beta = (k) => teacherDevice() && Sync.isAdmin() && lsGet(BETA_KEY) === 'on' && BETA_LIST.some((f) => f.k === k && f.ready)
+function betaSettingsHTML() {
+  if (!teacherDevice()) return ''
+  const on = lsGet(BETA_KEY) === 'on'
+  const anyReady = BETA_LIST.some((f) => f.ready) // 都還在試寫頁：開關沒有作用，先不放
+  return `<div class="group beta-sec"><div class="group-h">試用新功能<em class="new-tag">新</em></div><div class="list form">
+    ${anyReady ? `<div class="row field"><span class="row-t">在這個裝置上試用<small>只有老師的裝置看得到；學生、家長不受影響</small></span><div class="seg small" data-seg="beta"><button class="${on ? 'on' : ''}" data-v="on">開</button><button class="${on ? '' : 'on'}" data-v="off">關</button></div></div>` : ''}
+    ${BETA_LIST.map((f) => (f.ready ? `<div class="row"><span class="row-ic">${esc(f.ic)}</span><span class="row-t">${esc(f.name)}<small>${esc(f.desc)}</small></span><span class="row-r">${beta(f.k) ? '試用中' : '關'}</span></div>` : `<a class="row" href="${esc(f.link)}" target="_blank" rel="noopener"><span class="row-ic">${esc(f.ic)}</span><span class="row-t">${esc(f.name)}<small>${esc(f.desc)}</small></span>${ICON.chev}</a>`)).join('')}
+  </div><p class="group-f">${anyReady ? '試用中的功能只會出現在這個裝置上；' : '目前的功能都還在試寫頁，點上面打開（在新的分頁）。'}確認沒問題之後，才會對所有學生、家長開放。</p></div>`
+}
 // 管理裝置：還沒看過的新成員（首頁通知、設定分頁的紅點）
 function newMembers() {
   if (!Sync.isAdmin() || ACTIVE) return []
@@ -8616,4 +8649,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // 給測試用
-window.__app = { SPOTS, focusOf, lineText, spotsOf, S, ITEM, MODULES, MOD_ORDER, UNITS, EXAMS, SPEAK_PAIRS, pdfSlug, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }
+window.__app = { beta, teacherDevice, SPOTS, focusOf, lineText, spotsOf, S, ITEM, MODULES, MOD_ORDER, UNITS, EXAMS, SPEAK_PAIRS, pdfSlug, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }
