@@ -9587,3 +9587,82 @@ a.row:active {
   -webkit-user-drag: none; /* 電腦用滑鼠拖：不要變成「拖曳連結」 */
   user-select: none;
 }
+/* 2.22.7 加到主畫面的提醒（學生、家長的 iPhone／iPad Safari） */
+.a2hs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--sticky, var(--card));
+}
+.a2hs-t {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.a2hs-t b {
+  font-size: 17px;
+}
+.a2hs-t p {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--label2);
+  text-wrap: pretty;
+}
+.a2hs-acts {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+/* 2.22.7 QA 後：說明視窗裡的「分享」圖示是一行字的大小；加好之後要做的事用提醒框；卡片排版 */
+.sheet ol.plan svg,
+.sheet .sheet-p svg {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+  display: inline-block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.install-tip {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--sticky, var(--care-bg));
+  color: var(--sticky-ink, var(--label));
+}
+.install-tip b {
+  font-size: 16px;
+}
+.install-tip p,
+.install-p {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.65;
+  text-wrap: wrap;
+  word-break: normal;
+}
+.a2hs-t b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.a2hs-t b .new-tag {
+  margin-left: 0;
+}
+.a2hs-t p {
+  max-width: 38em;
+}
+@media (max-width: 600px) {
+  .a2hs-acts {
+    flex: 1 1 100%;
+  }
+  .a2hs-acts .btn {
+    flex: 1;
+  }
+}

@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.22.6（10/10）'
+const VERSION = '2.22.7（10/10）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2485,6 +2485,7 @@ function viewHome() {
         <div class="lg-row"><h1>${hello}</h1>${sd ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
         <p class="lg-sub">國中英語七上｜${esc(examLabel())}${cd ? '　·　' + cd : ''}</p>
       </header>
+      ${a2hsCardHTML()}
       ${hwCardHTML(myRole() === 'parent') || '<section class="hw-card" hidden></section>'}
       ${studentsCardHTML()}
 
@@ -4003,23 +4004,7 @@ async function exportData() {
   const data = { app: 'g7-english-review', v: 1, at: Date.now(), profile: S.profile, attempts: S.attempts, sessions: S.sessions, flash: S.flash }
   const d = new Date()
   const name = `英文複習紀錄-${S.profile.name || '學生'}-${S.profile.device || '裝置'}-${d.getMonth() + 1}${String(d.getDate()).padStart(2, '0')}.json`
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' })
-  const file = new File([blob], name, { type: 'application/json' })
-  try {
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: '英文複習紀錄' })
-      return
-    }
-  } catch (e) {
-    if (e.name === 'AbortError') return
-  }
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = name
-  document.body.append(a)
-  a.click()
-  setTimeout(() => (URL.revokeObjectURL(a.href), a.remove()), 1000)
-  toast('備份檔已下載', '💾')
+  await saveJSONFile(name, data, '英文複習紀錄', '備份檔已下載')
 }
 async function importData(e) {
   const f = e.target.files?.[0]
@@ -4167,8 +4152,8 @@ function viewSettings() {
     if (x === 'voice') Voice.speak(VOICE_SAMPLE)
     if (x === 'update') checkUpdate()
     if (x === 'news') return newsSheet(true)
-    if (x === 'install')
-      sheet(`<h2 class="sheet-title">加到主畫面</h2><ol class="plan"><li>用 <b>Safari</b> 打開這個網址。</li><li>點上方或下方的「分享」按鈕 ${ICON.share}。</li><li>選「加入主畫面」，再按「新增」。</li></ol><p class="sheet-p">之後從主畫面打開，就像一般 App 一樣全螢幕，沒有網路也能練習（聽力需要裝置語音）。Android 的 Chrome：右上角選單 →「加到主畫面」。</p>`)
+    if (x === 'install') return installSheet()
+    if (x === 'backup') return backupAll()
   })
 }
 // 設定頁的「即時同步」區塊：依這台的狀態顯示（還沒加入／暫停加入或被移除／已加入／管理裝置）
@@ -4195,6 +4180,7 @@ function syncSettingsHTML(role) {
     rows = Auth.isTeacher()
       ? `<div class="row static">${dot}<span class="row-t">老師帳號<small>${esc(Auth.email())}・${status}</small></span></div>
       <button class="row" data-x="students"><span class="row-ic">${ICON.people}</span><span class="row-t">學生<small>新增學生、傳 QR Code／連結／代碼、看即時作答、上課</small></span>${ICON.chev}</button>
+      ${Sync.isAdmin() && teacherDevice() ? `<button class="row" data-x="backup"><span class="row-ic">💾</span><span class="row-t">備份全部學生資料<em class="new-tag">新</em><small>${esc(lastBackupText())}</small></span>${ICON.chev}</button>` : ''}
       ${Sync.isAdmin() ? `<button class="row" data-x="manage"><span class="row-ic">👥</span><span class="row-t">成員管理<small>看哪些裝置加入了、移除裝置、暫停加入</small></span>${n ? `<b class="row-badge">${n}</b>` : ''}${ICON.chev}</button>` : ''}
       <button class="row danger" data-x="signout"><span class="row-t">登出老師帳號</span></button>`
       : `<button class="row" data-go="#/teacher"><span class="row-ic">🔑</span><span class="row-t">${st === 'upgrade' ? '設定老師帳號' : '登入老師帳號'}<small>老師後台要登入才能看學生</small></span>${ICON.chev}</button>
@@ -6012,6 +5998,103 @@ function betaSettingsHTML() {
     ${BETA_LIST.map((f) => (f.ready ? `<div class="row"><span class="row-ic">${esc(f.ic)}</span><span class="row-t">${esc(f.name)}<small>${esc(f.desc)}</small></span><span class="row-r">${beta(f.k) ? '試用中' : '關'}</span></div>` : `<a class="row" href="${esc(f.link)}" target="_blank" rel="noopener"><span class="row-ic">${esc(f.ic)}</span><span class="row-t">${esc(f.name)}<small>${esc(f.desc)}</small></span>${ICON.chev}</a>`)).join('')}
   </div><p class="group-f">${anyReady ? '試用中的功能只會出現在這個裝置上；' : '目前的功能都還在試寫頁，點上面打開（在新的分頁）。'}確認沒問題之後，才會對所有學生、家長開放。</p></div>`
 }
+// ───────── 2.22.7 資料安全（10/10 老師「盲點檢查」後：「那都要，你幫我做」）─────────
+// ① 備份全部學生資料（老師）：雲端免費方案沒有自動備份 → 一鍵把整個後台（學生、作答、練習、作業、老師的話）存成一個檔；
+//    學生總覽「要處理的事」每 30 天提醒一次。口說錄音不包含（檔案太大，放在另一個地方）。
+//    檔案裡不放加入代碼（班級代碼、學生的 6 碼代碼）：檔案萬一傳出去，別人也不能拿來加入。
+// ② 加到主畫面（已加入的學生、家長的 iPhone／iPad Safari）：Safari 太久沒打開會清掉網站資料，主畫面的 App 不會 → 首頁提醒、教怎麼加。
+// ③ 主畫面 App、老師的裝置：跟瀏覽器要「不要自動清掉」（支援的才有用）。
+const BACKUP_KEY = 'g7review:lastbackup'
+const BACKUP_SNOOZE = 'g7review:backupsnooze'
+const A2HS_KEY = 'g7review:a2hs'
+// 存成檔案：iPhone、iPad、Android 用分享（存到「檔案」）；電腦直接下載（電腦的分享視窗沒有「存檔」）
+async function saveJSONFile(name, data, title, doneText) {
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' })
+  const file = new File([blob], name, { type: 'application/json' })
+  const mobile = IS_IOS || /Android/i.test(navigator.userAgent)
+  try {
+    if (mobile && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title })
+      return true
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return false
+  }
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = name
+  document.body.append(a)
+  a.click()
+  setTimeout(() => (URL.revokeObjectURL(a.href), a.remove()), 1000)
+  if (doneText) toast(doneText, '💾')
+  return true
+}
+const lastBackupText = () => {
+  const t = +lsGet(BACKUP_KEY) || 0
+  return `${t ? `這台裝置上次備份：${fmtDate(t)}` : '還沒備份過・建議每個月一次'}・檔案有學生資料，不要傳到群組`
+}
+// 要不要提醒備份：有學生、這台 30 天沒備份；從沒備份過的話，等最早的學生加入滿 7 天或已經有作答才提醒
+function backupDue(ids) {
+  if (!ids.length || !teacherDevice()) return false
+  if (Date.now() - (+lsGet(BACKUP_SNOOZE) || 0) < 30 * DAY) return false
+  const lb = +lsGet(BACKUP_KEY) || 0
+  if (lb) return Date.now() - lb > 30 * DAY
+  const first = Math.min(...ids.map((s) => Sync.students[s]?.at || Date.now()))
+  return Date.now() - first > 7 * DAY || ids.some((s) => Sync.attemptsOf(s).length)
+}
+async function backupAll() {
+  if (!teacherDevice() || !Sync.isAdmin()) return toast('要在老師的裝置、連上網路才能備份', '⚠️')
+  if (!Sync.loaded) return toast('雲端資料還沒載入，等幾秒再按一次', '⏳')
+  const n = Object.keys(Sync.D?.students || {}).length
+  if (!n) return toast('還沒有學生資料可以備份', 'ℹ️')
+  // 複製一份再拿掉加入代碼、即時狀態（即時狀態不用備份）
+  const D = JSON.parse(JSON.stringify(Sync.D))
+  for (const st of Object.values(D.students || {})) {
+    delete st.code
+    delete st.codeExp
+  }
+  delete D.tkey
+  delete D.live
+  const d = new Date()
+  const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const data = { app: 'xiaoyu-english-backup', v: 1, version: VERSION, at: Date.now(), students: n, data: D }
+  const ok = await saveJSONFile(`小宇英文-全部學生備份-${ymd}.json`, data, '小宇英文：全部學生備份', '')
+  if (!ok) return
+  lsSet(BACKUP_KEY, String(Date.now()))
+  if ($('[data-x="backup"] small')) $('[data-x="backup"] small').textContent = lastBackupText()
+  toast(`已備份 ${n} 位學生的資料${Sync.status === 'on' ? '' : '（這是連線中斷前的資料）'}；請存到「檔案」或雲端硬碟`, '💾')
+  if (location.hash === '#/students') viewStudents(true) // 提醒拿掉
+}
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+function a2hsCardHTML() {
+  // 只給已經加入老師後台的學生、家長（沒加入的人紀錄只在 Safari 裡，換到主畫面會像紀錄不見了）
+  if (!IS_IOS || isStandalone() || ACTIVE || teacherMode() || myRole() === 'teacher' || !S.sync?.code || !S.seen?.intro) return ''
+  if (Date.now() - (+lsGet(A2HS_KEY) || 0) < 7 * DAY) return ''
+  return `<section class="card a2hs"><div class="a2hs-t"><b>📱 加到主畫面，紀錄比較安全<em class="new-tag">新</em></b><p>從主畫面的圖示打開，Safari 就不會<span class="nowrap">清掉紀錄</span>。加好之後，要跟老師拿 <span class="nowrap">6 碼代碼再加入一次</span>。</p></div><div class="a2hs-acts"><button class="btn primary small-btn" data-a2hs="how">怎麼加</button><button class="btn ghost small-btn" data-a2hs="later">之後再說</button></div></section>`
+}
+function installSheet() {
+  const who = myRole() === 'parent' ? '家長' : '學生'
+  sheet(`<h2 class="sheet-title">加到主畫面</h2>
+    <ol class="plan"><li>先連上網路、打開一次這個 App，讓紀錄都傳上雲端。</li><li>用 <b>Safari</b> 打開這個網址，點<span class="nowrap">「分享」${ICON.share}</span>（找不到就點右下角「⋯」→「分享」）。</li><li>選「加入主畫面」，再按「新增」。</li></ol>
+    <div class="install-tip"><b>加好之後一定要做</b><p>主畫面的 App 和 Safari 的紀錄是分開的：從主畫面打開，在歡迎畫面按「有老師給的代碼？」，輸入老師給的 6 碼代碼，身分選「${who}」，作答紀錄就會回來。</p></div>
+    <p class="sheet-p install-p">Android 的 Chrome：右上角選單 →<span class="nowrap">「加到主畫面」。</span></p>`)
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-a2hs]')
+  if (!b) return
+  if (b.dataset.a2hs === 'how') return installSheet()
+  if (b.dataset.a2hs !== 'later') return
+  lsSet(A2HS_KEY, String(Date.now())) // 「之後再說」：7 天後再提醒
+  b.closest('.a2hs')?.remove()
+})
+try {
+  // 主畫面 App、老師的裝置才要（Firefox 等會跳出詢問，不要嚇到學生）
+  if (isStandalone() || Auth.isTeacher())
+    navigator.storage
+      ?.persisted?.()
+      .then((p) => p || navigator.storage.persist())
+      .catch(() => {})
+} catch {}
 // 管理裝置：還沒看過的新成員（首頁通知、設定分頁的紅點）
 function newMembers() {
   if (!Sync.isAdmin() || ACTIVE) return []
@@ -6429,6 +6512,7 @@ function viewLiveHome(keepScroll = false) {
     `<div class="page narrow live-page parent-prog">
       ${header('學習進度', `${name} 每一課做到哪裡、各項練習的成績`, syncPill(true), !parentMode())}
       ${parentMode() ? '' : liveSegHTML('home')}
+      ${parentMode() ? a2hsCardHTML() : ''}
       ${parentProgressHTML(list, sess, myUnits(), l, name)}
     </div>`,
   )
@@ -6691,8 +6775,12 @@ function viewStudents(keepScroll = false) {
     }
     if (card) return go('#/student/' + sid + (S.ui?.stuTab === 'prep' ? '/prep' : S.ui?.stuTab === 'home' ? '/home' : '')) // 上次用的分頁
     const ta = q('[data-todo-act]')
-    if (ta) return ta.dataset.todoAct === 'hw' ? assignSheet(ta.dataset.sid) : go('#/student/' + ta.dataset.sid)
+    if (ta) return ta.dataset.todoAct === 'hw' ? assignSheet(ta.dataset.sid) : ta.dataset.todoAct === 'backup' ? backupAll() : go('#/student/' + ta.dataset.sid)
     const tx = q('[data-todo-x]')
+    if (tx && tx.dataset.todoX === 'backup') {
+      lsSet(BACKUP_SNOOZE, String(Date.now()))
+      return viewStudents(true)
+    }
     if (tx && S.sync) {
       S.sync.todoDone = [...(S.sync.todoDone || []), tx.dataset.todoX].slice(-200)
       save()
@@ -6867,6 +6955,11 @@ function todoList(ids) {
     const hwOpen = hwOf(sid).some(([, h]) => !hwStatus(h, sess, list).all)
     const key = `idle:${sid}/${Math.floor(since / DAY)}`
     if ((last ? idleWarn(days, hwOpen) : days >= 3) && !done.has(key)) out.push({ kind: 'warn', ic: '💤', text: last ? `${name} ${days} 天沒練習` : `${name} 還沒開始練習`, sub: last ? `最後練習：${fmtDate(last)}` : '', sid, key, act: 'hw', actText: '派作業', ts: since })
+  }
+  // 備份提醒（2.22.7）：backupDue 決定；按「知道了」30 天內不再提醒（記在 g7review:backupsnooze）
+  if (backupDue(ids)) {
+    const lb = +lsGet(BACKUP_KEY) || 0
+    out.push({ kind: 'warn', ic: '💾', text: '該備份學生資料了', sub: lb ? `這台裝置上次備份：${fmtDate(lb)}` : '還沒備份過（雲端沒有自動備份）', key: 'backup', act: 'backup', actText: '備份', sid: '', ts: Date.now() + DAY })
   }
   return out.sort((a, b) => b.ts - a.ts).slice(0, 6)
 }

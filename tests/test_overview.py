@@ -18,7 +18,8 @@ with sync_playwright() as p:
     check(wait_until(lambda: T.locator(".sc").count() == 2), "two student cards")
     check(wait_until(lambda: "Review 1" in txt(T, f'.sc[data-card="{amy}"] .sc-stats')), "card shows 開放到 (default first exam)")
     check(wait_until(lambda: "1" in txt(T, f'.sc[data-card="{amy}"] .sc-stats div:first-child b')), "card shows today's count")
-    check(wait_until(lambda: "還沒開始練習" in txt(T, ".stu-page") or T.locator(".todo-card").count() == 0), "todo card ok")
+    # 2.22.7：Amy 已經有作答 → 也可能出現「該備份學生資料了」
+    check(wait_until(lambda: "還沒開始練習" in txt(T, ".stu-page") or "該備份學生資料了" in txt(T, ".stu-page") or T.locator(".todo-card").count() == 0), "todo card ok")
     time.sleep(0.4)
     T.screenshot(path=str(OUT / "e1-overview.png"), full_page=True)
     # 開放的課：Amy 只開 Starter → 學生看不到 Unit 1、Unit 2
