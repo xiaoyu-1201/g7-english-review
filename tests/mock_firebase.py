@@ -143,7 +143,14 @@ def can_write(ps, uid, val, legacy, prov):
         m = mem(c, uid)
         if m.get("sid") != ps[3]:
             return False
-        return sec == "live" or (val is not None and m.get("role") == "student")
+        if sec == "live":
+            # 2.22.1：學生、家長不能刪上線紀錄；家長的紀錄只有家長能寫（學生不能蓋掉或假裝家長）
+            if val is None:
+                return False
+            old = get_node(ps[:5]) if len(ps) == 5 else None
+            role = lambda x: x.get("role") if isinstance(x, dict) else None
+            return m.get("role") == "parent" or (role(val) != "parent" and role(old) != "parent")
+        return val is not None and m.get("role") == "student"
     return False
 
 

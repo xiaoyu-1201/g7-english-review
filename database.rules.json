@@ -114,7 +114,7 @@
           "$sid": {
             ".read": "auth != null && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid",
             "$p": {
-              ".write": "auth != null && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid",
+              ".write": "auth != null && newData.exists() && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid && ((newData.child('role').val() !== 'parent' && data.child('role').val() !== 'parent') || root.child('classes/' + $code + '/members/' + auth.uid + '/role').val() === 'parent')",
               ".validate": "newData.hasChildren(['ts'])"
             }
           }
