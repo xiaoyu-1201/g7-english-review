@@ -9731,6 +9731,60 @@ a.row:active {
   vertical-align: 2px; /* 跟「新加入」一樣高 */
 }
 
+/* ───────── 2.23.1 視窗不被切掉（老師 10/11 截圖：檢討視窗最下面的按鈕被切掉，往上拉放手又彈回）───────── */
+/* 視窗的範圍＝真的看得到的範圍（app.js 用 visualViewport 算 --vvh、--vvt；舊瀏覽器照原本的 inset:0） */
+.sheet-wrap {
+  top: var(--vvt, 0);
+  bottom: auto;
+  height: var(--vvh, 100%);
+}
+.sheet {
+  max-height: calc(var(--vvh, 100dvh) * 0.92);
+}
+@media (min-width: 700px) {
+  .sheet {
+    max-height: calc(var(--vvh, 100dvh) * 0.86);
+  }
+}
+/* 鍵盤打開：底部的橫條被鍵盤蓋住了，不用再留安全區域的空白 */
+.kb .sheet {
+  padding-bottom: 16px;
+}
+.kb .sheet-actions.rr-nav,
+.kb .hw-foot {
+  padding-bottom: 12px;
+}
+/* 檢討（一題一題看）：上一題／下一題釘在視窗最下面，題目再長也不用滑到底才按得到；
+   派作業下面那排也一樣（滑到底不要多一塊空白、筆記本外觀底色跟視窗一樣）。打字時輸入框捲到按鈕列上面 */
+.sheet:has(.rr-nav),
+.sheet:has(.hw-foot) {
+  padding-bottom: 0;
+  scroll-padding-bottom: 96px;
+}
+.hw-foot {
+  bottom: 0;
+}
+[data-skin='notebook'] .hw-foot {
+  background: var(--card);
+}
+.sheet-actions.rr-nav {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 18px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left)));
+  padding: 12px max(18px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background: var(--bg);
+  border-top: 1px solid var(--sep);
+}
+[data-skin='notebook'] .sheet-actions.rr-nav {
+  background: var(--card);
+}
+@media (min-width: 700px) {
+  .sheet-actions.rr-nav {
+    padding-bottom: 16px;
+  }
+}
+
 /* ───────── 2.23 通知、麥克風收音 ───────── */
 /* 成員管理：這台有開通知 */
 /* 「要處理的事」的「知道了」×：線條圖示要描邊才看得到（QA 10/11）；點擊範圍 44px，看起來還是 32px 的灰圓 */

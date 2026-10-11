@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.23（10/11）'
+const VERSION = '2.23.1（10/11）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -841,6 +841,7 @@ function sheet(html, { onClose, wide } = {}) {
   const wrap = document.createElement('div')
   wrap.className = 'sheet-wrap'
   wrap.innerHTML = `<div class="sheet-bg" data-close></div><section class="sheet${wide ? ' wide' : ''}" role="dialog" aria-modal="true"><div class="grabber" aria-hidden="true"></div><button class="sheet-x" data-close aria-label="關閉">${ICON.x}</button><div class="sheet-body">${html}</div></section>`
+  syncVV() // 打開前先量一次看得到的高度
   document.body.append(wrap)
   document.body.classList.add('locked')
   requestAnimationFrame(() => wrap.classList.add('open'))
@@ -860,6 +861,41 @@ function sheet(html, { onClose, wide } = {}) {
     onClose?.()
   }
   return $('.sheet-body', wrap)
+}
+// 視窗用「真的看得到的高度」（老師 10/11 截圖：檢討視窗最下面的「上一題／下一題」被切掉，往上拉放手又彈回）
+// iPhone Safari 的工具列、主畫面 App 的底部：fixed＋inset:0 可能比看得到的範圍還高 → 用 visualViewport 的高度和位置
+// 只在視窗開著時更新（不然工具列一收一放整頁都要重算）；兩指放大不跟著縮（只處理鍵盤和工具列）
+// 鍵盤打開：底部橫條被蓋住，不用再留安全區域（.kb）；視窗變矮了，把正在打字的輸入框捲到看得到的地方
+let syncVV = () => {}
+{
+  const vv = window.visualViewport
+  let raf = 0
+  let last = ''
+  const apply = () => {
+    raf = 0
+    const zoomed = vv && vv.scale > 1.01
+    const h = Math.round(window.__vvh || (vv && !zoomed ? vv.height : innerHeight)) // __vvh：自動測試模擬鍵盤用
+    const t = Math.round(vv && !zoomed && !window.__vvh ? vv.offsetTop : 0)
+    const kb = innerHeight - h > 150
+    if (`${h}|${t}|${kb}` === last) return
+    last = `${h}|${t}|${kb}`
+    const root = document.documentElement
+    root.style.setProperty('--vvh', h + 'px')
+    root.style.setProperty('--vvt', t + 'px')
+    root.classList.toggle('kb', kb)
+    const a = document.activeElement
+    if (kb && a?.closest?.('.sheet')) requestAnimationFrame(() => a.scrollIntoView({ block: 'center' }))
+  }
+  syncVV = () => {
+    cancelAnimationFrame(raf)
+    apply()
+  }
+  const onChange = () => {
+    if (document.body.classList.contains('locked') && !raf) raf = requestAnimationFrame(apply)
+  }
+  vv?.addEventListener('resize', onChange)
+  vv?.addEventListener('scroll', onChange)
+  addEventListener('resize', onChange)
 }
 // how：'swap'＝馬上換另一個視窗；'nav'＝已經在換頁（上一頁、重畫畫面），不要再動瀏覽紀錄
 function closeSheet(how) {
@@ -6725,7 +6761,8 @@ function reviewRun(items, label = '') {
   const b = sheet(`<h2 class="sheet-title">檢討${label ? `：${esc(label)}` : ''}</h2><p class="sheet-p rr-pos"></p><div class="review-slot"></div><div class="sheet-actions rr-nav"><button class="btn ghost" data-rr="-1">上一題</button><button class="btn primary" data-rr="1">下一題</button></div>`, { wide: true, onClose: () => document.removeEventListener('keydown', key) })
   const show = () => {
     const a = items[i]
-    $('.rr-pos', b).textContent = `第 ${i + 1}／${items.length} 題・${modLabel(a)}・${new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}`
+    // 第幾題＋時間就好（哪一課在題目卡右上角已經寫了）；一段一段不斷行
+    $('.rr-pos', b).innerHTML = [`第 ${i + 1}／${items.length} 題`, new Date(a.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })].map((x) => `<span class="nowrap">${esc(x)}</span>`).join('・')
     $('.review-slot', b).replaceChildren(reviewCard(ITEM[a.q], a, '學生的答案'))
     $('[data-rr="-1"]', b).disabled = i === 0
     $('[data-rr="1"]', b).textContent = i === items.length - 1 ? '完成' : '下一題'
