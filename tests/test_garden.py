@@ -33,10 +33,10 @@ with sync_playwright() as p:
     A.goto(link(code, "student", amy))
     wait_until(lambda: st(A) == "member")
     A.goto(URL)
-    A.wait_for_selector(".home .garden .gd-pot img.plant")
-    check("plant-sun-1.webp" in A.get_attribute(".gd-pot img.plant", "src"), "no answers yet: big plant is the sunflower seed")
+    A.wait_for_selector(".home .garden .gd-sill .gd-cell.on img.plant")
+    check("plant-sun-1.webp" in A.get_attribute(".gd-sill .gd-cell.on img.plant", "src"), "no answers yet: the selected pot is the sunflower seed")
     check(wait_until(lambda: A.evaluate(LOADED, ".garden img.plant")), "all garden images load")
-    check(A.locator(".gd-row .gd-cell").count() >= 4, f"one small plant per open unit: {A.locator('.gd-row .gd-cell').count()}")
+    check(A.locator(".gd-sill .gd-cell").count() >= 4, f"one small plant per open unit: {A.locator('.gd-sill .gd-cell').count()}")
     check(txt(A, ".gd-change") == "選植物", f"before picking, the button says 選植物: {txt(A, '.gd-change')}")
     check("再答對 1 題，就會發芽" in txt(A, ".gd-next").replace("\xa0", " "), f"seed stage tells how to sprout: {txt(A, '.gd-next')}")
     check("先學「字母與書寫格式」" in txt(A, ".gd-grow"), f"幫它長大 on an unstarted unit: start its first module (concept cards first): {txt(A, '.gd-grow')}")
@@ -57,7 +57,7 @@ with sync_playwright() as p:
     check("仙人掌" in txt(A, ".sheet") and "毛絨玩偶風" in txt(A, ".sheet"), "names and styles shown")
     A.screenshot(path=str(OUT / "garden-2-pick.png"))
     A.click('.sheet [data-plant="cactus"]')
-    check(wait_until(lambda: "plant-cactus-" in (A.get_attribute(".gd-pot img.plant", "src") or "")), "home now shows the cactus")
+    check(wait_until(lambda: "plant-cactus-" in (A.get_attribute(".gd-sill .gd-cell.on img.plant", "src") or "")), "home now shows the cactus")
     check(txt(A, ".gd-change") == "換植物", "after picking, the button says 換植物")
     check(A.evaluate("JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith('g7review:v1')))).sessions.some((s) => s.k === 'plant' && s.type === 'cactus')"), "pick recorded as a session")
     # 幫它長大 → 練這課還不會的題目
@@ -83,8 +83,8 @@ with sync_playwright() as p:
     wait_until(lambda: st(P) == "member")
     P.click('.tabbar a[href="#/live/home"]')  # 配對完先在「即時作答」（原本的設計），花園在「學習進度」
     check(wait_until(lambda: P.locator(".sheet .news-row").count() >= 2, 10), "parent sees the what's-new sheet once")
-    # 最新兩版的家長版（2.23 通知、2.22 講義外觀）；2.21 的花園說明在「設定 → 更新紀錄」
-    check("每週摘要通知" in txt(P, ".sheet") and "講義筆記本外觀" in txt(P, ".sheet") and "一起看" not in txt(P, ".sheet"), "parent version of what's new (latest two versions)")
+    # 最新兩版的家長版（2.24 小芽和窗台花園、2.23 通知）；更早的在「設定 → 更新紀錄」
+    check("小芽和窗台花園" in txt(P, ".sheet") and "每週摘要通知" in txt(P, ".sheet"), "parent version of what's new (latest two versions)")
     P.screenshot(path=str(OUT / "garden-5-news-parent.png"))
     P.click(".sheet [data-close]")
     time.sleep(0.4)
@@ -103,7 +103,7 @@ with sync_playwright() as p:
     check(N.locator(".sheet .pp-pick").count() == 4, "and can pick a plant right there")
     N.screenshot(path=str(OUT / "garden-6-news.png"))
     N.click('.sheet [data-plant="sakura"]')
-    check(wait_until(lambda: "plant-sakura-" in (N.get_attribute(".gd-pot img.plant", "src") or "")), "picking in the sheet sets the plant")
+    check(wait_until(lambda: "plant-sakura-" in (N.get_attribute(".gd-sill .gd-cell.on img.plant", "src") or "")), "picking in the sheet sets the plant")
     N.reload()
     N.wait_for_selector(".home .garden")
     time.sleep(1.2)

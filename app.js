@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.23.1（10/11）'
+const VERSION = '2.24（10/12）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2496,6 +2496,10 @@ function viewAllNotes(want = '', listen = false) {
 function header(title, sub, right = '', back = false) {
   return `<header class="lg-head">${back ? `<button class="back" data-back>${ICON.back}<span>返回</span></button>` : ''}<div class="lg-row"><div><h1>${esc(title)}</h1>${sub ? `<p class="lg-sub">${esc(sub)}</p>` : ''}</div>${right}</div></header>`
 }
+// 早上 5～11 點、下午 11～18 點、其他是晚上：首頁的早安／午安／晚安、花園的天空、小芽的話都用這個
+function timeOfDay(h = new Date().getHours()) {
+  return h >= 5 && h < 11 ? 'am' : h >= 11 && h < 18 ? 'pm' : 'night'
+}
 function examCountdown() {
   if (!S.profile.exam) return ''
   const d = Math.round((dayStart(new Date(S.profile.exam + 'T00:00').getTime()) - dayStart()) / DAY)
@@ -2512,13 +2516,13 @@ function viewHome() {
     .sort((a, b) => (b[1].t0 || 0) - (a[1].t0 || 0))[0]
   const examBest = S.sessions.filter((s) => s.k === 'exam')
   const hour = new Date().getHours()
-  const hello = hour < 11 ? '早安' : hour < 18 ? '午安' : '晚安'
+  const hello = { am: '早安', pm: '午安', night: '晚安' }[timeOfDay(hour)] // 跟花園的天空同一套時間（2.24 QA）
   const cd = examCountdown()
   Sync.presence({ view: 'home' })
   setView(
     `<div class="page home">
       <header class="lg-head"><div class="eyebrow">${new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</div>
-        <div class="lg-row"><h1>${hello}</h1>${sd ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
+        <div class="lg-row"><h1>${hello}</h1>${sd && !gardenReady() ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
         <p class="lg-sub">國中英語七上｜${esc(examLabel())}${cd ? '　·　' + cd : ''}</p>
       </header>
       ${a2hsCardHTML()}
@@ -2599,6 +2603,19 @@ function viewHome() {
     </div>`,
   )
   const v = $('.home')
+  // 窗台：選到的那一盆捲到中間（課很多、要左右滑的時候）
+  const sill = $('.gd-sill', v)
+  const onCell = sill && $('.gd-cell.on', sill)
+  if (onCell && sill.scrollWidth > sill.clientWidth) sill.scrollLeft = onCell.offsetLeft - (sill.clientWidth - onCell.offsetWidth) / 2
+  // 課多到排不下：兩邊淡出，看得出可以左右滑（滑到最邊那一側就不淡出）
+  if (sill) {
+    const edge = () => {
+      sill.classList.toggle('more-r', sill.scrollLeft + sill.clientWidth < sill.scrollWidth - 2)
+      sill.classList.toggle('more-l', sill.scrollLeft > 2)
+    }
+    edge()
+    sill.addEventListener('scroll', edge, { passive: true })
+  }
   v.addEventListener('click', (e) => {
     const m = e.target.closest('[data-mod]')
     if (m) return startModule(m.dataset.mod)
@@ -2614,6 +2631,11 @@ function viewHome() {
       ;(S.ui ||= {}).gardenUnit = gu.dataset.garden
       save()
       return viewHome()
+    }
+    // 便利貼「作業」：捲到老師的作業
+    if (e.target.closest('[data-sticky="hw"]')) {
+      const hc = $('.home .hw-card:not([hidden])')
+      return hc ? hc.scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' }) : toast('目前沒有老師的作業', '📌')
     }
     if (e.target.closest('[data-plantpick]')) return plantPickSheet()
     if (e.target.closest('[data-growrule]')) return growRulesSheet()
@@ -2642,10 +2664,6 @@ function viewHome() {
   })
   welcome()
   newsMaybe()
-  // 花園：選中的那一課捲到中間（手機上一排放不下，選中的在右邊會看不到；10/9 AI 試玩）
-  const gr = $('.garden .gd-row')
-  const on = gr && $('.gd-cell.on', gr)
-  if (on && gr.scrollWidth > gr.clientWidth) gr.scrollLeft = on.offsetLeft - gr.offsetLeft - (gr.clientWidth - on.offsetWidth) / 2
   // 作業：做完最後一項就恭喜；太久沒抓就重新抓一次
   hwCelebrate()
   if (Sync.ready() && !Sync.isAdmin() && (!Sync.hwAt || Date.now() - Sync.hwAt > 120000)) {
@@ -2669,6 +2687,20 @@ function warmIds() {
 // 不跳：做題中（只在首頁類的畫面）、第一次用 App 的人（先看歡迎畫面）、只修 bug 的版本（NEWS 只列有新功能的版本）
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
+  {
+    v: '2.24',
+    date: '10/12',
+    student: [
+      ['🪟', '窗台花園', '首頁有一扇窗，窗台上每一課一盆植物；長多大，就是那一課學到哪。天空會跟著早上、下午、晚上變。'],
+      ['🌱', '小芽', '小宇英文的吉祥物，坐在窗框上跟你說話：還差幾題長大、連續練了幾天。'],
+      ['📝', '彩色便利貼', '今天練習、連續天數、作業、錯題本，一眼看完；點一下就到那裡。'],
+    ],
+    parent: [['🌱', '小芽和窗台花園', '孩子的首頁換成窗台花園，還有吉祥物「小芽」陪孩子練習。']],
+    teacher: [
+      ['🪟', '學生首頁：窗台花園＋小芽', '每一課一盆植物排在窗台上（不放名字）；小芽提醒還差幾題長大。'],
+      ['📝', '學生首頁：彩色便利貼', '黃＝今天、橘＝連續天數、綠＝作業、粉紅＝錯題本。'],
+    ],
+  },
   {
     v: '2.23',
     date: '10/11',
@@ -3173,9 +3205,32 @@ function gardenHTML(nextBtn, resume) {
       : g.stage < 4 && ids.length
       ? `<button class="resume gd-grow" data-grow="${esc(cur)}"><span class="resume-k">幫它長大<em class="new-tag">新</em></span><span class="resume-t">${g.stage === 3 && g.needBook ? `先練錯題本裡 ${esc(cur)} 的題目` : `練 ${esc(cur)} 還不會的題目`}・${ids.length}&nbsp;題</span>${ICON.chev}</button>${resume ? `<button class="link gd-resume" data-resume="${esc(resume[0])}">或繼續上次：${esc(resume[1].title)}</button>` : ''}`
       : nextBtn
-  return `<section class="garden card">
+  // 2.24 窗台花園＋小芽（老師 10/12 選 A＋小芽）：一扇窗、窗台上每一課一盆（長到哪＝學到哪），天空跟著早安／午安／晚安變；
+  // 小芽（吉祥物）坐在窗框上說一句話。首頁不放名字（只寫「我的花園」）
+  const tod = timeOfDay()
+  const sd = streakDays()
+  const nx = ['發芽', '長葉子', '長花苞', names[4]][g.stage]
+  const say =
+    g.stage < 4 && g.need && g.need <= 3 && !g.needBook
+      ? `再答對 ${g.need} 題，${cur} 就會${nx}！`
+      : t.n && sd >= 2
+        ? `連續 ${sd} 天了，好厲害！`
+        : t.n
+          ? `今天練了 ${t.n} 題，很棒！`
+          : { am: '早安！先做 5 題暖身吧', pm: '午安！今天還沒練喔', night: '睡前練 5 題就好～' }[tod]
+  const scene = `<div class="gd-scene sky-${tod}">
+      ${skyDecoSVG(tod)}
+      <p class="gd-scene-h">我的花園<em class="new-tag">新</em></p>
+      <div class="gd-ya">${xiaoya(t.n ? 'cheer' : tod === 'night' ? 'sleepy' : 'happy')}<p class="gd-say">${(say.match(/[^，！～]+[，！～]?/g) || [say])
+        .map((x) => `<span class="nowrap">${esc(x)}</span>`) // 在標點後面才換行（不會只剩一兩個字掉下去）
+        .join('')}</p></div>
+      <div class="gd-sill" role="group" aria-label="各課的植物，點一盆看那一課">${units
+        .map((u) => `<button class="gd-cell st${gs[u].stage}${u === cur ? ' on' : ''}${u === cur && grown.includes(cur) && !reduceMotion() ? ' grow' : ''}" data-garden="${esc(u)}" aria-pressed="${u === cur}" aria-label="${esc(u)}：${esc(names[gs[u].stage])}">${plantImg(type, gs[u].stage, `small st${gs[u].stage}`)}<span aria-hidden="true">${esc(u)}</span></button>`)
+        .join('')}</div>
+    </div>`
+  return `<section class="garden card has-scene">
+    ${scene}
     <div class="gd-main">
-      <div class="gd-pot s${g.stage}${grown.includes(cur) && !reduceMotion() ? ' grow' : ''}">${plantImg(type, g.stage, 'big')}</div>
       <div class="gd-info">
         <p class="gd-k">${esc(cur)} 的${esc(PLANTS[type].name)}<button class="link gd-change" data-plantpick>${S.profile.plant || S.sessions.some((s) => s.k === 'plant') ? '換植物' : '選植物'}</button></p>
         <h2 class="gd-stage">${names[g.stage]}</h2>
@@ -3185,12 +3240,47 @@ function gardenHTML(nextBtn, resume) {
         <button class="link gd-rule" data-growrule>植物怎麼長大？</button>
       </div>
     </div>
-    <div class="gd-row" role="tablist" aria-label="各課的植物">${units
-      .map((u) => `<button class="gd-cell${u === cur ? ' on' : ''}" data-garden="${esc(u)}" role="tab" aria-selected="${u === cur}">${plantImg(type, gs[u].stage, `small st${gs[u].stage}`)}<span>${esc(u)}</span></button>`)
-      .join('')}</div>
-    <p class="gd-today">今天練習 ${t.n} 題${t.n ? `・答對 ${Math.round(t.acc * 100)}%` : ''}</p>
     <div class="hero-acts">${grow}</div>
-  </section>`
+  </section>
+  ${stickyStatsHTML(t, sd)}`
+}
+// 2.24 彩色便利貼：一種顏色固定一件事（黃＝今天、橘＝連續天數、綠＝作業、粉紅＝錯題本），點了到那裡
+function stickyStatsHTML(t = todayStats(), sd = streakDays()) {
+  const book = bookIds().length
+  const hws = activeHw(Sync.sid()).map(([, , s]) => s)
+  const hd = hws.reduce((n, s) => n + s.done, 0)
+  const ht = hws.reduce((n, s) => n + s.total, 0)
+  const note = (cls, v, k, act) => `<button class="sticky ${cls}" ${act}><b>${v}</b><span>${k}</span></button>`
+  return `<div class="stickies" role="group" aria-label="今天的數字">
+    ${note('s-y', `${t.n}<small> 題</small>`, '今天練習', 'data-go="#/stats"')}
+    ${note('s-o', `${sd}<small> 天</small>`, '連續練習', 'data-go="#/stats"')}
+    ${note('s-g', ht ? `${hd}<small>／${ht}</small>` : '—', ht ? '作業完成' : '沒有作業', 'data-sticky="hw"')}
+    ${note('s-p', `${book}<small> 題</small>`, '錯題本', 'data-go="#/book"')}
+  </div>`
+}
+// 2.24 小芽（小宇英文的吉祥物，老師 10/12 選的）：圓圓的米色身體、頭上兩片葉子；mood：happy（打招呼）／cheer（練過了，舉手歡呼）／sleepy（晚上）
+function xiaoya(mood = 'happy', cls = '') {
+  const eyes =
+    mood === 'sleepy'
+      ? '<path d="M37 72 Q42 77 47 72 M59 72 Q64 77 69 72" stroke="#2b2723" stroke-width="3" fill="none" stroke-linecap="round"/>'
+      : '<circle cx="42" cy="71" r="4.5" fill="#2b2723"/><circle cx="64" cy="71" r="4.5" fill="#2b2723"/><circle cx="43.5" cy="69.5" r="1.4" fill="#fff"/><circle cx="65.5" cy="69.5" r="1.4" fill="#fff"/>'
+  const mouth = mood === 'cheer' ? '<path d="M45 81 Q53 92 61 81 Z" fill="#2b2723"/><path d="M49 86 Q53 89 57 86" fill="#f28ba8"/>' : '<path d="M46 82 Q53 89 60 82" fill="none" stroke="#2b2723" stroke-width="2.6" stroke-linecap="round"/>'
+  const arms =
+    mood === 'cheer'
+      ? '<path d="M18 70 Q8 56 12 46 M88 70 Q98 56 94 46" fill="none" stroke="#2b2723" stroke-width="3" stroke-linecap="round"/>'
+      : '<path d="M18 80 Q10 84 12 92 M88 80 Q96 84 94 92" fill="none" stroke="#2b2723" stroke-width="3" stroke-linecap="round"/>'
+  return `<svg class="xiaoya ${cls}" viewBox="0 0 106 112" aria-hidden="true"><path d="M52 34 C42 12 20 14 16 22 C28 22 40 28 52 36Z" fill="#7fbf5a"/><path d="M54 34 C62 10 88 10 92 20 C78 20 66 28 54 36Z" fill="#9ad16f"/><path d="M53 36 V44" stroke="#5d9a3f" stroke-width="3" stroke-linecap="round"/>${arms}<ellipse cx="53" cy="76" rx="36" ry="33" fill="#fff4dc" stroke="#2b2723" stroke-width="2.6"/>${eyes}<ellipse cx="33" cy="83" rx="5.5" ry="3.2" fill="#ffb3b3" opacity=".85"/><ellipse cx="73" cy="83" rx="5.5" ry="3.2" fill="#ffb3b3" opacity=".85"/>${mouth}</svg>`
+}
+// 窗外的天空：早上太陽＋雲、下午夕陽、晚上月亮＋星星（山坡在 CSS）
+function skyDecoSVG(tod) {
+  const hills = `<svg class="gd-hills" viewBox="0 0 400 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 34 Q70 6 140 28 T280 22 T400 26 V60 H0Z" fill="${tod === 'night' ? '#31406b' : tod === 'pm' ? '#e9c98f' : '#cfe8b8'}"/></svg>`
+  const deco =
+    tod === 'night'
+      ? '<svg class="gd-deco" viewBox="0 0 120 70" aria-hidden="true"><path d="M92 14a16 16 0 1 0 12 26 13 13 0 1 1-12-26z" fill="#ffe9a8"/><g fill="#fff"><circle cx="20" cy="18" r="1.6"/><circle cx="46" cy="34" r="1.2"/><circle cx="64" cy="12" r="1.5"/><circle cx="8" cy="44" r="1"/><circle cx="74" cy="52" r="1.1"/></g></svg>'
+      : tod === 'pm'
+        ? '<svg class="gd-deco" viewBox="0 0 120 70" aria-hidden="true"><circle cx="94" cy="40" r="20" fill="#ff9d4d" opacity=".25"/><circle cx="94" cy="40" r="13" fill="#ff9d4d"/><ellipse cx="34" cy="24" rx="22" ry="7" fill="#fff" opacity=".7"/></svg>'
+        : '<svg class="gd-deco" viewBox="0 0 120 70" aria-hidden="true"><circle cx="96" cy="28" r="22" fill="#ffd95a" opacity=".25"/><circle cx="96" cy="28" r="14" fill="#ffd95a"/><g fill="#fff"><ellipse cx="30" cy="26" rx="22" ry="8"/><ellipse cx="46" cy="21" rx="14" ry="8"/></g></svg>'
+  return hills + deco
 }
 // 生長規則（學生、家長都看得到；老師 10/9：要簡單、寫清楚）
 function growRulesSheet(type = myPlant(), who = 'student') {
@@ -8058,13 +8148,18 @@ const dueText = (t) => {
   const d = new Date(t)
   return `${d.getMonth() + 1}/${d.getDate()}（${'日一二三四五六'[d.getDay()]}）${clockText(t)}前`
 }
+// 首頁要顯示的作業：還沒做完、或做完不到一天的（作業卡和便利貼共用）→ [[id, h, 狀況], ...]
+const activeHw = (sid) =>
+  sid
+    ? hwOf(sid)
+        .map(([id, h]) => [id, h, hwStatus(h, S.sessions, S.attempts)])
+        .filter(([, , st]) => !st.all || Date.now() - Math.max(0, ...st.res.map((x) => x.s?.ts || 0)) < DAY)
+    : []
 // 學生首頁（和家長頁）的「老師的作業」：還沒做完、或做完不到一天的
 function hwCardHTML(readonly = false) {
   const sid = Sync.sid()
   if (!sid || (!Sync.ready() && !S.hwCache)) return ''
-  const list = hwOf(sid)
-    .map(([id, h]) => [id, h, hwStatus(h, S.sessions, S.attempts)])
-    .filter(([, h, st]) => !st.all || Date.now() - Math.max(...st.res.map((x) => x.s?.ts || 0)) < DAY)
+  const list = activeHw(sid)
   if (!list.length) return ''
   return `<section class="card hw-card"><div class="sec-h"><div><h2>📌 老師的作業</h2><p>${readonly ? '孩子做完會自動打勾' : '做完會自動打勾，老師也看得到'}</p></div></div>
     ${list

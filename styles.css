@@ -9731,6 +9731,373 @@ a.row:active {
   vertical-align: 2px; /* 跟「新加入」一樣高 */
 }
 
+/* ───────── 2.24 窗台花園＋小芽＋彩色便利貼（老師 10/12 選 A＋小芽）───────── */
+.garden.has-scene {
+  padding: 0 0 16px;
+  overflow: hidden;
+  background: var(--card);
+}
+.garden.has-scene .gd-main {
+  display: block;
+  padding: 14px 18px 0;
+}
+.garden.has-scene .hero-acts {
+  padding: 0 18px;
+}
+.gd-scene {
+  --wood: #c9a77a;
+  --sill: #b98b5a;
+  --wall: #f3e6d2;
+  position: relative;
+  height: 236px;
+  overflow: hidden;
+  background: linear-gradient(#bfe3f7, #eaf6fb 70%);
+}
+.gd-scene.sky-pm {
+  background: linear-gradient(#ffc98e, #ffe9c9 70%);
+}
+.gd-scene.sky-night {
+  --wall: #e9dcc6;
+  background: linear-gradient(#24305a, #3c4a7a 70%);
+}
+/* 窗框（四邊＋中間一根）：最下面是窗台 */
+.gd-scene::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 50px;
+  border: 7px solid var(--wood);
+  border-bottom: 0;
+  background: linear-gradient(var(--wood), var(--wood)) center / 5px 100% no-repeat;
+  pointer-events: none;
+  z-index: 1;
+}
+/* 窗台（木板）＋下面的牆（放課名） */
+.gd-scene::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 50px;
+  background: linear-gradient(var(--sill) 0 13px, var(--wall) 13px);
+  z-index: 0;
+}
+.gd-hills {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 50px;
+  width: 100%;
+  height: 56px;
+}
+.gd-deco {
+  position: absolute;
+  top: 58px;
+  left: calc(50% - 128px);
+  width: 120px;
+  height: 70px;
+}
+.sky-night .gd-sill::before {
+  /* 晚上：窗台上一圈暖暖的燈光，盆栽看得清楚 */
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 30px;
+  height: 90px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 214, 140, 0.45), transparent);
+  pointer-events: none;
+}
+.gd-scene-h {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  z-index: 2;
+  margin: 0;
+  font-weight: 700;
+  font-size: 18px;
+  font-family: var(--hand, inherit);
+  color: #2b2723;
+}
+.sky-night .gd-scene-h {
+  color: #fff8e6;
+}
+/* 小芽：坐在右上角的窗框上，旁邊一句話 */
+.gd-ya {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100% - 150px);
+}
+.xiaoya {
+  flex: none;
+  width: 58px;
+  height: 61px;
+}
+.gd-say {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border: 1.5px solid #2b2723;
+  border-radius: 12px 12px 3px 12px;
+  background: #fff;
+  color: #2b2723;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 13.5px;
+  line-height: 1.4;
+  font-family: var(--hand, inherit);
+}
+/* 窗台上的盆栽：每一課一盆，越大越接近開花；點了看那一課。課多就左右滑 */
+.gd-sill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-end;
+  gap: 0;
+  padding: 0 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.gd-sill > .gd-cell:first-child {
+  margin-left: auto; /* 排得下：置中；排不下：從最左邊開始 */
+}
+.gd-sill > .gd-cell:last-child {
+  margin-right: auto;
+}
+.gd-sill.more-r {
+  -webkit-mask-image: linear-gradient(90deg, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, #000 86%, transparent);
+}
+.gd-sill.more-l {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%);
+  mask-image: linear-gradient(90deg, transparent, #000 14%);
+}
+.gd-sill.more-l.more-r {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+.gd-sill::-webkit-scrollbar {
+  display: none;
+}
+.garden .gd-sill .gd-cell {
+  flex: 1 0 64px; /* 排得下就平均撐開；課多到排不下就左右滑（不擠成一團） */
+  min-width: 64px;
+  max-width: 130px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+.gd-sill .gd-cell .plant.small {
+  width: auto;
+  /* 每一階段的圖都是同一個畫布（盆子在下面）：一樣大，植物自己會長大；格子窄就跟著縮 */
+  height: auto;
+  max-width: 100%;
+  max-height: 100px;
+  margin: 0 0 -3px; /* 盆底壓在木板上 */
+  transition: transform 0.2s ease;
+}
+.gd-sill .gd-cell span {
+  height: 26px;
+  margin: 19px 0 5px; /* 上面是木板的厚度 */
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b635a;
+  white-space: nowrap;
+}
+.garden .gd-sill .gd-cell.on {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  outline: 0;
+}
+.garden .gd-sill .gd-cell:focus-visible {
+  outline: none;
+}
+.gd-sill .gd-cell:focus-visible span {
+  outline: 2px solid var(--blue);
+}
+.gd-sill .gd-cell.on span {
+  color: #2b2723;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.gd-sill .gd-cell.on .plant.small {
+  transform: translateY(-2px) scale(1.06);
+  filter: drop-shadow(0 0 9px rgba(255, 214, 120, 0.95)) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15)); /* 選到的那盆：後面一圈暖光 */
+}
+.gd-sill .gd-cell:active .plant.small {
+  transform: scale(0.96);
+}
+.gd-sill .gd-cell.grow .plant.small {
+  animation: gd-pop 0.8s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+@keyframes gd-pop {
+  0% {
+    transform: scale(0.7);
+  }
+  100% {
+    transform: translateY(-2px) scale(1.06);
+  }
+}
+/* 很窄的手機（寬 360 以下）：小芽的話放到標題下面一行（不然會蓋住標題） */
+@media (max-width: 360px) {
+  .gd-scene {
+    height: 256px;
+  }
+  .gd-ya {
+    top: 42px;
+    max-width: calc(100% - 24px);
+  }
+}
+/* iPad、電腦：整排大窗戶在上面、說明在下面（不跟舊的兩欄排版混在一起）；窗戶和盆栽大一點 */
+.garden.has-scene {
+  display: block;
+}
+@media (min-width: 700px) {
+  .gd-scene {
+    height: 284px;
+  }
+  .gd-sill .gd-cell .plant.small {
+    max-height: 130px;
+  }
+  .garden .gd-sill .gd-cell {
+    max-width: 150px;
+  }
+}
+/* 彩色便利貼：黃＝今天、橘＝連續天數、綠＝作業、粉紅＝錯題本 */
+.stickies {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 0 0 16px;
+}
+.sticky {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 64px;
+  padding: 9px 10px 8px;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  color: #2b2723;
+  text-align: left;
+  cursor: pointer;
+  transform: rotate(var(--r, 0deg));
+  transition: transform 0.15s ease;
+}
+.sticky:active {
+  transform: rotate(var(--r, 0deg)) scale(0.96);
+}
+.sticky b {
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.15;
+  font-family: var(--hand, inherit);
+  white-space: nowrap;
+}
+.sticky b small {
+  font-size: 13px;
+}
+.sticky span {
+  font-size: 13px;
+  color: rgba(43, 39, 35, 0.72);
+  white-space: nowrap;
+}
+.s-y {
+  background: #fff1a6;
+  --r: -1.2deg;
+}
+.s-o {
+  background: #ffd8b0;
+  --r: 0.8deg;
+}
+.s-g {
+  background: #d4ecc4;
+  --r: -0.6deg;
+}
+.s-p {
+  background: #ffd3d9;
+  --r: 1.2deg;
+}
+@media (max-width: 360px) {
+  .stickies {
+    gap: 7px;
+  }
+  .sticky {
+    padding: 8px 7px 7px;
+  }
+  .sticky b {
+    font-size: 19px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sticky,
+  .gd-sill .gd-cell.grow .plant.small {
+    transform: none;
+    animation: none;
+  }
+}
+/* 深色模式：插畫維持原來的顏色（稍微暗一點不刺眼）；便利貼改成深一點的同色系 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .gd-scene {
+    --wall: #5a4c3c;
+  }
+  :root:not([data-theme='light']) .gd-scene:not(.sky-night) {
+    filter: brightness(0.9);
+  }
+  :root:not([data-theme='light']) .gd-sill .gd-cell span {
+    color: #e9dfcf;
+  }
+  :root:not([data-theme='light']) .gd-sill .gd-cell.on span {
+    color: #2b2723;
+  }
+  :root:not([data-theme='light']) .gd-say {
+    background: #2f2a25;
+    color: #f3ece0;
+    border-color: #f3ece0;
+  }
+  :root:not([data-theme='light']) .s-y {
+    background: #5a5226;
+  }
+  :root:not([data-theme='light']) .s-o {
+    background: #5e4128;
+  }
+  :root:not([data-theme='light']) .s-g {
+    background: #344a2b;
+  }
+  :root:not([data-theme='light']) .s-p {
+    background: #5a3239;
+  }
+  :root:not([data-theme='light']) .sticky,
+  :root:not([data-theme='light']) .sticky span {
+    color: #f3ece0;
+  }
+}
+
 /* ───────── 2.23.1 視窗不被切掉（老師 10/11 截圖：檢討視窗最下面的按鈕被切掉，往上拉放手又彈回）───────── */
 /* 視窗的範圍＝真的看得到的範圍（app.js 用 visualViewport 算 --vvh、--vvt；舊瀏覽器照原本的 inset:0） */
 .sheet-wrap {
