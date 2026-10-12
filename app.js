@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.25（10/12）'
+const VERSION = '2.25.1（10/12）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -396,8 +396,8 @@ const BADGES = [
   ['days', '🔥', '三天不間斷', '連續 3 天都有練習'],
   ['grad', '🎓', '錯題畢業生', '10 題從錯題本畢業'],
   ['flash', '⚡', '閃電手', '閃電挑戰答對 20 題'],
-  ['lesson1', '🥈', '第 1 堂制霸', '第 1 堂 8 個單元都拿到三星'],
-  ['lesson2', '🥇', '第 2 堂制霸', '第 2 堂 8 個單元都拿到三星'],
+  ['lesson1', '🥈', 'Unit 1 制霸', 'Starter 和 Unit 1 的 8 個單元都拿到三星'],
+  ['lesson2', '🥇', 'Unit 2 制霸', 'Unit 2 和 Review 1 的 8 個單元都拿到三星'],
   ['exam', '💯', '準備好了', '模擬段考 90 分以上'],
 ]
 // 哪些徽章達成了：預設算自己的紀錄；老師看學生時傳學生的雲端紀錄進來算（2.15）
@@ -422,8 +422,8 @@ function badgeEarned(data) {
     days: maxStreakDays(attempts) >= 3,
     grad: grads >= 10,
     flash: flashBest >= 20,
-    lesson1: LESSONS[0].modules.every((m) => best(m) === 3),
-    lesson2: LESSONS[1].modules.every((m) => best(m) === 3),
+    lesson1: LESSONS.filter((L) => ['L1', 'L1u'].includes(L.id)).flatMap((L) => L.modules).every((m) => best(m) === 3),
+    lesson2: LESSONS.filter((L) => ['L2', 'L2r'].includes(L.id)).flatMap((L) => L.modules).every((m) => best(m) === 3),
     exam: sessions.some((s) => s.k === 'exam' && s.s >= 90),
   }
 }
@@ -3406,7 +3406,7 @@ function planSheet(lid) {
       .map((mid, i) => `<button class="row" data-mod="${mid}"><span class="row-n">${i + 1}</span><span class="row-t">${esc(MODULES[mid].title)}</span><span class="row-r">${MODULES[mid].min} 分</span>${ICON.chev}</button>`)
       .join('')}</div></div>
     <p class="sheet-p small">每個單元都是「觀念卡（先讓學生猜）→ 練習題（提示是一層一層的引導問題）→ 結果」。學生答錯時，先按「提示」讓他自己想，再看解析。</p>
-    <div class="sheet-actions"><button class="btn ghost" data-print-lesson="${L.id}">${ICON.doc}<span>列印這一堂的紙本練習卷</span></button></div>`,
+    <div class="sheet-actions"><button class="btn ghost" data-print-lesson="${L.id}">${ICON.doc}<span>列印紙本練習卷</span></button></div>`,
   ).addEventListener('click', (e) => {
     const m = e.target.closest('[data-mod]')
     if (m) {

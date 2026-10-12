@@ -10967,3 +10967,20 @@ img.xiaoya {
     --card: rgba(30, 38, 33, 0.92);
   }
 }
+/* 2.25 老師 10/12「背景有點太花，卡片要改不透明」：卡片一律實心（白／深色），插畫只當背景 */
+:root[data-skin='garden'],
+:root[data-skin='garden'] .pdf-holder {
+  --card: #ffffff;
+  --card2: #f6f8f4;
+}
+@media (min-width: 1000px) {
+  :root[data-skin='garden'] {
+    --card: #ffffff;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='garden']:not([data-theme='light']) {
+    --card: #1f2722;
+    --card2: #263029;
+  }
+}
