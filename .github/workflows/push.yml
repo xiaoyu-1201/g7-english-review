@@ -1,0 +1,61 @@
+# 2.23 每天晚上的通知：台灣時間 19:37、20:07、20:37、21:07、21:37、22:07（GitHub 的排程常常晚幾分鐘，所以每次都檢查「時間到了、今天還沒處理」）
+# 程式：tools/push/send.mjs；要兩個 Secrets：FIREBASE_SA（Firebase 服務帳戶的 JSON）、VAPID_PRIVATE（通知用的私鑰）
+# 手動執行（Actions → 每日通知 → Run workflow）：dry＝只檢查讀不讀得到資料、算要發幾則；test＝發一則測試通知給老師的裝置
+name: 每日通知
+on:
+  schedule:
+    - cron: '37 11 * * *'
+    - cron: '7,37 12,13 * * *'
+    - cron: '7 14 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry（只檢查）／test（發測試通知給老師）／run（照時間發）'
+        required: true
+        default: dry
+        type: choice
+        options: [dry, test, run]
+permissions:
+  contents: read
+concurrency:
+  group: daily-push
+  cancel-in-progress: false
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false # 發通知這一步不需要寫入 GitHub 的權限
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 發通知
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'run' }}
+        run: node tools/push/send.mjs
+  # GitHub 規定：公開專案 60 天沒有更新，排程會自動停掉 → 超過 50 天沒更新就自動更新一個日期檔（老師 10/11 同意）
+  # 發通知失敗也要跑（金鑰過期時排程還是要開著，老師才看得到錯誤）
+  keepalive:
+    needs: send
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: 保持排程開著
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( ($(date +%s) - last) / 86400 )) -ge 50 ]; then
+            date -u +%F > .github/keepalive
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add .github/keepalive
+            git commit -m '保持每日通知的排程開著（超過 50 天沒更新）'
+            git push
+          fi
