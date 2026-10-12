@@ -237,7 +237,18 @@ async function teacherMsg(c, cl) {
   if (idle.length) parts.push(listNames(idle, 2))
   return { title: did.length ? `今天 ${did.length} 位學生有練習` : '今天沒有學生練習', body: parts.join('；') + '。', url: './#/students' }
 }
-const TEST_MSG = { title: '測試通知', body: '通知設定好了：之後每天晚上 9 點會收到今天的學生摘要。', url: './#/students' }
+// 測試通知（老師 10/12：要很像真的那種）：用真的資料算今天的老師摘要；今天還沒人練習，就列每個學生最近一次練習（標「試發」）
+async function testMsg(c, cl) {
+  const real = await teacherMsg(c, cl)
+  if (real) return real
+  const parts = []
+  for (const [sid, s] of Object.entries(cl.students)) {
+    const st = await stu(c, sid)
+    const d = st.last ? daysAgo(st.last) : null
+    parts.push(`${clip(s?.name || '學生', 10)} ${d === null ? '還沒開始練習' : d === 0 ? '今天有練習' : d === 1 ? '昨天有練習' : `${d} 天沒練習`}`)
+  }
+  return { title: '學生摘要（試發）', body: parts.length ? listNames(parts, 4) + '。' : '還沒有學生。', url: './#/students' }
+}
 
 const keyLen = (s, n) => {
   try {
@@ -357,13 +368,13 @@ async function main() {
           continue
         }
         const mk = `${role}/${rec.sid || ''}`
-        const msg = MODE === 'test' ? TEST_MSG : await (msgs[mk] ||= role === 'student' ? studentMsg(c, cl, rec.sid) : role === 'parent' ? parentMsg(c, cl, rec.sid) : teacherMsg(c, cl))
+        const msg = await (msgs[mk] ||= MODE === 'test' ? testMsg(c, cl) :role === 'student' ? studentMsg(c, cl, rec.sid) : role === 'parent' ? parentMsg(c, cl, rec.sid) : teacherMsg(c, cl))
         if (!msg) {
           out.不用發++
           if (MODE === 'run') none[`${c}/${uid}/${dev}/${role}`] = 0
           continue
         }
-        const payload = { ...msg, tag: MODE === 'test' ? 'test' : 'daily-' + role }
+        const payload = { ...msg, tag: 'daily-' + role } // 測試通知也用一樣的 tag（看起來、學生模式遮名字都跟真的一樣）
         if (MODE === 'dry') {
           out.已發++
           outList.push({ c, uid, dev, role, msg: payload, code: 0 })

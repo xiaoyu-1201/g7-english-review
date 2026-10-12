@@ -176,7 +176,9 @@ check(not got and "沒有要發" in out["out"]["要發"], "after 22:30 nothing i
 # ⑤ 測試通知：不管時間，馬上發給老師的兩台
 got, out = run("test", ms(2026, 10, 13, 15, 0), "test")
 m = opened(got)
-check(sorted(m) == ["/ep/t1", "/ep/t2"] and all(x.get("title") == "測試通知" for x in m.values()), f"test mode → teacher devices only ({sorted(m)})")
+tm = m.get("/ep/t1", {})
+check(sorted(m) == ["/ep/t1", "/ep/t2"], f"test mode → teacher devices only ({sorted(m)})")
+check(tm.get("title") == "學生摘要（試發）" and "Amy 還沒開始練習" in tm.get("body", "") and "Ben 2 天沒練習" in tm["body"] and tm.get("tag") == "daily-teacher", f"test notification looks like the real one, made from real data ({tm})")
 check(http("GET", f"/pushlog/2026-10-13.json")[1] is None, "test mode does not write pushlog")
 
 # ⑥ dry：算出要發幾則，但不發、不改資料庫
