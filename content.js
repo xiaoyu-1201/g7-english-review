@@ -71,7 +71,7 @@ export const LESSONS = [
   {
     id: 'L1u',
     title: 'Unit 1',
-    sub: "Who's That Handsome Boy? · 家人與職業、Who 問句",
+    sub: '家人與職業、Who 問句、所有格',
     modules: ['u1a', 'u1b', 'u1c', 'u1d', 'u1e'],
     plan: [
       '家族樹那一課讓學生用手指著圖說出 A is B\'s ___，再看答案。',
@@ -81,7 +81,7 @@ export const LESSONS = [
   {
     id: 'L2',
     title: 'Unit 2',
-    sub: 'Where Are My Pencils? · 文具與房間、名詞複數、位置介系詞',
+    sub: '文具與房間、名詞複數、位置介系詞',
     modules: ['u2a', 'u2b', 'u2c', 'u2d', 'u2e', 'u2f', 'u2g'],
     plan: [
       '開頭先開「錯題本」，把 Starter、Unit 1 錯的題目重做一次（隔一段時間再做，記得最牢）。',

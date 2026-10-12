@@ -1,7 +1,7 @@
 // 讓 App 沒有網路也能打開
 // 更新：每次都先問 GitHub 有沒有新版（跳過 10 分鐘暫存）；新版裝好會自動重新整理一次
 // 改版時：app.js 的 VERSION 和這裡的 CACHE 都要改
-const CACHE = 'g7review-v76'
+const CACHE = 'g7review-v77'
 const SHELL = ['./', 'index.html', 'app.js', 'icons.js', 'focus.js', 'content.js', 'content2.js', 'content3.js', 'speak2.js', 'art.js', 'qrcode.js', 'asr.js', 'styles.css', 'icon.svg', 'privacy.html', 'licenses.html', 'img/bg-garden.webp', 'img/bg-garden-l.webp']
 // 主畫面圖示和 manifest 不經過 service worker：iPhone「加入主畫面」抓圖示時會走頁面的 SW，被攔到就會變成文字圖示（10/7）
 // PDF（重點總整理）也不經過、不存進暫存：幾 MB 的檔案只在要分享時才抓
@@ -54,7 +54,7 @@ self.addEventListener('push', (e) => {
         if (on === '1') d = { ...d, title: '小宇英文', body: '今天的學生摘要好了，結束學生模式後再看。' }
       }
       // 同一種通知（tag）會蓋掉前一則；renotify：蓋掉時一樣會響（前一天沒滑掉的提醒，不能讓今天的變成靜音）
-      await self.registration.showNotification(d.title || '小宇英文', { body: d.body || '', icon: 'icon-192-v2.png', tag: d.tag || 'daily', renotify: true, data: { url: d.url || './' } })
+      await self.registration.showNotification(d.title || '小宇英文', { body: d.body || '', icon: 'icon-192-v3.png', tag: d.tag || 'daily', renotify: true, data: { url: d.url || './' } })
     })(),
   )
 })

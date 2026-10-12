@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.25.1（10/12）'
+const VERSION = '2.25.2（10/12）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2710,9 +2710,9 @@ const NEWS = [
   {
     v: '2.25',
     date: '10/12',
-    student: [['🌷', '花園外觀', '整個 App 換成湖邊花園：背景是插畫、卡片像玻璃、選到的答案變紫色。想換回講義，到「設定」→「外觀」。']],
-    parent: [['🌷', '花園外觀', '畫面換成湖邊花園的樣子，內容都一樣。想換回講義，到「設定」→「外觀」。']],
-    teacher: [['🌷', '花園外觀', '學生、家長、老師的畫面一起換成花園風格；講義外觀留在「設定」→「外觀」，每個裝置可以自己選。']],
+    student: [['🌷', '花園外觀', '整個 App 換成湖邊花園：背景是插畫、卡片像玻璃、選到的答案變紫色。想換回講義，到「設定」→「外觀」。'], ['📱', '新的主畫面圖示', '圖示換成小芽＋ABC。已經加到主畫面的，先刪掉再加一次就會換成新的。']],
+    parent: [['🌷', '花園外觀', '畫面換成湖邊花園的樣子，內容都一樣。想換回講義，到「設定」→「外觀」。'], ['📱', '新的主畫面圖示', '圖示換成小芽＋ABC。已經加到主畫面的，先刪掉再加一次就會換成新的。']],
+    teacher: [['🌷', '花園外觀', '學生、家長、老師的畫面一起換成花園風格；講義外觀留在「設定」→「外觀」，每個裝置可以自己選。'], ['📱', '新的主畫面圖示', '圖示換成小芽＋ABC。已經加到主畫面的，先刪掉再加一次就會換成新的。']],
   },
   {
     v: '2.24',
@@ -6519,7 +6519,7 @@ async function pushEnable() {
     sub ||= await pushSubscribe(reg)
     await pushSave(sub)
     // 馬上跳一則給他看：之後的通知就長這樣
-    reg.showNotification?.('通知開好了', { body: `${PUSH_TIME[role]}：${PUSH_WHAT[role]}。${PUSH_HOW_OFTEN(role)}。`, icon: 'icon-192-v2.png', tag: 'welcome' })?.catch?.(() => {})
+    reg.showNotification?.('通知開好了', { body: `${PUSH_TIME[role]}：${PUSH_WHAT[role]}。${PUSH_HOW_OFTEN(role)}。`, icon: 'icon-192-v3.png', tag: 'welcome' })?.catch?.(() => {})
     toast('通知開好了', '🔔')
   } catch (e) {
     toast(e?.status ? '沒有存到雲端，請檢查網路再試一次' : '這個裝置現在沒辦法開通知，請稍後再試', '⚠️')

@@ -14,7 +14,7 @@ with sync_playwright() as p:
     check(P.locator(".sticky .st-ic").count() == 4, "the four number tiles have icons")
     # 2.25 主畫面圖示（小芽）：manifest 和 apple-touch-icon 都指到 v3，圖抓得到
     mf = P.evaluate("fetch(document.querySelector('link[rel=manifest]').href).then(r => r.json())")
-    check(all("-v2.png" in i["src"] for i in mf["icons"]) and mf["display"] == "standalone", "manifest icons are set")
+    check(all("-v3.png" in i["src"] for i in mf["icons"]) and mf["display"] == "standalone", "manifest uses the new 小芽 ABC icons")
     for src in [i["src"] for i in mf["icons"]] + [P.get_attribute("link[rel=apple-touch-icon]", "href")]:
         check(P.evaluate(f"fetch({src!r}).then(r => r.ok)"), f"icon loads: {src}")
     # 不認得的值 → 花園
