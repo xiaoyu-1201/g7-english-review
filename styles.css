@@ -10311,3 +10311,659 @@ img.xiaoya {
     display: none;
   }
 }
+
+/* ═══════════ 2.25 花園外觀（老師 10/12「整體介面美術風格」，ChatGPT 設計圖）═══════════
+   整個畫面後面是湖邊花園插畫（img/bg-garden*.webp）、卡片是毛玻璃、數字用圓潤的 Nunito、
+   進度和選到的分頁用綠色、選到的選項用紫色、主按鈕用深咖啡。<html data-skin="garden">（index.html 設定，預設）
+   跟 2.20 薄荷綠的版面一樣，只換顏色和質感（講義外觀的規則都是 [data-skin='notebook'] 開頭，這裡不會吃到） */
+:root[data-skin='garden'] {
+  --bg: #eef3ea; /* 視窗、釘住的列的底色（不透明） */
+  --card: rgba(255, 255, 255, 0.82);
+  --card2: rgba(255, 255, 255, 0.66);
+  --solid: #ffffff;
+  --fill: rgba(60, 70, 50, 0.1);
+  --fill2: rgba(60, 70, 50, 0.06);
+  --label: #2a2520;
+  --label2: rgba(42, 37, 32, 0.68);
+  --label3: rgba(42, 37, 32, 0.4);
+  --sep: rgba(60, 50, 40, 0.1);
+  --blue: #2c7a4b; /* 可以點的字：深一點的葉子綠（白底 5:1） */
+  --brand: #4a3426; /* 主按鈕：深咖啡 */
+  --brand-soft: rgba(76, 175, 106, 0.16);
+  --green: #2c8a4f;
+  --green-v: #4caf6a;
+  --orange: #c0630f;
+  --orange-v: #f59e3d;
+  --red: #d2453d;
+  --red-v: #ef6b6b;
+  --indigo: #8b6fe0;
+  --pink: #ef7fa0;
+  --teal: #4fb3c8;
+  --mint: #7cc79a;
+  --sel-bg: #f1eaff; /* 選到的選項：淡紫 */
+  --sel-ring: #9b7ff0;
+  --ok-bg: rgba(76, 175, 106, 0.16);
+  --bad-bg: rgba(239, 107, 107, 0.13);
+  --care-bg: rgba(245, 158, 61, 0.16);
+  --r-xl: 24px;
+  --r-lg: 20px;
+  --r-md: 16px;
+  --r-sm: 12px;
+  --glass-b: 1px solid rgba(255, 255, 255, 0.7);
+  --glass-blur: blur(16px) saturate(150%);
+  --shadow: 0 4px 18px rgba(50, 60, 40, 0.1);
+  --bar-bg: rgba(255, 255, 255, 0.72);
+  --round: 'Nunito', ui-rounded, 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --veil: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, 0.1) 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='garden']:not([data-theme='light']) {
+    --bg: #161c18;
+    --card: rgba(30, 38, 33, 0.84);
+    --card2: rgba(30, 38, 33, 0.6);
+    --solid: #1f2722;
+    --fill: rgba(220, 235, 220, 0.12);
+    --fill2: rgba(220, 235, 220, 0.07);
+    --label: #f1efe8;
+    --label2: rgba(241, 239, 232, 0.68);
+    --label3: rgba(241, 239, 232, 0.4);
+    --sep: rgba(241, 239, 232, 0.12);
+    --blue: #86d6a0;
+    --brand: #f1e6d6;
+    --brand-soft: rgba(134, 214, 160, 0.18);
+    --green: #86d6a0;
+    --green-v: #6cc489;
+    --orange: #f5ad5c;
+    --red: #f08a82;
+    --sel-bg: rgba(155, 127, 240, 0.24);
+    --sel-ring: #b9a2ff;
+    --glass-b: 1px solid rgba(255, 255, 255, 0.1);
+    --shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+    --bar-bg: rgba(30, 38, 33, 0.74);
+    --veil: linear-gradient(180deg, rgba(8, 14, 10, 0.62), rgba(8, 14, 10, 0.5));
+  }
+}
+/* 背景插畫：固定在畫面後面（iPhone 不支援 background-attachment: fixed，所以用一層固定的 ::before） */
+[data-skin='garden'] body {
+  background: var(--bg);
+}
+[data-skin='garden'] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100lvh; /* Safari 網址列縮放時背景不跳 */
+  z-index: -1;
+  background: var(--veil), url('img/bg-garden.webp') center bottom / cover no-repeat, #cfe6f2;
+  pointer-events: none;
+}
+@media (min-width: 700px) {
+  [data-skin='garden'] body::before {
+    background: var(--veil), url('img/bg-garden-l.webp') center bottom / cover no-repeat, #cfe6f2;
+  }
+}
+/* 卡片：半透明白＋白邊＋柔和陰影（不模糊：背景插畫是固定的，iPhone 捲動時每張都模糊會卡）；
+   只有浮在內容上面的列（分頁列、練習上下列）和首頁的大卡片才模糊 */
+[data-skin='garden'] :is(.card, .list, .qk, .mod, .qcard, .note, .fx-card, .tile, .pp-note-card, .sticky, .tabbar, .run-bar, .run-actions, .resume, .hw-card, .live-banner) {
+  border: var(--glass-b);
+  box-shadow: var(--shadow);
+}
+[data-skin='garden'] :is(.tabbar, .run-bar, .run-actions, .home > .card, .home > .stickies .sticky) {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+[data-skin='garden'] .card,
+[data-skin='garden'] .list {
+  border-radius: var(--r-xl);
+}
+[data-skin='garden'] :is(.list .list, .card .list, .card .card, .card .mod, .card .tile, .card .qk, .card .note, .sheet .list, .sheet .card) {
+  box-shadow: none;
+}
+/* 系統設定「降低透明度」：改成不透明的白卡 */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-skin='garden'] {
+    --card: var(--solid);
+    --card2: var(--solid);
+    --bar-bg: var(--solid);
+  }
+}
+/* 列印、存成 PDF：白紙黑字，不印插畫、不要透明和白光 */
+@media print {
+  [data-skin='garden'] body::before {
+    display: none;
+  }
+  :root[data-skin='garden'] {
+    --bg: #fff;
+    --card: #fff;
+    --card2: #fff;
+    --solid: #fff;
+  }
+  [data-skin='garden'] * {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    text-shadow: none !important;
+  }
+}
+[data-skin='garden'] .pdf-holder {
+  --card2: #f6f8f4;
+  --fill2: rgba(60, 70, 50, 0.06);
+  --solid: #fff;
+  --blue: #2c7a4b;
+  --brand: #4a3426;
+  --brand-soft: rgba(76, 175, 106, 0.16);
+  --sel-bg: #f1eaff;
+  --green: #2c8a4f;
+  --green-v: #4caf6a;
+  --red: #d2453d;
+  --red-v: #ef6b6b;
+  --orange: #c0630f;
+  --orange-v: #f59e3d;
+  --indigo: #8b6fe0;
+  --ok-bg: rgba(76, 175, 106, 0.16);
+  --bad-bg: rgba(239, 107, 107, 0.13);
+  --care-bg: rgba(245, 158, 61, 0.16);
+}
+[data-skin='garden'] .pdf-holder * {
+  text-shadow: none;
+}
+/* 視窗：不透明的白（字多，要好讀） */
+[data-skin='garden'] .sheet {
+  background: var(--bg);
+  border: var(--glass-b);
+}
+/* 標題：大、粗；日期小一點；在插畫的天空上加一點白光，字才清楚 */
+[data-skin='garden'] .lg-head h1 {
+  font-weight: 900;
+  font-size: clamp(34px, 5vw, 44px);
+  letter-spacing: 0.02em;
+}
+[data-skin='garden'] .lg-head,
+[data-skin='garden'] .sec-h h2,
+[data-skin='garden'] .exam-h {
+  text-shadow: 0 0 14px rgba(255, 255, 255, 0.9), 0 0 3px rgba(255, 255, 255, 0.8);
+}
+[data-skin='garden'] .lg-head .lg-sub,
+[data-skin='garden'] .lg-head .eyebrow,
+[data-skin='garden'] .lesson-h p {
+  color: rgba(42, 37, 32, 0.78);
+}
+[data-skin='garden'] .sec-h h2,
+[data-skin='garden'] .lesson-h h2 {
+  font-weight: 800;
+}
+/* 數字：Nunito（圓潤）；中文還是系統黑體 */
+[data-skin='garden'] :is(.sticky b, .tile-v, .sum-pct b, .sr-v, .book-n, .today-row b, .hm b, .pp-stat b, .ld-today b, .sc-stats b, .streak b, .flash-score) {
+  font-family: var(--round);
+  font-weight: 800;
+}
+/* 主按鈕：深咖啡、白字；次要按鈕：白色玻璃 */
+[data-skin='garden'] .btn.primary {
+  background: var(--brand);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(74, 52, 38, 0.25);
+}
+[data-skin='garden'] .btn.primary:disabled {
+  background: rgba(74, 52, 38, 0.32);
+  box-shadow: none;
+}
+[data-skin='garden'] .btn.ghost,
+[data-skin='garden'] .run-actions .pill {
+  background: var(--solid);
+  border: 1px solid var(--sep);
+  color: var(--label);
+}
+/* 分頁列：玻璃膠囊；選到的那格＝綠字＋淡綠底 */
+[data-skin='garden'] .tabbar {
+  background: var(--bar-bg);
+}
+[data-skin='garden'] .tabbar a {
+  color: var(--label2);
+}
+[data-skin='garden'] .tabbar a.on {
+  color: var(--green);
+  background: var(--brand-soft);
+}
+/* 分段切換 */
+[data-skin='garden'] .seg {
+  background: var(--fill);
+}
+[data-skin='garden'] .seg button.on {
+  background: var(--solid);
+  color: var(--label);
+}
+/* 進度條：綠色 */
+[data-skin='garden'] .run-progress i,
+[data-skin='garden'] .mod-bar i,
+[data-skin='garden'] .mini-bar i {
+  background: var(--green-v);
+}
+/* 單元圖示：圓的、淡淡的底色（設計圖的「學習單元」） */
+[data-skin='garden'] .mod-ic:not(.sm) {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mc, var(--indigo)) 18%, white);
+  color: var(--mc, var(--indigo));
+}
+[data-skin='garden'] .mod-t {
+  font-weight: 800;
+}
+[data-skin='garden'] .qk-ic {
+  border-radius: 50%;
+}
+/* ── 首頁花園：沒有窗戶和天空（背景已經是花園），只留木頭層板＋盆栽＋小芽 ── */
+[data-skin='garden'] .garden.has-scene {
+  background: var(--card);
+}
+[data-skin='garden'] .gd-scene,
+[data-skin='garden'] .gd-scene.sky-pm,
+[data-skin='garden'] .gd-scene.sky-night {
+  --sill: #c79a66;
+  --wall: transparent;
+  height: 200px;
+  background: none;
+}
+[data-skin='garden'] .gd-scene::before,
+[data-skin='garden'] .gd-hills,
+[data-skin='garden'] .gd-deco,
+[data-skin='garden'] .sky-night .gd-sill::before {
+  display: none;
+}
+/* 層板：木頭色＋一條亮邊、下面一點陰影 */
+[data-skin='garden'] .gd-scene::after {
+  left: 12px;
+  right: 12px;
+  bottom: 34px;
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(#e0b98a 0 3px, #c79a66 3px 10px, #a97c4c 10px);
+  box-shadow: 0 6px 10px rgba(80, 55, 30, 0.18);
+}
+[data-skin='garden'] .gd-sill .gd-cell span {
+  margin: 17px 0 4px;
+  height: 24px;
+  color: var(--label2);
+}
+[data-skin='garden'] .gd-sill .gd-cell.on span {
+  color: #fff;
+  background: #2e7d4c; /* 白字 4.9:1 */
+  box-shadow: none;
+}
+[data-skin='garden'] .gd-scene-h,
+[data-skin='garden'] .sky-night .gd-scene-h {
+  color: var(--label);
+  font-weight: 800;
+  font-family: inherit;
+}
+[data-skin='garden'] .gd-say {
+  border: 0;
+  background: var(--solid);
+  color: var(--label);
+  font-family: inherit;
+  box-shadow: 0 2px 10px rgba(50, 60, 40, 0.14);
+}
+[data-skin='garden'] .gd-sill .gd-cell.on .plant.small {
+  filter: drop-shadow(0 0 8px rgba(255, 236, 160, 0.95)) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.12));
+}
+/* 家長頁（2.24）：課名下面多一行，層板高一點 */
+[data-skin='garden'] .pp-garden .gd-scene {
+  height: 214px;
+}
+[data-skin='garden'] .pp-garden .gd-scene::after {
+  height: 14px;
+  bottom: 50px;
+}
+[data-skin='garden'] .pp-garden .gd-sill .gd-cell span {
+  margin: 13px 0 4px;
+}
+@media (min-width: 700px) {
+  [data-skin='garden'] .gd-scene {
+    height: 236px;
+  }
+  [data-skin='garden'] .pp-garden .gd-scene {
+    height: 252px;
+  }
+}
+@media (max-width: 360px) {
+  [data-skin='garden'] .gd-scene {
+    height: 220px;
+  }
+}
+/* ── 首頁四個數字：玻璃小卡＋彩色圓形圖示；連續天數是橘色漸層（設計圖） ── */
+[data-skin='garden'] .sticky {
+  --r: 0deg;
+  background: var(--card);
+  color: var(--label);
+  border-radius: 18px;
+  padding: 10px 10px 9px;
+  gap: 2px;
+}
+[data-skin='garden'] .sticky span {
+  color: var(--label2);
+}
+[data-skin='garden'] .sticky b {
+  font-size: 24px;
+}
+[data-skin='garden'] .st-ic {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  color: #fff;
+}
+[data-skin='garden'] .st-ic svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+[data-skin='garden'] .s-y .st-ic {
+  background: var(--green-v);
+}
+[data-skin='garden'] .s-g .st-ic {
+  background: #5aa9e6;
+}
+[data-skin='garden'] .s-p .st-ic {
+  background: var(--red-v);
+}
+[data-skin='garden'] .s-o {
+  background: linear-gradient(160deg, #ffd27a, #ff9a3c);
+  color: #3d2410;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+[data-skin='garden'] .s-o span {
+  color: rgba(61, 36, 16, 0.85);
+}
+[data-skin='garden'] .s-o .st-ic {
+  background: #fff;
+  color: #f07c1e;
+}
+.st-ic {
+  display: none; /* 講義外觀不用 */
+}
+/* ── 練習：上面一條玻璃列、題目是白卡、選項 2×2（選項短的時候）、選到＝紫色 ── */
+[data-skin='garden'] .run-bar {
+  width: calc(100% - 20px);
+  max-width: 820px;
+  margin: calc(env(safe-area-inset-top) + 8px) auto 0;
+  padding: 8px 10px;
+  border-radius: 22px;
+  top: calc(env(safe-area-inset-top) + 8px);
+}
+[data-skin='garden'] .run-count {
+  color: var(--label);
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.9);
+}
+[data-skin='garden'] .qcard,
+[data-skin='garden'] .run-card > .card {
+  background: rgba(255, 255, 255, 0.9);
+}
+[data-skin='garden'] .opt {
+  background: var(--solid);
+  box-shadow: inset 0 0 0 1px var(--sep);
+}
+[data-skin='garden'] .opt.sel {
+  background: var(--sel-bg);
+  box-shadow: inset 0 0 0 2px var(--sel-ring);
+}
+[data-skin='garden'] .opt.sel .opt-key,
+[data-skin='garden'] .opt.sel .opt-box {
+  background: #7254d6; /* 白字 5:1 */
+  color: #fff;
+}
+[data-skin='garden'] .opt-key {
+  background: var(--fill2);
+}
+/* 對答案：對＝綠、錯＝紅（要蓋過上面的白底和紫色的「選到」） */
+[data-skin='garden'] .opt.ok,
+[data-skin='garden'] .opt.miss {
+  background: var(--ok-bg);
+  box-shadow: inset 0 0 0 2px var(--green-v);
+}
+[data-skin='garden'] .opt.miss {
+  box-shadow: inset 0 0 0 2px dashed var(--green-v);
+}
+[data-skin='garden'] .opt.bad,
+[data-skin='garden'] .opt.sel.bad {
+  background: var(--bad-bg);
+  box-shadow: inset 0 0 0 2px var(--red-v);
+}
+[data-skin='garden'] .opt.ok .opt-key {
+  background: #2e7d4c;
+  color: #fff;
+}
+[data-skin='garden'] .opt.bad .opt-key,
+[data-skin='garden'] .opt.sel.bad .opt-key {
+  background: #c63a33;
+  color: #fff;
+}
+[data-skin='garden'] .opts.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+[data-skin='garden'] .opts.grid2 .opt {
+  min-height: 64px;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+[data-skin='garden'] .opts.grid2 .opt-text {
+  flex: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 360px) {
+  [data-skin='garden'] .opts.grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+[data-skin='garden'] .opts.grid2 .opt-key {
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
+}
+[data-skin='garden'] .run-actions {
+  left: max(10px, env(safe-area-inset-left));
+  right: max(10px, env(safe-area-inset-right));
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 10px 12px;
+  border-radius: 24px;
+}
+/* 深色：插畫蓋一層深色，玻璃改深色；題目卡也跟著變深 */
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='garden']:not([data-theme='light']) .qcard,
+  :root[data-skin='garden']:not([data-theme='light']) .run-card > .card {
+    background: rgba(30, 38, 33, 0.92);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) :is(.lg-head, .sec-h h2, .exam-h, .run-count) {
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) :is(.lg-head .lg-sub, .lg-head .eyebrow, .lesson-h p) {
+    color: rgba(241, 239, 232, 0.8);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) .btn.primary {
+    color: #2a2520;
+  }
+  :root[data-skin='garden']:not([data-theme='light']) .btn.primary:disabled {
+    background: rgba(241, 230, 214, 0.3);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) .mod-ic:not(.sm) {
+    background: color-mix(in srgb, var(--mc, var(--indigo)) 30%, #1f2722);
+    color: #fff;
+  }
+}
+/* 2.25 排版：iPad、電腦上盆栽擠在左邊、右邊空一塊（格子有最大寬度，auto 邊界又分不到空間）→ 格子平均撐滿整排 */
+.garden .gd-sill .gd-cell {
+  max-width: none;
+}
+/* 直接在插畫上的小字（說明、分組標題）：加一圈白光，湖面、花叢上也看得清楚 */
+[data-skin='garden'] :is(.group-h, .group-f, .page > p, .page > .muted, .foot, .lesson-h p) {
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.95), 0 0 2px rgba(255, 255, 255, 0.9);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='garden']:not([data-theme='light']) :is(.group-h, .group-f, .page > p, .page > .muted, .foot, .lesson-h p) {
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+  }
+}
+/* 深色＋花園：蓋掉上面沒分外觀的深色便利貼、小芽對話框（那些是講義外觀的顏色） */
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='garden']:not([data-theme='light']) :is(.s-y, .s-g, .s-p) {
+    background: var(--card);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) .s-o {
+    background: linear-gradient(160deg, #b8742a, #8a4a16);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) :is(.sticky, .sticky span) {
+    color: var(--label);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) .gd-say {
+    background: var(--solid);
+    color: var(--label);
+    border: 0;
+  }
+  :root[data-skin='garden']:not([data-theme='light']) .gd-sill .gd-cell span {
+    color: var(--label2);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) .gd-sill .gd-cell.on span {
+    color: #fff;
+  }
+}
+/* 表格左邊固定的那一欄：不透明，左右捲時底下的字不會透出來 */
+[data-skin='garden'] .note-show table th:first-child {
+  background: var(--solid);
+}
+/* 練習上面那條浮起來的列：上面那一點縫隙也遮起來（往下滑時題目不會從縫裡露出來） */
+[data-skin='garden'] .run-bar::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  bottom: 100%;
+  height: calc(env(safe-area-inset-top) + 9px);
+  background: linear-gradient(rgba(220, 236, 244, 0.95), rgba(220, 236, 244, 0.6));
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='garden']:not([data-theme='light']) .run-bar::before {
+    background: linear-gradient(rgba(16, 22, 18, 0.95), rgba(16, 22, 18, 0.6));
+  }
+}
+/* ═══ 2.25 QA 修正（10/12：6 種尺寸、淺色深色約 730 張截圖） ═══ */
+/* 首頁花園的進度條、選到的課別／範圍：綠色（進度＝綠） */
+[data-skin='garden'] .gd-bar i {
+  background: var(--green-v);
+}
+/* 練習：上面的列、題目卡、下面的按鈕列一樣寬（左右邊對齊） */
+[data-skin='garden'] .run-stage {
+  max-width: 812px; /* 卡片 780 */
+}
+[data-skin='garden'] .run-bar,
+[data-skin='garden'] .run-actions {
+  max-width: 780px;
+}
+/* 遮縫的那條：撐滿整個畫面寬（iPad 橫放、電腦不會變成一塊方角色塊） */
+[data-skin='garden'] .run-bar::before {
+  left: calc(50% - 50vw);
+  right: auto;
+  width: 100vw;
+}
+/* 2×2 選項：字母＋文字整組置中（作答前後位置一樣） */
+[data-skin='garden'] .opts.grid2 .opt .opt-text {
+  flex: 0 1 auto;
+}
+[data-skin='garden'] .opts.grid2 .opt .opt-key {
+  margin: 0;
+}
+/* 重點總整理上面固定的課別列：玻璃圓角條（不要不透明的方塊） */
+[data-skin='garden'] .notes-units {
+  background: var(--bar-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: var(--glass-b);
+  border-radius: 20px;
+  margin: 0 0 10px;
+  padding: 6px 8px;
+}
+/* 手機首頁：花園場景矮一點，四個數字卡第一眼就看得到 */
+@media (max-width: 699px) {
+  [data-skin='garden'] .gd-scene,
+  [data-skin='garden'] .gd-scene.sky-pm,
+  [data-skin='garden'] .gd-scene.sky-night {
+    height: 178px;
+  }
+}
+/* 頁尾小字：淡玻璃底，不直接疊在插畫上 */
+[data-skin='garden'] .foot {
+  background: var(--card2);
+  border-radius: 16px;
+  padding: 10px 14px;
+  text-wrap: pretty;
+}
+/* 閃電挑戰：題目放在玻璃卡上；3 個選項排一欄（不要左下角落單一個） */
+[data-skin='garden'] .flash-q {
+  padding: 14px 28px;
+  border-radius: 24px;
+  background: var(--card);
+  border: var(--glass-b);
+  box-shadow: var(--shadow);
+}
+[data-skin='garden'] .flash-opts:has(> :nth-child(3):last-child) {
+  grid-template-columns: 1fr;
+  max-width: 420px;
+}
+/* 錯題本：主要按鈕放前面、兩顆一樣寬 */
+[data-skin='garden'] .book-btns > * {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+[data-skin='garden'] .book-btns > .primary {
+  order: -1;
+}
+/* 卡片裡的清單：不要再一層底色（邊緣會多一條線） */
+[data-skin='garden'] .card .list {
+  background: transparent;
+  border: 0;
+}
+/* 說話的人名（段考聽力）13px */
+.pv-who {
+  font-size: 13px;
+}
+/* 電腦：插畫放大很多，卡片白一點，字不會疊在插畫上 */
+@media (min-width: 1000px) {
+  :root[data-skin='garden'] {
+    --card: rgba(255, 255, 255, 0.9);
+  }
+}
+@media (prefers-color-scheme: dark) {
+  /* 選到的範圍／課別：深綠底白字（原本淡綠底白字看不清楚） */
+  :root[data-skin='garden']:not([data-theme='light']) :is(.chips-wrap button.on, .notes-units button.on) {
+    background: #2c7a4b;
+    color: #fff;
+  }
+  /* 分段切換：選到的那格比底色亮 */
+  :root[data-skin='garden']:not([data-theme='light']) .seg button.on {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+  :root[data-skin='garden']:not([data-theme='light']) em.new-tag {
+    background: #c63a33;
+    color: #fff;
+  }
+}
+@media (prefers-color-scheme: dark) and (min-width: 1000px) {
+  :root[data-skin='garden']:not([data-theme='light']) {
+    --card: rgba(30, 38, 33, 0.92);
+  }
+}

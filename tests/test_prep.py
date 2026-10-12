@@ -1,7 +1,7 @@
 """2.22 課前備課卡＋學生卡的「需要關心」＋講義筆記本外觀
 ① 學生頁第三個分頁「備課」：這 7 天、建議上課講的 3 點（錯題對到的重點＋學生寫錯的答案，點了看那一題）、建議作業（派作業視窗預先勾好）、家長多久沒看
 ② 學生卡：3 天以上沒練、家長還沒看過 → 小標籤，點了到備課
-③ 外觀：<html data-skin="notebook">；g7review:skin=old 可以切回舊的"""
+③ 外觀：<html data-skin="garden">（2.25 預設）；g7review:skin=old 可以切回舊的"""
 import time
 from playwright.sync_api import sync_playwright
 from synchelp import *
@@ -75,8 +75,12 @@ with sync_playwright() as p:
     T.keyboard.press("Escape")
     time.sleep(0.4)
     # ③ 外觀
-    check(T.evaluate("document.documentElement.dataset.skin") == "notebook", "notebook skin is on by default")
-    check(T.evaluate("!!document.querySelector('link[href*=\"LXGW+WenKai\"]')"), "handwriting heading font is linked")
+    check(T.evaluate("document.documentElement.dataset.skin") == "garden", "garden skin is on by default")
+    check(T.evaluate("!!document.querySelector('link[href*=\"Nunito\"]')"), "garden number font is linked")
+    T.evaluate("localStorage.setItem('g7review:skin', 'notebook')")
+    T.reload()
+    T.wait_for_selector(".stu-prep")
+    check(T.evaluate("!!document.querySelector('link[href*=\"LXGW+WenKai\"]')"), "notebook: handwriting heading font is linked")
     T.evaluate("localStorage.setItem('g7review:skin', 'old')")
     T.reload()
     T.wait_for_selector(".stu-prep")

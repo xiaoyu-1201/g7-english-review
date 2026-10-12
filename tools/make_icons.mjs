@@ -15,6 +15,8 @@ const NAMES = [
   'bell', 'volume', 'volume-off', 'key', 'ban', 'books', 'thumb-up', 'arrow-back-up', 'download', 'bulb', 'eye', 'school', 'trophy',
   'flame', 'player-play', 'circle-check', 'circle-x', 'mood-smile', 'device-tablet', 'chart-line', 'target', 'refresh', 'book', 'file-text',
   'rocket', 'bolt', 'award', 'hand-stop', 'hourglass', 'player-stop', 'search', 'ear', 'eye-off', 'mail', 'cloud', 'help', 'turtle', 'message-dots',
+  // 2.25 每個按鈕都要有圖示（QA）
+  'arrow-right', 'printer', 'plus', 'logout', 'list-check', 'settings', 'pencil-minus', 'player-track-next', 'seedling', 'chevron-down', 'cloud-upload', 'external-link',
 ]
 const out = {}
 for (const n of NAMES) {

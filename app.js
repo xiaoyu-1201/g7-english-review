@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.24.2（10/12）'
+const VERSION = '2.25（10/12）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -53,6 +53,32 @@ const emoIc = (e, cls = '') => (EMO[e] ? ti(EMO[e][0], `ic-${EMO[e][1]}${cls ? '
 // 圖示框（只有一個 emoji）→ 線條圖示；標題、按鈕、說明開頭的 emoji → 行內線條圖示；徽章 → 白色圖示
 const ICON_BOX = '.row-ic, .empty-ic, .js-ic, .mg-ic, .req-ic, .w-ic, .rp-ic, .hp-ic, .pp-ic, .medal, .t-ic, .sp-mode-ic'
 const ICON_LEAD = 'h2, h3, .btn, .pill, button, summary, .locked-note, .hw-note, .chip, .lb-t b'
+// 2.25 每個按鈕都要有圖示（老師 10/12；QA 列出的）：按鈕上只有字、沒有圖示 → 照字補一個（「…」結尾＝開頭符合就算）
+const LABEL_SEL = '.btn, .pill, button.link'
+const LABEL_IC = {
+  檢查: 'check', 我懂了: 'check', 知道了: 'check', 繼續: 'arrow-right', 下一題: 'arrow-right', 看結果: 'flag', 交卷: 'send',
+  開始: 'player-play', 去練習: 'player-play', 開始考試: 'player-play', 開始重練: 'player-play', 開始聽力練習卷: 'headphones', 再玩一次: 'refresh', 再練一次: 'refresh',
+  關閉: 'x', 取消: 'x', 之後再說: 'clock', 等一下再選: 'clock', 下載: 'download', 分享: 'share', 慢速: 'hourglass', 選植物: 'seedling',
+  '植物怎麼長大？': 'help-circle', 上課流程: 'list-check', 選取: 'list-check', 備份: 'cloud-upload', 開啟通知: 'bell', 載入: 'download',
+  重新載入: 'refresh', 開放的課: 'lock-open', 改名稱: 'pencil', 刪除這個學生: 'trash', 退出同步: 'logout', 列印錯題卷: 'printer',
+  '顯示全部…': 'chevron-down', '或繼續上次…': 'player-play', '練這…': 'player-play',
+}
+function labelIcons(root) {
+  const btns = root.matches?.(LABEL_SEL) ? [root, ...root.querySelectorAll(LABEL_SEL)] : root.querySelectorAll(LABEL_SEL)
+  for (const el of btns) {
+    if (el.querySelector('svg, img')) continue
+    const raw = el.textContent.trim().replace(/^[＋+]\s*/, '')
+    const k = LABEL_IC[raw] ? raw : Object.keys(LABEL_IC).find((w) => w.endsWith('…') && raw.startsWith(w.slice(0, -1)))
+    const plus = /^\s*[＋+]/.test(el.textContent) // 「＋ 新增學生」：全形＋換成圖示
+    if (!k && !plus) continue
+    if (plus) {
+      const n = [...el.childNodes].find((x) => x.nodeType === 3 && x.nodeValue.trim())
+      if (n) n.nodeValue = n.nodeValue.replace(/^\s*[＋+]\s*/, '')
+    }
+    const first = [...el.childNodes].find((x) => x.nodeType !== 3 || x.nodeValue.trim())
+    first?.before(document.createRange().createContextualFragment(ti(k ? LABEL_IC[k] : 'plus', 'ic-lead')))
+  }
+}
 function iconize(root) {
   if (!root?.querySelectorAll) return
   const boxes = root.matches?.(ICON_BOX) ? [root, ...root.querySelectorAll(ICON_BOX)] : root.querySelectorAll(ICON_BOX)
@@ -74,12 +100,18 @@ function iconize(root) {
     n.nodeValue = n.nodeValue.slice(m[0].length)
     n.before(document.createRange().createContextualFragment(emoIc(m[1], 'ic-lead')))
   }
+  labelIcons(root)
   // 「你先想想 🤔」這種放在後面的：拿掉
   for (const el of root.querySelectorAll('.ask-h')) el.childNodes.forEach((x) => x.nodeType === 3 && (x.nodeValue = x.nodeValue.replace(/\s*\p{Extended_Pictographic}️?\s*$/u, '')))
 }
 // 新加到畫面上的東西都過一次（換頁、視窗、提示訊息、後來插入的按鈕）；MutationObserver 在畫出來之前執行，不會先閃一下 emoji
 new MutationObserver((list) => {
-  for (const r of list) for (const n of r.addedNodes) if (n.nodeType === 1 && n.namespaceURI === 'http://www.w3.org/1999/xhtml') iconize(n)
+  for (const r of list)
+    for (const n of r.addedNodes) {
+      if (n.nodeType === 1 && n.namespaceURI === 'http://www.w3.org/1999/xhtml') iconize(n)
+      // 按鈕換字（例如「檢查」→「繼續」）：重新補圖示
+      else if (n.nodeType === 3 && r.target.matches?.(LABEL_SEL)) labelIcons(r.target)
+    }
 }).observe(document.documentElement, { childList: true, subtree: true })
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
@@ -1087,7 +1119,7 @@ const CTRL = {
     // 上課模式：先遮住選項，讓學生「先說出答案」（生成效應：自己想出來的記得比較牢）
     const cover = mode === 'practice' && S.profile.oral === 'on' && !it.audio
     const C = {
-      html: `<div class="q-text">${qtext(it.q)}</div><div class="opts-wrap${cover ? ' covered' : ''}">${cover ? '<button type="button" class="cover-btn"><span>🗣️ 先說出你的答案</span><small>想好了再點這裡看選項</small></button>' : ''}<div class="opts${it.pic ? ' pic' : ''}${abc ? ' abc' : ''}" role="radiogroup">${order
+      html: `<div class="q-text">${qtext(it.q)}</div><div class="opts-wrap${cover ? ' covered' : ''}">${cover ? '<button type="button" class="cover-btn"><span>🗣️ 先說出你的答案</span><small>想好了再點這裡看選項</small></button>' : ''}<div class="opts${it.pic ? ' pic' : ''}${abc ? ' abc' : ''}${!it.pic && !abc && order.length === 4 && it.opts.every((o) => String(o).length <= 12 && String(o).split(/\s+/).every((w) => w.length <= 9)) ? ' grid2' : ''}" role="radiogroup">${order
         .map((i, k) => `<button type="button" class="opt" role="radio" aria-checked="false" data-i="${i}"><span class="opt-key">${'ABCDEFGH'[k]}</span><span class="opt-text">${esc(it.opts[i])}</span></button>`)
         .join('')}</div></div>`,
       answered: () => sel !== null,
@@ -1718,7 +1750,7 @@ function viewRunReview(key, at, it, streak) {
   RUN = { key, at, it, reviewing: true, streak }
   // 回顧到答錯的題目：可以馬上再試一次（在視窗裡作答，不改這次的分數）
   const mine = [...S.attempts].reverse().find((a) => a.q === it.id && a.ts >= (pr.t0 || 0))
-  if (mine && mine.r !== 'ok') $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="retry">↻<span>再試一次</span></button>`)
+  if (mine && mine.r !== 'ok') $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="retry">🔄<span>再試一次</span></button>`)
   $('.run').addEventListener('click', (e) => {
     const a = e.target.closest('[data-act]')?.dataset.act
     if (a === 'close') return leaveRun()
@@ -1832,7 +1864,7 @@ function checkItem() {
   checkBadges()
   C.el.classList.add('done', 'r-' + res.r)
   $$('.ra-left [data-act=hint], .ra-left [data-act=guess]').forEach((b) => b.remove())
-  if (res.r !== 'ok') $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="retry">↻<span>再試一次</span></button>`)
+  if (res.r !== 'ok') $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="retry">🔄<span>再試一次</span></button>`)
   const btn = $('[data-act=check]')
   btn.textContent = pr.i + 1 >= pr.ids.length ? '看結果' : '繼續'
   btn.disabled = false
@@ -2676,6 +2708,13 @@ function warmIds() {
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
   {
+    v: '2.25',
+    date: '10/12',
+    student: [['🌷', '花園外觀', '整個 App 換成湖邊花園：背景是插畫、卡片像玻璃、選到的答案變紫色。想換回講義，到「設定」→「外觀」。']],
+    parent: [['🌷', '花園外觀', '畫面換成湖邊花園的樣子，內容都一樣。想換回講義，到「設定」→「外觀」。']],
+    teacher: [['🌷', '花園外觀', '學生、家長、老師的畫面一起換成花園風格；講義外觀留在「設定」→「外觀」，每個裝置可以自己選。']],
+  },
+  {
     v: '2.24',
     date: '10/12',
     student: [
@@ -3262,7 +3301,10 @@ function stickyStatsHTML(t = todayStats(), sd = streakDays()) {
   const hws = activeHw(Sync.sid()).map(([, , s]) => s)
   const hd = hws.reduce((n, s) => n + s.done, 0)
   const ht = hws.reduce((n, s) => n + s.total, 0)
-  const note = (cls, v, k, act) => `<button class="sticky ${cls}" ${act}><b>${v}</b><span>${k}</span></button>`
+  // 2.25 花園外觀：數字上面一個彩色小圓圖示（講義外觀用 CSS 藏起來）
+  const ic = (d) => `<i class="st-ic" aria-hidden="true"><svg viewBox="0 0 24 24">${d}</svg></i>`
+  const IC = { y: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', o: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.4 1.2-3.9 2.5-5 .2 1.6.9 2.6 2 3 0-3 .3-5.5.5-8z"/>', g: '<path d="M8 4h8M7 4h10v17H7zM10 10h4M10 14h4"/>', p: '<path d="M7 7l10 10M17 7L7 17"/>' }
+  const note = (cls, v, k, act) => `<button class="sticky ${cls}" ${act}>${ic(IC[cls[2]])}<b>${v}</b><span>${k}</span></button>`
   return `<div class="stickies" role="group" aria-label="今天的數字">
     ${note('s-y', `${t.n}<small> 題</small>`, '今天練習', 'data-go="#/stats"')}
     ${note('s-o', `${sd}<small> 天</small>`, '連續練習', 'data-go="#/stats"')}
@@ -3764,7 +3806,7 @@ function gradeExam() {
     record(C.it, res, { x: 'e' })
     C.reveal(res)
     const fb = $('.q-feedback', C.el)
-    fb.innerHTML = feedbackHTML(C.it, res, { exam: true }) + (res.r !== 'ok' ? `<button class="btn ghost retry-btn" data-retry="${C.it.id}">↻ 再試一次</button>` : '')
+    fb.innerHTML = feedbackHTML(C.it, res, { exam: true }) + (res.r !== 'ok' ? `<button class="btn ghost retry-btn" data-retry="${C.it.id}">🔄 再試一次</button>` : '')
     fb.hidden = false
     revealExtras(C)
     C.el.classList.add('done', 'r-' + res.r)
@@ -4221,6 +4263,10 @@ function viewSettings() {
         <button class="row" data-x="voice"><span class="row-ic">${ICON.speaker}</span><span class="row-t">試聽語音</span>${ICON.chev}</button>
       </div><p class="group-f">聽力、口說、單字都用事先做好的自然語音播放，iPhone 開著靜音模式也聽得到（音量照媒體音量）。</p></div>
 
+      <div class="group"><div class="group-h">外觀</div><div class="list form">
+        <div class="row field"><span class="row-t">畫面風格<em class="new-tag">新</em><small>花園：湖邊插畫＋玻璃卡片；講義：紙張＋螢光筆</small></span><div class="seg small" data-seg="skin"><button class="${skinNow() === 'garden' ? 'on' : ''}" data-v="garden">花園</button><button class="${skinNow() === 'notebook' ? 'on' : ''}" data-v="notebook">講義</button></div></div>
+      </div><p class="group-f">只改這個裝置的樣子，紀錄不受影響。</p></div>
+
       <div class="group"><div class="group-h">上課</div><div class="list form">
         <div class="row field"><span class="row-t">先說答案，再看選項<small>選擇題的選項先遮住，學生先口頭回答</small></span><div class="seg small" data-seg="oral"><button class="${p.oral === 'on' ? 'on' : ''}" data-v="on">開</button><button class="${p.oral !== 'on' ? 'on' : ''}" data-v="off">關</button></div></div>
         <div class="row field"><span class="row-t">字體大小</span><div class="seg small" data-seg="size"><button class="${p.size !== 'lg' ? 'on' : ''}" data-v="std">標準</button><button class="${p.size === 'lg' ? 'on' : ''}" data-v="lg">大</button></div></div>
@@ -4274,6 +4320,12 @@ function viewSettings() {
         if (!teacherDevice()) return
         lsSet(BETA_KEY, b.dataset.v)
         toast(b.dataset.v === 'on' ? '這個裝置開始試用新功能（學生、家長看不到）' : '已關掉試用', '🧪')
+        return viewSettings()
+      }
+      // 2.25 外觀：花園／講義（存在這個裝置；字型跟 index.html 一樣不擋畫面）
+      if (k === 'skin') {
+        if (b.classList.contains('on')) return
+        setSkin(b.dataset.v)
         return viewSettings()
       }
       // 2.23 通知：開（要在按下去的這一刻跟系統要權限）／關
@@ -5377,6 +5429,23 @@ const lsSet = (k, v) => {
   try {
     localStorage.setItem(k, v)
   } catch {}
+}
+// 2.25 外觀（index.html 開頭先設好 <html data-skin>，這裡給設定頁切換）
+const SKIN_FONT = { garden: 'Nunito:wght@700;800', notebook: 'LXGW+WenKai+TC:wght@400;700' }
+const SKIN_BAR = { garden: '#cfe6f2', notebook: '#f7f3ea' }
+const skinNow = () => document.documentElement.dataset.skin || 'garden'
+function setSkin(s) {
+  if (!Object.prototype.hasOwnProperty.call(SKIN_FONT, s)) return
+  lsSet('g7review:skin', s)
+  document.documentElement.dataset.skin = s
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', SKIN_BAR[s]) // 第一個是淺色用的
+  const href = `https://fonts.googleapis.com/css2?family=${SKIN_FONT[s]}&display=swap`
+  if (![...document.querySelectorAll('link[rel=stylesheet]')].some((l) => l.href === href)) {
+    const l = document.createElement('link')
+    l.rel = 'stylesheet'
+    l.href = href
+    document.head.appendChild(l)
+  }
 }
 const dbBase = () => (lsGet('g7review:db') || SYNC_DB).replace(/\/+$/, '')
 const ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789' // 沒有 0／o、1／l／i，念、抄都不會看錯

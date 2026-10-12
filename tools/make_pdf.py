@@ -13,7 +13,7 @@ PORT = 5187
 URL = f"http://127.0.0.1:{PORT}/"
 # 聽力重點的句子、藍色單字在 PDF 裡是音檔連結、QR Code 打開網頁版：都要指向正式網站（不是本機）
 LIVE = "https://xiaoyu-1201.github.io/g7-english-review/"
-SEED = "localStorage.setItem('g7review:v1', JSON.stringify({seen:{intro:1}})); window.__pdfBase = '" + LIVE + "';"
+SEED = "localStorage.setItem('g7review:v1', JSON.stringify({seen:{intro:1}})); localStorage.setItem('g7review:skin', 'notebook'); window.__pdfBase = '" + LIVE + "';"
 # PDF 裡不要頁首、分頁列、課名列
 HIDE = ".lg-head, .tabbar, .notes-units { display: none !important } .page { padding-top: 0 }"
 
