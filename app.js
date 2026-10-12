@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.25.5（10/12）'
+const VERSION = '2.25.6（10/12）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -4436,9 +4436,12 @@ async function checkUpdate() {
     latest = (text.match(/const VERSION = '([^']+)'/) || [])[1] || ''
   } catch {}
   if (latest && latest === VERSION) return toast(`已經是最新版：${VERSION}`, '✅')
+  // 只清自己的：同一個網址（xiaoyu-1201.github.io）底下還有聖佳庫存、培訓筆記，它們的離線程式和暫存不能一起刪（2.25.6）
+  // 推播用的 xy-flags、口說辨識模型（transformers-cache）也留著
   try {
-    for (const r of (await navigator.serviceWorker?.getRegistrations?.()) || []) await r.unregister()
-    for (const k of (await caches?.keys?.()) || []) await caches.delete(k)
+    const mine = new URL('./', location.href).href
+    for (const r of (await navigator.serviceWorker?.getRegistrations?.()) || []) if (r.scope === mine) await r.unregister()
+    for (const k of (await caches?.keys?.()) || []) if (k.startsWith('g7review-')) await caches.delete(k)
   } catch {}
   toast('更新中，馬上重新整理', '⬇️')
   setTimeout(() => location.reload(), 600)
