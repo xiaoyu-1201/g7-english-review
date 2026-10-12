@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.24.1（10/12）'
+const VERSION = '2.24.2（10/12）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -3271,7 +3271,13 @@ function stickyStatsHTML(t = todayStats(), sd = streakDays()) {
   </div>`
 }
 // 2.24 小芽（小宇英文的吉祥物，老師 10/12 選的）：圓圓的米色身體、頭上兩片葉子；mood：happy（打招呼）／cheer（練過了，舉手歡呼）／sleepy（晚上）
+// 2.24.2 正式圖（老師 10/12 用 ChatGPT 畫的，切開、去背：img/xiaoya-<mood>.webp）；下面的 SVG 留著當備用
+const XIAOYA_MOODS = ['happy', 'cheer', 'sleepy']
 function xiaoya(mood = 'happy', cls = '') {
+  if (XIAOYA_MOODS.includes(mood)) return `<img class="xiaoya ${cls}" src="img/xiaoya-${mood}.webp" alt="" aria-hidden="true" draggable="false">`
+  return xiaoyaSVG(mood, cls)
+}
+function xiaoyaSVG(mood = 'happy', cls = '') {
   const eyes =
     mood === 'sleepy'
       ? '<path d="M37 72 Q42 77 47 72 M59 72 Q64 77 69 72" stroke="#2b2723" stroke-width="3" fill="none" stroke-linecap="round"/>'
@@ -7397,7 +7403,7 @@ function stuCardHTML(sid) {
       ${nu ? `<button class="btn ghost small-btn" data-act="next">🔓 開放 ${esc(nu)}</button>` : ''}
       <button class="btn ghost small-btn" data-act="hw">📌 派作業</button>
       <button class="btn ghost small-btn" data-act="watch">${ICON.eye}<span>課堂檢視</span></button>
-      <button class="btn ghost small-btn" data-act="parent">傳給家長</button>
+      <button class="btn ghost small-btn" data-act="parent">👪 傳給家長</button>
       <button class="link sc-units" data-act="units">${nu ? '開放的課' : '課程已全部開放'}</button>
     </div>
   </section>`
@@ -7652,8 +7658,8 @@ function viewStudent(sid, keepScroll = false) {
 const stuActionsHTML = (sid) => `<div class="stu-actions">
         <button class="btn primary" data-go="#/watch/${sid}">${ICON.eye}<span>課堂檢視</span></button>
         <button class="btn ghost" data-assign>📌<span>派作業</span></button>
-        <button class="btn ghost" data-share="student">傳給學生</button>
-        <button class="btn ghost" data-share="parent">傳給家長</button>
+        <button class="btn ghost" data-share="student">📨 傳給學生</button>
+        <button class="btn ghost" data-share="parent">👪 傳給家長</button>
       </div>`
 const stuSegHTML = (sid, tab) => `<div class="seg full stu-seg" role="tablist"><button role="tab" class="${tab === 'live' ? 'on' : ''}" aria-selected="${tab === 'live'}" data-tab="#/student/${sid}">即時作答</button><button role="tab" class="${tab === 'home' ? 'on' : ''}" aria-selected="${tab === 'home'}" data-tab="#/student/${sid}/home">學習進度</button><button role="tab" class="${tab === 'prep' ? 'on' : ''}" aria-selected="${tab === 'prep'}" data-tab="#/student/${sid}/prep">備課<em class="new-tag" aria-hidden="true">新</em></button></div>`
 // 分頁切換：取代目前這一筆瀏覽紀錄（「返回」直接回學生列表，不會在兩個分頁之間來回）
@@ -7777,9 +7783,9 @@ function viewStudentPrep(sid, keepScroll = false) {
         ${d.tasks.length && !d.today.length ? `<div class="prep-tasks">${d.tasks.map((t) => `<span class="chip">${esc(hwTaskName(t))}</span>`).join('')}</div>` : ''}
         <button class="btn ${d.today.length ? 'ghost' : 'primary'} big prep-go" data-prephw>📌<span>${d.today.length ? '再派一份' : d.tasks.length ? '派這份作業' : '派作業'}</span></button></section>
       <section class="card pp-card"><div class="sec-h"><div><h2>家長</h2><p>${parentP}</p></div></div>
-        <div class="nc-acts${d.hasParent ? '' : ' one'}">${d.hasParent ? `<button class="btn ghost" data-report>📋 本週摘要</button><button class="btn ghost" data-note>✏️ 給家長的話</button>` : `<button class="btn ghost" data-share="parent">傳家長連結</button>`}</div>
+        <div class="nc-acts${d.hasParent ? '' : ' one'}">${d.hasParent ? `<button class="btn ghost" data-report>📋 本週摘要</button><button class="btn ghost" data-note>✏️ 給家長的話</button>` : `<button class="btn ghost" data-share="parent">👪 傳家長連結</button>`}</div>
         ${parentTip ? `<p class="prep-tip">${parentTip}</p>` : ''}</section>
-      ${opened ? `<section class="card pp-card"><div class="sec-h"><div><h2>下一課</h2><p>已經開放 ${esc(opened)}</p></div><button class="btn ghost small" data-undoopen="${esc(opened)}">復原</button></div></section>` : d.next ? `<section class="card pp-card"><div class="sec-h"><div><h2>下一課</h2><p>上完這堂課，可以開放 ${esc(d.next)}</p></div><button class="btn ghost small nowrap" data-opennext>開放 ${esc(d.next)}</button></div></section>` : ''}
+      ${opened ? `<section class="card pp-card"><div class="sec-h"><div><h2>下一課</h2><p>已經開放 ${esc(opened)}</p></div><button class="btn ghost small" data-undoopen="${esc(opened)}">↩️ 復原</button></div></section>` : d.next ? `<section class="card pp-card"><div class="sec-h"><div><h2>下一課</h2><p>上完這堂課，可以開放 ${esc(d.next)}</p></div><button class="btn ghost small nowrap" data-opennext>🔓 開放 ${esc(d.next)}</button></div></section>` : ''}
       </div></div>
     </div>`,
   )
@@ -8681,7 +8687,7 @@ function hwTeacherHTML(sid) {
       .map(([id, h]) => {
         const st = hwStatus(h, sess, att)
         const late = !st.all && h.due && Date.now() > h.due
-        return `<div class="hw-item${st.all ? ' all' : ''}"><div class="hw-top"><b>${esc(h.title)}</b><span class="${late ? 'late' : ''}">${st.all ? '✓ 全部完成' : `${st.done}／${st.total}${h.due ? '・' + (late ? '已過期限' : dueText(h.due)) : ''}`}</span><button class="link hw-share" data-sharehw="${id}">傳給學生</button><button class="link hw-edit" data-edithw="${id}">修改</button><button class="link hw-del" data-delhw="${id}">刪除</button></div>
+        return `<div class="hw-item${st.all ? ' all' : ''}"><div class="hw-top"><b>${esc(h.title)}</b><span class="${late ? 'late' : ''}">${st.all ? '✓ 全部完成' : `${st.done}／${st.total}${h.due ? '・' + (late ? '已過期限' : dueText(h.due)) : ''}`}</span><button class="link hw-share" data-sharehw="${id}">📨 傳給學生</button><button class="link hw-edit" data-edithw="${id}">修改</button><button class="link hw-del" data-delhw="${id}">刪除</button></div>
         ${h.note ? `<p class="hw-note">💬 ${esc(h.note)}</p>` : ''}
         <div class="list flat">${st.res
           .map(({ t, s, ok, empty }) => `<div class="row static hw-task${ok ? ' ok' : ''}"><span class="hw-chk">${ok ? ICON.check : ''}</span><span class="row-t">${esc(hwTaskName(t))}${s ? `<small>${fmtTime(s.ts)}${s.n ? `・${s.n} 題` : ''}</small>` : ''}</span><span class="row-r">${s ? `${s.s} 分` : empty ? '已清空' : '還沒做'}</span></div>`)

@@ -9840,6 +9840,12 @@ a.row:active {
   width: 58px;
   height: 61px;
 }
+img.xiaoya {
+  width: auto;
+  height: 66px; /* 2.24.2 正式圖（寬高比約 0.9） */
+  -webkit-user-drag: none;
+  user-select: none;
+}
 .gd-say {
   margin: 8px 0 0;
   padding: 6px 10px;
