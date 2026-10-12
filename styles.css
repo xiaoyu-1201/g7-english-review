@@ -9962,6 +9962,53 @@ a.row:active {
     transform: translateY(-2px) scale(1.06);
   }
 }
+/* 家長的學習進度（2.24，老師 10/12）：同一個窗台，牆高一點，課名下面多一行「會了幾題」；只看、不能點 */
+.pp-garden .gd-scene {
+  height: 256px;
+}
+.pp-garden .gd-scene::before {
+  inset: 0 0 64px;
+}
+.pp-garden .gd-scene::after {
+  height: 64px;
+}
+.pp-garden .gd-hills {
+  bottom: 64px;
+}
+.pp-garden .gd-sill .gd-cell {
+  cursor: default;
+}
+.pp-garden .gd-sill .gd-cell span {
+  flex-direction: column;
+  justify-content: center;
+  height: 40px;
+  margin: 17px 0 7px;
+  line-height: 1.25;
+}
+.pp-garden .gd-sill .gd-cell span small {
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.pp-garden-f {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 12px 18px 0;
+  font-size: 14px;
+  color: var(--label2);
+}
+.pp-garden-f .gd-rule {
+  margin: 0;
+}
+@media (min-width: 700px) {
+  .pp-garden .gd-scene {
+    height: 300px;
+  }
+}
 /* 很窄的手機（寬 360 以下）：小芽的話放到標題下面一行（不然會蓋住標題） */
 @media (max-width: 360px) {
   .gd-scene {

@@ -5,7 +5,7 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 
-const VERSION = '2.24（10/12）'
+const VERSION = '2.24.1（10/12）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2603,19 +2603,7 @@ function viewHome() {
     </div>`,
   )
   const v = $('.home')
-  // 窗台：選到的那一盆捲到中間（課很多、要左右滑的時候）
-  const sill = $('.gd-sill', v)
-  const onCell = sill && $('.gd-cell.on', sill)
-  if (onCell && sill.scrollWidth > sill.clientWidth) sill.scrollLeft = onCell.offsetLeft - (sill.clientWidth - onCell.offsetWidth) / 2
-  // 課多到排不下：兩邊淡出，看得出可以左右滑（滑到最邊那一側就不淡出）
-  if (sill) {
-    const edge = () => {
-      sill.classList.toggle('more-r', sill.scrollLeft + sill.clientWidth < sill.scrollWidth - 2)
-      sill.classList.toggle('more-l', sill.scrollLeft > 2)
-    }
-    edge()
-    sill.addEventListener('scroll', edge, { passive: true })
-  }
+  initSill(v) // 窗台：選到的那一盆捲到中間、課多就兩邊淡出
   v.addEventListener('click', (e) => {
     const m = e.target.closest('[data-mod]')
     if (m) return startModule(m.dataset.mod)
@@ -2695,7 +2683,7 @@ const NEWS = [
       ['🌱', '小芽', '小宇英文的吉祥物，坐在窗框上跟你說話：還差幾題長大、連續練了幾天。'],
       ['📝', '彩色便利貼', '今天練習、連續天數、作業、錯題本，一眼看完；點一下就到那裡。'],
     ],
-    parent: [['🌱', '小芽和窗台花園', '孩子的首頁換成窗台花園，還有吉祥物「小芽」陪孩子練習。']],
+    parent: [['🌱', '小芽和窗台花園', '「學習進度」裡的花園換成窗台：每一課一盆，下面寫會了幾題；小芽會告訴你孩子這週練了多少。']],
     teacher: [
       ['🪟', '學生首頁：窗台花園＋小芽', '每一課一盆植物排在窗台上（不放名字）；小芽提醒還差幾題長大。'],
       ['📝', '學生首頁：彩色便利貼', '黃＝今天、橘＝連續天數、綠＝作業、粉紅＝錯題本。'],
@@ -3218,16 +3206,16 @@ function gardenHTML(nextBtn, resume) {
         : t.n
           ? `今天練了 ${t.n} 題，很棒！`
           : { am: '早安！先做 5 題暖身吧', pm: '午安！今天還沒練喔', night: '睡前練 5 題就好～' }[tod]
-  const scene = `<div class="gd-scene sky-${tod}">
-      ${skyDecoSVG(tod)}
-      <p class="gd-scene-h">我的花園<em class="new-tag">新</em></p>
-      <div class="gd-ya">${xiaoya(t.n ? 'cheer' : tod === 'night' ? 'sleepy' : 'happy')}<p class="gd-say">${(say.match(/[^，！～]+[，！～]?/g) || [say])
-        .map((x) => `<span class="nowrap">${esc(x)}</span>`) // 在標點後面才換行（不會只剩一兩個字掉下去）
-        .join('')}</p></div>
-      <div class="gd-sill" role="group" aria-label="各課的植物，點一盆看那一課">${units
-        .map((u) => `<button class="gd-cell st${gs[u].stage}${u === cur ? ' on' : ''}${u === cur && grown.includes(cur) && !reduceMotion() ? ' grow' : ''}" data-garden="${esc(u)}" aria-pressed="${u === cur}" aria-label="${esc(u)}：${esc(names[gs[u].stage])}">${plantImg(type, gs[u].stage, `small st${gs[u].stage}`)}<span aria-hidden="true">${esc(u)}</span></button>`)
-        .join('')}</div>
-    </div>`
+  const scene = sceneHTML({
+    tod,
+    title: '我的花園<em class="new-tag">新</em>',
+    say,
+    mood: t.n ? 'cheer' : tod === 'night' ? 'sleepy' : 'happy',
+    label: '各課的植物，點一盆看那一課',
+    cells: units
+      .map((u) => `<button class="gd-cell st${gs[u].stage}${u === cur ? ' on' : ''}${u === cur && grown.includes(cur) && !reduceMotion() ? ' grow' : ''}" data-garden="${esc(u)}" aria-pressed="${u === cur}" aria-label="${esc(u)}：${esc(names[gs[u].stage])}">${plantImg(type, gs[u].stage, `small st${gs[u].stage}`)}<span aria-hidden="true">${esc(u)}</span></button>`)
+      .join(''),
+  })
   return `<section class="garden card has-scene">
     ${scene}
     <div class="gd-main">
@@ -3243,6 +3231,30 @@ function gardenHTML(nextBtn, resume) {
     <div class="hero-acts">${grow}</div>
   </section>
   ${stickyStatsHTML(t, sd)}`
+}
+// 窗台場景（學生首頁、家長的學習進度共用）：title 是 HTML（呼叫的人要先 esc）；cells 是窗台上每一盆的 HTML
+function sceneHTML({ tod = timeOfDay(), title, say, mood, cells, label, cls = '' }) {
+  return `<div class="gd-scene sky-${tod}${cls ? ' ' + cls : ''}">
+      ${skyDecoSVG(tod)}
+      <p class="gd-scene-h">${title}</p>
+      <div class="gd-ya">${xiaoya(mood)}<p class="gd-say">${(say.match(/[^，！～]+[，！～]?/g) || [say])
+        .map((x) => `<span class="nowrap">${esc(x)}</span>`) // 在標點後面才換行（不會只剩一兩個字掉下去）
+        .join('')}</p></div>
+      <div class="gd-sill" role="group" aria-label="${esc(label)}">${cells}</div>
+    </div>`
+}
+// 窗台排不下（課很多）：選到的那盆捲到中間、兩邊淡出看得出可以左右滑
+function initSill(root) {
+  const sill = root && $('.gd-sill', root)
+  if (!sill) return
+  const on = $('.gd-cell.on', sill)
+  if (on && sill.scrollWidth > sill.clientWidth) sill.scrollLeft = on.offsetLeft - (sill.clientWidth - on.offsetWidth) / 2
+  const edge = () => {
+    sill.classList.toggle('more-r', sill.scrollLeft + sill.clientWidth < sill.scrollWidth - 2)
+    sill.classList.toggle('more-l', sill.scrollLeft > 2)
+  }
+  edge()
+  sill.addEventListener('scroll', edge, { passive: true })
 }
 // 2.24 彩色便利貼：一種顏色固定一件事（黃＝今天、橘＝連續天數、綠＝作業、粉紅＝錯題本），點了到那裡
 function stickyStatsHTML(t = todayStats(), sd = streakDays()) {
@@ -7022,6 +7034,7 @@ function viewLiveHome(keepScroll = false) {
     </div>`,
   )
   if (keepScroll) window.scrollTo(0, y)
+  initSill($('.parent-prog')) // 2.24 窗台：課多就兩邊淡出
   if (parentMode()) newsMaybe()
   $('.parent-prog').addEventListener('click', (e) => {
     const tb = e.target.closest('[data-tab]')
@@ -7140,15 +7153,25 @@ function parentProgressHTML(list, sess, units, l, name) {
       gardenReady()
         ? (() => {
             // 2.21 孩子的花園：每一課一株植物，會了越多題長越大（家長看得到孩子的成長）
+            // 2.24 換成跟孩子首頁一樣的窗台（老師 10/12）：小芽跟家長說這週的狀況；每一盆下面寫會了幾題（家長頁只看、不能點）
             const type = plantOf(sess)
             const names = stageNames(type)
-            return `<section class="card pp-card">${secH(`${esc(name)} 的花園`, `${esc(PLANTS[type].name)}・答對越多長越大`)}
-              <div class="gd-row parent">${UNITS.filter((u) => units.has(u))
+            const tod = timeOfDay()
+            const bloom = UNITS.filter((u) => units.has(u) && unitGrowth(u, list, sess).stage >= 4).length
+            const say = week.length ? `這週練了 ${week.length} 題，很認真！` : bloom ? `已經有 ${bloom} 課開花了！` : '這週還沒開始練習喔'
+            return `<section class="card pp-card garden has-scene pp-garden">${sceneHTML({
+              tod,
+              title: `${esc(name.length > 8 ? name.slice(0, 7) + '…' : name)} 的花園`, // 「新」放在下面那行（標題有名字比較長，會被小芽的話蓋到）
+              say,
+              mood: week.length ? 'cheer' : tod === 'night' ? 'sleepy' : 'happy',
+              label: '各課的植物',
+              cells: UNITS.filter((u) => units.has(u))
                 .map((u) => {
                   const x = unitGrowth(u, list, sess)
-                  return `<div class="gd-cell">${plantImg(type, x.stage, `small st${x.stage}`)}<span>${esc(u)}</span><small>${names[x.stage]}<br>${x.ok}／${x.total}</small></div>`
+                  return `<div class="gd-cell st${x.stage}" role="img" aria-label="${esc(u)}：${esc(names[x.stage])}，會了 ${x.ok}／${x.total} 題">${plantImg(type, x.stage, `small st${x.stage}`)}<span aria-hidden="true">${esc(u)}<small>${x.ok}／${x.total}</small></span></div>`
                 })
-                .join('')}</div><button class="link gd-rule" data-growrule="${type}">植物怎麼長大？</button></section>`
+                .join(''),
+            })}<p class="pp-garden-f"><span><em class="new-tag">新</em> ${esc(PLANTS[type].name)}・答對越多長越大；數字是會了幾題</span><button class="link gd-rule" data-growrule="${type}">植物怎麼長大？</button></p></section>`
           })()
         : ''
     }
