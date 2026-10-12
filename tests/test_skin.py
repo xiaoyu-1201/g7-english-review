@@ -12,9 +12,9 @@ with sync_playwright() as p:
     check(P.evaluate("document.documentElement.dataset.skin") == "garden", "garden is the default skin")
     check(P.evaluate("getComputedStyle(document.body, '::before').backgroundImage.includes('bg-garden')"), "garden background picture is behind the page")
     check(P.locator(".sticky .st-ic").count() == 4, "the four number tiles have icons")
-    # 2.25 主畫面圖示（小芽）：manifest 和 apple-touch-icon 都指到 v3，圖抓得到
+    # 2.25.3 主畫面圖示（照拐乖記帳）：icons/ 資料夾；離線程式裝好時就存好圖示，抓圖示直接從暫存給
     mf = P.evaluate("fetch(document.querySelector('link[rel=manifest]').href).then(r => r.json())")
-    check(all("-v3.png" in i["src"] for i in mf["icons"]) and mf["display"] == "standalone", "manifest uses the new 小芽 ABC icons")
+    check(all(i["src"].startswith("icons/") for i in mf["icons"]) and mf["display"] == "standalone", "manifest uses the new 小芽 ABC icons")
     for src in [i["src"] for i in mf["icons"]] + [P.get_attribute("link[rel=apple-touch-icon]", "href")]:
         check(P.evaluate(f"fetch({src!r}).then(r => r.ok)"), f"icon loads: {src}")
     # 不認得的值 → 花園

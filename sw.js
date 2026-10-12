@@ -1,10 +1,13 @@
 // 讓 App 沒有網路也能打開
 // 更新：每次都先問 GitHub 有沒有新版（跳過 10 分鐘暫存）；新版裝好會自動重新整理一次
 // 改版時：app.js 的 VERSION 和這裡的 CACHE 都要改
-const CACHE = 'g7review-v77'
-const SHELL = ['./', 'index.html', 'app.js', 'icons.js', 'focus.js', 'content.js', 'content2.js', 'content3.js', 'speak2.js', 'art.js', 'qrcode.js', 'asr.js', 'styles.css', 'icon.svg', 'privacy.html', 'licenses.html', 'img/bg-garden.webp', 'img/bg-garden-l.webp']
-// 主畫面圖示和 manifest 不經過 service worker：iPhone「加入主畫面」抓圖示時會走頁面的 SW，被攔到就會變成文字圖示（10/7）
-// PDF（重點總整理）也不經過、不存進暫存：幾 MB 的檔案只在要分享時才抓
+const CACHE = 'g7review-v78'
+// 2.25.3 主畫面圖示（老師 10/12：加到主畫面還是沒有圖示）→ 照拐乖記帳的做法：圖示和 manifest 裝的時候就先存好，
+// iPhone「加入主畫面」來抓的時候直接從暫存給（快取優先，沒網路、網路慢也拿得到）
+const ICONS = ['manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png']
+const SHELL = ['./', 'index.html', 'app.js', 'icons.js', 'focus.js', 'content.js', 'content2.js', 'content3.js', 'speak2.js', 'art.js', 'qrcode.js', 'asr.js', 'styles.css', 'icon.svg', 'privacy.html', 'licenses.html', 'img/bg-garden.webp', 'img/bg-garden-l.webp', ...ICONS]
+const ICON_RE = /\/(manifest\.webmanifest|icons\/[\w-]+\.png)$/
+// 其他 PNG（舊版圖示）、PDF（重點總整理，幾 MB）不經過、不存進暫存
 const BYPASS = /\.(png|webmanifest|pdf)$/
 
 self.addEventListener('install', (e) => {
@@ -54,7 +57,7 @@ self.addEventListener('push', (e) => {
         if (on === '1') d = { ...d, title: '小宇英文', body: '今天的學生摘要好了，結束學生模式後再看。' }
       }
       // 同一種通知（tag）會蓋掉前一則；renotify：蓋掉時一樣會響（前一天沒滑掉的提醒，不能讓今天的變成靜音）
-      await self.registration.showNotification(d.title || '小宇英文', { body: d.body || '', icon: 'icon-192-v3.png', tag: d.tag || 'daily', renotify: true, data: { url: d.url || './' } })
+      await self.registration.showNotification(d.title || '小宇英文', { body: d.body || '', icon: 'icons/icon-192.png', tag: d.tag || 'daily', renotify: true, data: { url: d.url || './' } })
     })(),
   )
 })
@@ -79,7 +82,24 @@ self.addEventListener('notificationclick', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
-  if (url.origin !== self.location.origin || e.request.method !== 'GET' || BYPASS.test(url.pathname)) return
+  if (url.origin !== self.location.origin || e.request.method !== 'GET') return
+  if (ICON_RE.test(url.pathname)) {
+    e.respondWith(
+      caches.match(e.request, { ignoreSearch: true }).then(
+        (hit) =>
+          hit ||
+          fetch(e.request).then((res) => {
+            if (res.ok) {
+              const copy = res.clone() // 要在回傳前複製（回傳後內容會被讀走）
+              caches.open(CACHE).then((c) => c.put(e.request, copy))
+            }
+            return res
+          }),
+      ),
+    )
+    return
+  }
+  if (BYPASS.test(url.pathname)) return
   e.respondWith(
     caches.open(CACHE).then((cache) =>
       fetch(e.request, { cache: 'no-cache' })
