@@ -1,6 +1,7 @@
 // 列出所有要做成音檔的文字：聽力（依說話的人選聲音）、口說句子、可以點來聽的單字、分類題會念的字卡、設定頁的試聽
 // App 找不到音檔才會用裝置朗讀，而裝置朗讀在 iPhone 靜音模式下沒有聲音，所以會念出來的字都要列在這裡
 import { MODULES, SPEAK, VOICE_SAMPLE, SPEAK_PAIRS, SPEAK_QA } from '../../content.js'
+import { VOCAB } from '../../vocab.js'
 import fs from 'fs'
 
 const lines = new Set() // "說話的人|文字"
@@ -41,6 +42,8 @@ for (const [q, ans] of Object.values(SPEAK_QA).flat()) {
   both(q)
   for (const a of ans) addSentence(a)
 }
+// 2.26 每課單字：單字本身（點來聽、聽音選字、單字卡）＋自編例句（單字卡翻面可以聽）
+for (const groups of Object.values(VOCAB)) for (const g of groups) for (const [en, , , ex] of g.w) { words.add(en.toLowerCase()); lines.add('W|' + ex) }
 const out = { lines: [...lines], words: [...words] }
 fs.writeFileSync(new URL('./texts.json', import.meta.url), JSON.stringify(out, null, 1))
 console.log('lines', out.lines.length, 'words', out.words.length)

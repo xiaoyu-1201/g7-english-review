@@ -17,6 +17,8 @@ const NAMES = [
   'rocket', 'bolt', 'award', 'hand-stop', 'hourglass', 'player-stop', 'search', 'ear', 'eye-off', 'mail', 'cloud', 'help', 'turtle', 'message-dots',
   // 2.25 每個按鈕都要有圖示（QA）
   'arrow-right', 'printer', 'plus', 'logout', 'list-check', 'settings', 'pencil-minus', 'player-track-next', 'seedling', 'chevron-down', 'cloud-upload', 'external-link',
+  // 2.26 單字玩法
+  'cards', 'puzzle', 'abc', 'text-plus', 'chevron-up',
 ]
 const out = {}
 for (const n of NAMES) {

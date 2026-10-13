@@ -4,8 +4,9 @@ import { TAGS, TAG_HINTS, CHECKLIST, LESSONS, PASSAGES, MODULES, FLASH, SPEAK, E
 import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
+import { VOCAB, unitKey, wordSlug } from './vocab.js'
 
-const VERSION = '2.25.6（10/12）'
+const VERSION = '2.26（10/13）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -29,7 +30,7 @@ const modCat = (mid) => {
 }
 const modIc = (mid, cls = '') => `<span class="mod-ic mc-${modCat(mid)}${cls ? ' ' + cls : ''}">${ti(MOD_TI[mid] || 'book')}</span>`
 // 活動（和首頁的活動卡同色）：模擬段考、口說、錯題本、閃電、重點總整理
-const ACT_TI = { exam: ['file-text', 'exam'], speak: ['microphone', 'speak'], book: ['book', 'book'], flash: ['bolt', 'flash'], notes: ['notebook', 'notes'] }
+const ACT_TI = { exam: ['file-text', 'exam'], speak: ['microphone', 'speak'], book: ['book', 'book'], flash: ['bolt', 'flash'], notes: ['notebook', 'notes'], vocab: ['abc', 'vocab'] }
 const actIc = (k, cls = '') => `<span class="mod-ic mc-${ACT_TI[k][1]}${cls ? ' ' + cls : ''}">${ti(ACT_TI[k][0])}</span>`
 // 其他地方還留著的 emoji（圖示框、標題和按鈕開頭、提示訊息）：畫面產生時換成同一套線條圖示（iconize）
 // [圖示名稱, 顏色]；顏色＝語意（藍＝一般、綠＝完成、橘＝提醒、紅＝危險、灰＝次要）
@@ -47,6 +48,8 @@ const EMO = {
   '🔈': ['volume', 'blue'], '💪': ['flame', 'orange'], '👏': ['thumb-up', 'green'], '👉': ['hand-finger-right', 'blue'], '🎯': ['target', 'red'], '🎓': ['school', 'green'],
   '🚀': ['rocket', 'blue'], '🔟': ['list-numbers', 'orange'], '⚡': ['bolt', 'orange'], '🥈': ['medal', 'gray'], '🥇': ['medal', 'orange'], '💯': ['award', 'red'],
   '📘': ['book', 'blue'], '📒': ['notebook', 'green'], '🌱': ['sparkles', 'green'], '🙌': ['thumb-up', 'green'], '🏆': ['trophy', 'orange'], '🔄': ['refresh', 'blue'],
+  '🔤': ['abc', 'orange'], '🧩': ['puzzle', 'purple'], '🃏': ['cards', 'indigo'], '🔼': ['chevron-up', 'blue'], '🏠': ['home', 'blue'], '➡️': ['arrow-right', 'blue'],
+  '⏭️': ['player-track-next', 'gray'], '🏁': ['flag', 'green'],
 }
 const EMO_LEAD = /^\s*(\p{Extended_Pictographic}️?)\s*/u
 const emoIc = (e, cls = '') => (EMO[e] ? ti(EMO[e][0], `ic-${EMO[e][1]}${cls ? ' ' + cls : ''}`) : '')
@@ -115,7 +118,7 @@ new MutationObserver((list) => {
 }).observe(document.documentElement, { childList: true, subtree: true })
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
-const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念' }
+const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念', spell: '拼字' }
 const DAY = 86400000
 
 // ───────────────────────── 小工具 ─────────────────────────
@@ -161,6 +164,7 @@ const DEF = () => ({
   sessions: [],
   progress: {},
   flash: { best: 0, runs: 0 },
+  vocab: { w: {}, best: {} }, // 2.26 單字：w[單字]={k:記得了幾次, ts}；best[課:組]=配對最快秒數
 })
 // 學生模式：老師的裝置暫時借給某個學生用（紀錄存在另一份，同步到那個學生）；同步設定（S.sync、S.syncQ）存在共用的 SYNC_KEY
 const ACTIVE = (() => {
@@ -179,7 +183,7 @@ function load() {
   try {
     main = JSON.parse(localStorage.getItem(KEY) || '{}') || {}
     const d = ACTIVE ? JSON.parse(localStorage.getItem(STORE) || '{}') || {} : main
-    s = { ...s, ...d, profile: { ...s.profile, ...(d.profile || {}) }, flash: { ...s.flash, ...(d.flash || {}) } }
+    s = { ...s, ...d, profile: { ...s.profile, ...(d.profile || {}) }, flash: { ...s.flash, ...(d.flash || {}) }, vocab: { w: {}, best: {}, ...(d.vocab || {}) } }
   } catch {}
   try {
     const sy = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null')
@@ -232,6 +236,102 @@ for (const [k, lines] of Object.entries(ADD_LINES)) {
   if (card) card.show += lines.map((l) => '<br>' + l).join('')
 }
 const ALL_SCORED = MOD_ORDER.flatMap((m) => MODULES[m].scored)
+
+// ───────────────────────── 單字（2.26，老師 10/13：每課單字＋各種玩法） ─────────────────────────
+// 每課單字照課本分成幾組（對話、主題字、閱讀、認識字彙），每組六種玩法：單字卡、聽音選字、配對消除、拼字方塊、句子填空、念單字
+// 聽音選字、句子填空、拼字做成真的題目（ITEM），錯題本、課堂檢視、紀錄、花園都通用；認識字彙只要懂意思、聽得懂（課綱），只有單字卡、聽音、配對
+const VOCAB_MODES = [
+  ['cards', '單字卡', 'cards', '看英文想中文，翻面看答案、聽發音'],
+  ['listen', '聽音選字', 'headphones', '聽發音，選出聽到的單字'],
+  ['match', '配對消除', 'puzzle', '英文配中文，配對就消失，比最快'],
+  ['spell', '拼字方塊', 'abc', '看中文，點字母拼出單字'],
+  ['fill', '句子填空', 'text-plus', '把對的單字填進句子（最像段考）'],
+  ['speak', '念單字', 'microphone', '念出單字，看發音準不準'],
+]
+const VGROUPS = [] // { id: 'u1:0', unit, gi, t, r, words: [{ en, pos, zh, ex, exZh, slug, key, unit, gid }], mid: 'v:u1:0' }
+const VWORD = {} // key（u1:cousin）→ 單字
+const h32 = (s) => {
+  let h = 7
+  for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return h
+}
+for (const [unit, groups] of Object.entries(VOCAB)) {
+  const uk = unitKey(unit)
+  groups.forEach((g, gi) => {
+    const id = `${uk}:${gi}`
+    const words = g.w.map(([en, pos, zh, ex, exZh]) => {
+      let key = `${uk}:${wordSlug(en)}`
+      if (VWORD[key]) key += '-' + wordSlug(pos || 'x') // 同一課同一個字兩種詞性（Starter 的 watch：手錶、觀看）：各自一份
+      const w = { en, pos, zh, ex, exZh, slug: wordSlug(en), key, unit, gid: id }
+      VWORD[w.key] = w
+      return w
+    })
+    VGROUPS.push({ id, unit, gi, t: g.t, r: !!g.r, words, mid: 'v:' + id })
+  })
+}
+const vgroup = (gid) => VGROUPS.find((g) => g.id === gid)
+const vgroupsOf = (unit) => VGROUPS.filter((g) => g.unit === unit)
+// 選項：同一組（組太小就同一課）裡固定的 3 個別的字（固定＝老師的課堂檢視畫出來的選項和學生一樣）
+// 句子填空：先挑同詞性、而且不是片語／整句的字（QA：「Your mother is ___.」不要出現「Nice to meet you.」）
+const isPhrase = (w) => /[ .]/.test(w.en.replace(/\.$/, '')) || /[.!?]$/.test(w.en)
+function vocabOpts(w, pool, fill = false) {
+  let cand = pool.filter((x) => x.key !== w.key)
+  if (fill) {
+    const samePos = cand.filter((x) => x.pos && x.pos.split(';')[0] === (w.pos || '').split(';')[0] && isPhrase(x) === isPhrase(w))
+    const noPhrase = cand.filter((x) => isPhrase(x) === isPhrase(w))
+    cand = samePos.length >= 3 ? samePos : noPhrase.length >= 3 ? noPhrase : cand
+  }
+  const others = cand.sort((a, b) => h32(w.slug + a.slug) - h32(w.slug + b.slug)).slice(0, 3)
+  const at = h32(w.slug) % 4
+  const opts = others.map((x) => x.en)
+  opts.splice(at, 0, w.en)
+  return { opts, a: at }
+}
+// 例句挖空（整個片語一起挖；只挖整個字，a 不能挖到 have 裡的 a；句首大寫、句尾標點都照顧到）
+const vocabBlank = (w) => {
+  const core = w.en.replace(/[.!?…]+$/, '')
+  const re = new RegExp(`(^|[^A-Za-z])${core.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/'/g, "['’]")}(?![A-Za-z])`, 'i')
+  return re.test(w.ex) ? w.ex.replace(re, '$1___') : ''
+}
+for (const g of VGROUPS) {
+  const unitWords = vgroupsOf(g.unit).flatMap((x) => x.words)
+  const pool = g.words.length >= 6 ? g.words : unitWords
+  const items = []
+  for (const w of g.words) {
+    const o = vocabOpts(w, pool)
+    const kp = `單字：${w.en}（${w.zh}）`
+    const letters = w.en.replace(/[^A-Za-z]/g, '')
+    items.push({ id: `vl:${w.key}`, t: 'mcq', sec: '單字', q: '聽發音，選出你聽到的單字。', audio: w.en, opts: o.opts, a: o.a, kp, g: ['先聽開頭的音，再看選項的第一個字母。', `意思是「${w.zh}」。`], vw: w.key, vm: 'listen' })
+    if (!g.r) {
+      const blank = vocabBlank(w)
+      const of = vocabOpts(w, unitWords, true)
+      if (blank) items.push({ id: `vf:${w.key}`, t: 'mcq', sec: '單字', q: `${blank}\n（${w.exZh}）`, opts: of.opts, a: of.a, kp, g: ['先看中文句子，找出空格要填的意思。', `要填的字是「${w.zh}」。`], vw: w.key, vm: 'fill' })
+      // 只有一兩個字母的字（I、a、an）拼字沒意義
+      if (letters.length > 2) items.push({ id: `vs:${w.key}`, t: 'spell', sec: '單字', q: w.zh, pos: w.pos, ans: w.en, audio: w.en, kp, g: [`共 ${letters.length} 個字母，第一個是 ${letters[0]}。`, `開頭是 ${letters.slice(0, Math.ceil(letters.length / 2))}…`], vw: w.key, vm: 'spell' })
+    }
+  }
+  MODULES[g.mid] = { unit: g.unit, title: `單字：${g.t}`, min: 5, items, scored: items, vocab: true, gid: g.id }
+  for (const it of items) {
+    it.mid = g.mid
+    ITEM[it.id] = it
+  }
+}
+// 一個字會了嗎：單字卡按過兩次「記得了」，或任何一種題目最後一次答對
+const vocabKnownBy = (list = S.attempts) => {
+  const last = lastByItem(list)
+  return (w) => (S.vocab?.w?.[w.key]?.k || 0) >= 2 || ['vl', 'vf', 'vs'].some((p) => last[`${p}:${w.key}`]?.r === 'ok')
+}
+// 只看紀錄（老師、家長看學生時沒有學生的單字卡紀錄）
+const vocabKnownOf = (unit, list) => {
+  const last = lastByItem(list)
+  const words = vgroupsOf(unit).flatMap((g) => g.words)
+  return { total: words.length, known: words.filter((w) => ['vl', 'vf', 'vs'].some((p) => last[`${p}:${w.key}`]?.r === 'ok')).length }
+}
+function vocabStats(unit, known = vocabKnownBy()) {
+  const words = vgroupsOf(unit).flatMap((g) => g.words)
+  return { total: words.length, known: words.filter(known).length }
+}
+const vocabModes = (g) => VOCAB_MODES.filter(([k]) => !g.r || ['cards', 'listen', 'match'].includes(k))
 
 // ── 一課一課開放：老師在學生總覽開放；還沒開放的課，學生畫面完全看不到 ──
 // 資料：classes/<後台>/students/<學生>/units ＝ { 'Unit 3': true, … }；沒設定過＝第一次段考的範圍都開
@@ -1209,6 +1309,99 @@ const CTRL = {
     return C
   },
 
+  // 2.26 拼字方塊：看中文（可以聽發音），點字母拼出單字；熟了可以改成直接打字（記在設定裡）
+  spell(it) {
+    const ans = it.ans
+    const slots = [...ans].map((ch, i) => ({ ch, i, fixed: !/[a-z]/i.test(ch) })) // 空格、撇號、連字號、句點固定不動
+    const alpha = slots.filter((s) => !s.fixed)
+    let pool = shuffle(alpha.map((s, k) => ({ ch: s.ch, k })))
+    for (let t = 0; t < 5 && pool.map((p) => p.ch).join('') === alpha.map((s) => s.ch).join(''); t++) pool = shuffle(pool)
+    const built = [] // 點過的字母（照順序）
+    let typing = S.profile.spellType === 'type'
+    const C = {
+      html: `<div class="q-text spell-q"><span class="spell-zh">${esc(it.q)}</span>${it.pos ? `<span class="spell-pos">${esc(it.pos)}</span>` : ''}</div><div class="spell-body"></div><button type="button" class="link spell-toggle"></button>`,
+      draw() {
+        const body = $('.spell-body', C.el)
+        if (typing) {
+          body.innerHTML = `<div class="spell-type"><input class="blank spell-in" aria-label="拼出單字" ${inputAttrs(`placeholder="${alpha.length} 個字母"`)}></div>`
+          const inp = $('.spell-in', body)
+          inp.addEventListener('input', () => C.onAnswer?.())
+          inp.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault()
+            C.onEnter?.()
+          })
+        } else {
+          let b = 0
+          // 片語（elementary school）：一個單字一組格子，換行以單字為單位（QA：格子換行後落單一格）
+          const wordsHTML = []
+          let cur = ''
+          for (const s of slots) {
+            if (s.ch === ' ') {
+              wordsHTML.push(cur)
+              cur = ''
+              continue
+            }
+            cur += s.fixed ? `<span class="spell-fixed">${esc(s.ch)}</span>` : `<button type="button" class="spell-slot${built[b] ? ' on' : ''}" data-j="${b}" aria-label="第 ${b + 1} 格${built[b] ? '：' + esc(built[b].ch) + '，點一下拿回去' : '（空）'}">${esc(built[b++]?.ch || '')}</button>`
+          }
+          wordsHTML.push(cur)
+          body.innerHTML = `<div class="spell-ans" role="group" aria-label="你拼的">${wordsHTML.map((w) => `<span class="spell-word">${w}</span>`).join('')}</div><div class="spell-pool">${pool.map((p) => `<button type="button" class="spell-tile" data-k="${p.k}">${esc(p.ch)}</button>`).join('')}</div>`
+        }
+        $('.spell-toggle', C.el).innerHTML = typing ? '🔤 改用點字母' : '✏️ 改用打字'
+      },
+      value: () => (typing ? $('.spell-in', C.el)?.value || '' : slots.map((s) => (s.fixed ? s.ch : '')).reduce((acc, ch, i) => acc + (slots[i].fixed ? ch : built[slots.slice(0, i).filter((x) => !x.fixed).length]?.ch || ''), '')),
+      answered: () => (typing ? C.value().trim().length > 0 : built.length === alpha.length),
+      mount(el) {
+        C.draw()
+        el.addEventListener('click', (e) => {
+          if (C.locked) return
+          const tg = e.target.closest('.spell-toggle')
+          if (tg) {
+            typing = !typing
+            S.profile.spellType = typing ? 'type' : 'tiles'
+            save()
+            C.draw()
+            C.onAnswer?.()
+            if (typing) C.focus()
+            return
+          }
+          const t = e.target.closest('.spell-tile')
+          if (t) {
+            const i = pool.findIndex((p) => p.k === +t.dataset.k)
+            if (i < 0) return
+            built.push(...pool.splice(i, 1))
+          }
+          const s = e.target.closest('.spell-slot.on')
+          if (s) pool.push(...built.splice(+s.dataset.j, 1))
+          if (!t && !s) return
+          buzz(6)
+          C.draw()
+          C.onAnswer?.()
+        })
+      },
+      focus: () => $('.spell-in', C.el)?.focus({ preventScroll: true }),
+      grade() {
+        const v = C.value().trim().replace(/\s+/g, ' ')
+        const ok = v === ans
+        const cap = !ok && v.toLowerCase() === ans.toLowerCase()
+        C.res = ok ? 'ok' : cap ? 'care' : 'bad'
+        return { r: C.res, tags: cap ? ['cap'] : ok ? [] : ['spell'], msgs: cap ? ['拼對了，但大小寫要注意。'] : ok ? [] : [`正確的拼法是 ${ans}。`], given: v, right: esc(ans) }
+      },
+      reveal() {
+        C.locked = true
+        $$('.spell-tile, .spell-slot, .spell-toggle', C.el).forEach((b) => (b.disabled = true))
+        const inp = $('.spell-in', C.el)
+        if (inp) {
+          inp.disabled = true
+          inp.classList.add(C.res)
+        }
+        $('.spell-ans', C.el)?.classList.add(C.res)
+        if (C.res !== 'ok') $('.spell-body', C.el).insertAdjacentHTML('beforeend', `<div class="spell-fix"><span class="fix">${esc(ans)}</span></div>`)
+      },
+    }
+    return C
+  },
+
   fill(it) {
     let bi = 0
     const lines = it.q.split('\n').map(
@@ -1628,7 +1821,7 @@ function runShell(pr, it, at, reviewing) {
       <header class="run-bar">
         <button class="icon-btn" data-act="close" aria-label="離開（進度會保留）">${ICON.x}</button>
         <div class="run-mid"><div class="run-title">${esc(pr.title)}</div><div class="run-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${pr.ids.length}" aria-valuenow="${at}"><i style="width:${(at / pr.ids.length) * 100}%"></i></div></div>
-        <button class="icon-btn" data-act="notes" aria-label="重點">${ICON.notes}</button>
+        ${MODULES[pr.mid || it.mid]?.vocab ? '<span class="icon-btn sp-ph" aria-hidden="true"></span>' : `<button class="icon-btn" data-act="notes" aria-label="重點">${ICON.notes}</button>`}
       </header>
       <div class="run-stage"><div class="run-count">${reviewing ? '<span class="rev-tag">回顧</span>' : ''}${it.t === 'learn' ? '觀念' : `第 ${nBefore + 1}／${scored.length} 題`}</div><div class="run-card"></div><div class="hint-box" hidden></div></div>
       <footer class="run-actions">
@@ -1818,7 +2011,9 @@ function leaveRun() {
     pr.i = Math.max(pr.i, RUN.at + 1)
     save()
   } else saveDraft()
-  go('#/')
+  // 單字的練習：回那一課的單字頁（QA：六種玩法離開要一致）
+  const vm = MODULES[S.progress[RUN.key]?.mid || RUN.it?.mid]
+  go(vm?.vocab ? vocabHome(vm.unit) : '#/')
 }
 function showHint() {
   const hs = hintsFor(RUN.it)
@@ -1929,7 +2124,10 @@ function viewSummary(key) {
     checkBadges()
   }
   const missed = res.filter(([, r]) => r !== 'ok').map(([id]) => id)
-  const fx = focusOf(missed) // 錯題統整（2.21）：錯的題目對到重點總整理的哪一行
+  // 2.26 單字的練習：結果頁多「再換一種玩法」「回單字」，不用對重點總整理
+  const vmod = MODULES[pr.mid || ITEM[pr.ids[0]]?.mid]
+  const vg = vmod?.vocab ? vgroup(vmod.gid) : null
+  const fx = vg ? { n: 0 } : focusOf(missed) // 錯題統整（2.21）：錯的題目對到重點總整理的哪一行
   Sync.presence({ view: 'summary', title: pr.title, s: Math.round(pct * 100) })
   const nextMid = pr.mid && openMods().includes(pr.mid) ? openMods()[openMods().indexOf(pr.mid) + 1] : null
   setView(
@@ -1952,10 +2150,12 @@ function viewSummary(key) {
           ? `<div class="group"><div class="group-h">要再看一次的題目</div><div class="list">${missed.map((id) => `<button class="row" data-review="${id}"><span class="row-t">${esc(snippet(ITEM[id]))}</span><span class="row-r ${pr.res[id]}">${pr.res[id] === 'care' ? '粗心' : '錯'}${S.attempts.some((a) => a.q === id && a.x === 'r' && a.r === 'ok' && a.ts >= pr.t0) ? '・再試對了' : ''}</span>${ICON.chev}</button>`).join('')}</div></div>`
           : ''
       }
+      ${vg ? `<div class="group vocab-sum"><div class="group-h">再換一種玩法</div><div class="vg-modes">${vocabModes(vg).map(([m, name, icon]) => `<button type="button" class="vg-mode" data-vm="${vg.id}:${m}">${ti(icon)}<b>${name}</b></button>`).join('')}</div></div>` : ''}
       <div class="sum-actions">
-        ${missed.length ? `<button class="btn primary big" data-act="retry">重練這 ${missed.length} 題</button>` : ''}
-        ${nextMid ? `<button class="btn ${missed.length ? 'ghost' : 'primary'} big" data-act="next">下一單元：${esc(MODULES[nextMid].title)}</button>` : ''}
-        <button class="btn ghost big" data-act="home">回首頁</button>
+        ${missed.length ? `<button class="btn primary big" data-act="retry">🔄<span>重練這 ${missed.length} 題</span></button>` : ''}
+        ${nextMid ? `<button class="btn ${missed.length ? 'ghost' : 'primary'} big" data-act="next">➡️<span>下一單元：${esc(MODULES[nextMid].title)}</span></button>` : ''}
+        ${vg ? `<button class="btn ${missed.length ? 'ghost' : 'primary'} big" data-act="vocab">📚<span>回單字</span></button>` : ''}
+        <button class="btn ghost big" data-act="home">🏠<span>回首頁</span></button>
       </div>
     </div>`,
     { tabs: false },
@@ -1977,9 +2177,12 @@ function viewSummary(key) {
     if (fr) return fxRun(fr.dataset.fxrun.split(','))
     const fg = e.target.closest('[data-go]')
     if (fg) return go(fg.dataset.go)
+    const vm = e.target.closest('[data-vm]')
+    if (vm && vg) return startVocabMode(vg, vm.dataset.vm.slice(vm.dataset.vm.lastIndexOf(':') + 1))
     const a = e.target.closest('[data-act]')?.dataset.act
     if (a === 'retry') startRun('retry:' + (pr.mid || key), `${pr.title}・重練`, missed)
     if (a === 'next') startModule(nextMid)
+    if (a === 'vocab' && vg) go(vocabHome(vg.unit))
     if (a === 'home') go('#/')
   })
 }
@@ -1987,6 +2190,8 @@ function snippet(it) {
   const cut = (s) => (s.length > 70 ? s.slice(0, 68) + '…' : s)
   // 聽寫：不能寫出答案，寫是哪個單元的聽寫；其他聽力題的題目都長得一樣（「哪一句和你聽到的意思一樣？」）→ 寫考點
   if (it.audio && it.t === 'fill') return `聽寫・${MODULES[it.mid]?.title || ''}`
+  // 單字題：不能把答案寫出來（聽音、拼字都是要學生想出那個字）
+  if (it.vm) return cut(`單字・${vocabModeName(it.vm)}・${it.vm === 'listen' ? VWORD[it.vw]?.zh || '' : it.q.split('\n')[0]}`)
   if (it.audio && it.kp) return cut(`聽力・${it.kp}`)
   const s = it.q || it.toks?.join(' ') || it.words?.join(' ') || it.title || ''
   return cut(s.replace(/\n/g, ' ').replace(/___/g, '＿\u2060＿')) // \u2060：兩條底線不要被拆到兩行
@@ -2082,6 +2287,7 @@ function rightAnswerText(it) {
   if (it.t === 'spot') return esc(it.toks.map((t, i) => (i === it.bad ? it.acc[0] : t)).filter(Boolean).join(' '))
   if (it.t === 'sort') return it.bins.map((b, k) => `<b>${esc(b)}</b>：${it.chips.filter((c) => c[1] === k).map((c) => esc(c[0])).join('、')}`).join('<br>')
   if (it.t === 'place') return REL_LABEL[it.a]
+  if (it.t === 'spell') return esc(it.ans)
   return ''
 }
 
@@ -2539,6 +2745,7 @@ function examCountdown() {
   return d > 0 ? `距離段考 <b>${d}</b> 天` : d === 0 ? '<b>今天段考，加油！</b>' : ''
 }
 function viewHome() {
+  viewHome.vk = null // 單字「會了幾個」：這次畫首頁重新算一次
   const t = todayStats()
   const goal = S.profile.goal || 30
   const book = bookIds().length
@@ -2607,7 +2814,13 @@ function viewHome() {
         const total = stats.reduce((n, s) => n + s.total, 0)
         return `${openExams().length > 1 && L.exam !== arr[i - 1]?.exam ? `<h2 class="exam-h">${esc(EXAMS.find((e) => e.id === L.exam)?.title || '')}</h2>` : ''}<section class="lesson${folded ? ' folded' : ''}" data-lesson="${L.id}">
           <div class="sec-h"><button type="button" class="lesson-h" data-fold="${L.id}" aria-expanded="${!folded}"><span class="fold-chev">${ICON.chev}</span><span><h2>${esc(L.title)}</h2><p>${folded ? `${mods.length} 個單元・會了 ${mastered}／${total} 題${allDone ? '・已完成' : ''}` : esc(lessonSub(L))}</p></span></button>${L.modules.every(modOpen) ? `<button class="link" data-plan="${L.id}">上課流程</button>` : ''}</div>
-          <div class="mods">${L.modules
+          <div class="mods">${(() => {
+            // 2.26 每課單字：這一課的第一張卡
+            const u = MODULES[L.modules[0]]?.unit
+            if (!VOCAB[u] || !myUnits().has(u)) return ''
+            const v = vocabStats(u, (viewHome.vk ||= vocabKnownBy())) // 首頁一次算好（下面重設）
+            return `<button class="mod vocab-mod" data-vocab="${esc(u)}">${actIc('vocab')}<span class="mod-body"><span class="eyebrow">${esc(u)}・5 分鐘・6 種玩法</span><span class="mod-t">${esc(u)} 單字<em class="new-tag">新</em></span><span class="mod-bar"><i style="width:${(v.known / Math.max(1, v.total)) * 100}%"></i></span><span class="mod-s">${v.known ? `會了 ${v.known}／${v.total} 個` : `${v.total} 個單字・還沒開始`}</span></span></button>`
+          })()}${L.modules
             .filter(modOpen)
             .map((mid) => {
               const m = MODULES[mid]
@@ -2639,6 +2852,8 @@ function viewHome() {
   v.addEventListener('click', (e) => {
     const m = e.target.closest('[data-mod]')
     if (m) return startModule(m.dataset.mod)
+    const vu = e.target.closest('[data-vocab]')
+    if (vu) return go(vocabHome(vu.dataset.vocab))
     const g = e.target.closest('[data-go]')
     if (g) return go(g.dataset.go)
     const r = e.target.closest('[data-resume]')
@@ -2707,6 +2922,13 @@ function warmIds() {
 // 不跳：做題中（只在首頁類的畫面）、第一次用 App 的人（先看歡迎畫面）、只修 bug 的版本（NEWS 只列有新功能的版本）
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
+  {
+    v: '2.26',
+    date: '10/13',
+    student: [['🔤', '每課單字練習', '每一課多了「單字」：單字卡、聽音選字、配對消除、拼字方塊、句子填空、念單字六種玩法。答錯的字會進錯題本，練單字植物也會長大。']],
+    parent: [['🔤', '單字練習', '學習進度多了每一課會了幾個單字；孩子答錯的字會進錯題本。']],
+    teacher: [['🔤', '每課單字練習', '學生首頁每一課多一張「單字」卡（課本單字表，分對話、主題字、閱讀、認識字彙）；派作業可以派「單字」；學習進度看得到會了幾個。']],
+  },
   {
     v: '2.25',
     date: '10/12',
@@ -3159,7 +3381,11 @@ function unitGrowth(unit, list = S.attempts, sess = S.sessions) {
   const last = lastByItem(list)
   const ok = items.filter((i) => last[i.id]?.r === 'ok').length
   const total = items.length || 1
-  const r = ok / total
+  // 2.26：單字也幫植物長（code review：不能直接把幾百個單字題併進題數，不然要答幾百題才開花）
+  // 這一課的單字全部會了＝多算 25% 的進度；只算進度，不算進「會了幾題」
+  const v = VOCAB[unit] ? vocabKnownOf(unit, list) : null
+  const okV = v?.total ? (v.known / v.total) * total * 0.25 : 0
+  const r = Math.min(1, (ok + okV) / total)
   const bookLeft = bookIds(list).filter((q) => inUnit.has(q)).length
   let calc = 0
   if (ok > 0) calc = 1
@@ -3171,7 +3397,7 @@ function unitGrowth(unit, list = S.attempts, sess = S.sessions) {
   let need = 0
   let needBook = 0
   if (stage < 4) {
-    need = Math.max(stage === 0 ? 1 : 0, Math.ceil(STAGE_AT[stage + 1] * total) - ok)
+    need = Math.max(stage === 0 ? 1 : 0, Math.ceil(STAGE_AT[stage + 1] * total - okV) - ok)
     if (stage === 3) needBook = bookLeft
   }
   const toNext = stage < 4 ? Math.max(0, Math.min(1, (r - STAGE_AT[stage]) / (STAGE_AT[stage + 1] - STAGE_AT[stage]))) : 1
@@ -3517,7 +3743,8 @@ function viewBook() {
           ? `<div class="book-cta card"><div><div class="book-n">${ids.length}</div><div class="muted">題待複習${grads.length ? `・已畢業 ${grads.length} 題` : ''}</div></div>
             <div class="book-btns"><button class="btn ghost big" data-go="#/print/book">${ICON.doc}<span>列印錯題卷</span></button><button class="btn primary big" data-act="all">開始重練${ids.length > 12 ? '（先做 12 題）' : ''}</button></div></div>
             <p class="muted small pad">題目會打散不同單元的順序（交錯練習），比照段考的感覺。</p>
-            ${MOD_ORDER.filter((m) => byMod[m])
+            ${[...MOD_ORDER, ...VGROUPS.map((g) => g.mid)]
+              .filter((m) => byMod[m])
               .map(
                 (mid) => `<div class="group"><div class="group-h">${esc(MODULES[mid].unit)}｜${esc(MODULES[mid].title)}</div><div class="list">${byMod[mid]
                   .map((id) => `<button class="row" data-review="${id}"><span class="row-t">${esc(snippet(ITEM[id]))}<small class="${st[id].oks ? 'care-t' : 'bad-t'}">錯 ${st[id].wrong} 次${st[id].oks ? `・已經答對 ${st[id].oks} 次` : ''}</small></span>${ICON.chev}</button>`)
@@ -4359,7 +4586,7 @@ function viewSettings() {
     // 只有老師的裝置可以清（學生、家長沒有刪除權限）
     if (x === 'wipe' && teacherMode())
       return confirmSheet('清除這個裝置的練習紀錄？', '這個裝置上的作答、錯題本、練習紀錄、徽章都會刪掉，沒辦法復原。', '清除', () => {
-        Object.assign(S, { attempts: [], sessions: [], progress: {}, flash: { best: 0, runs: 0 }, badges: {}, hwDone: [] })
+        Object.assign(S, { attempts: [], sessions: [], progress: {}, flash: { best: 0, runs: 0 }, vocab: { w: {}, best: {} }, badges: {}, hwDone: [] })
         for (const k of Object.keys(SNAPS)) delete SNAPS[k]
         for (const k of Object.keys(DRAFTS)) delete DRAFTS[k]
         save()
@@ -6211,7 +6438,7 @@ const Sync = {
   // keepId：修改已經派出的作業（老師 10/9：不小心按錯要可以改）——同一個代號蓋過去，學生、家長那邊跟著更新
   async addHw(sid, h, keepId = '') {
     // 作業裡有還沒開放的課：一起開放（不然學生打不開）
-    const need = [...new Set(h.tasks.filter((t) => t.k === 'mod' && MODULES[t.id]).map((t) => MODULES[t.id].unit))]
+    const need = [...new Set(h.tasks.filter((t) => (t.k === 'mod' && MODULES[t.id]) || (t.k === 'vocab' && VOCAB[t.u])).map((t) => (t.k === 'vocab' ? t.u : MODULES[t.id].unit)))]
     const set = unitsOfStu(this.students[sid])
     if (need.some((u) => !set.has(u))) {
       need.forEach((u) => set.add(u))
@@ -6771,6 +6998,7 @@ function liveText(l) {
   if (l.view === 'summary' && fresh) return `剛做完「${l.title || ''}」${l.s != null ? `・答對 ${l.s}%` : ''}${where}`
   if (l.view === 'flash' && fresh) return `正在玩閃電挑戰${l.n ? `・已答對 ${l.n} 題` : ''}${where}`
   if (l.view === 'speak' && fresh) return `正在練口說・第 ${l.n}／${l.of} 句${where}`
+  if (l.view === 'vocab' && fresh) return `正在練單字${l.title ? `・${l.title}` : ''}${l.of ? `・第 ${l.n}／${l.of}` : ''}${where}`
   if (l.view === 'away' || !fresh) return `離開 App（${agoText(l.ts)}）`
   return `在 App 裡${where}（${agoText(l.ts)}）`
 }
@@ -7185,7 +7413,8 @@ function parentProgressHTML(list, sess, units, l, name) {
       const done = items.filter((i) => lastItem[i.id]).length
       const ok = items.filter((i) => lastItem[i.id]?.r === 'ok').length
       const p = pct(ok, items.length)
-      return `<div class="pp-unit"><div class="pp-unit-h"><b>${esc(u)}</b><span>${done ? `會了 ${ok}／${items.length} 題` : '還沒開始'}</span></div><div class="pp-bar"><i style="width:${p}%"></i></div></div>`
+      const v = VOCAB[u] ? vocabKnownOf(u, list) : null // 2.26 單字：會了幾個（看紀錄）
+      return `<div class="pp-unit"><div class="pp-unit-h"><b>${esc(u)}</b><span>${done ? `會了 ${ok}／${items.length} 題` : v?.known ? '題目還沒開始' : '還沒開始'}${v?.known ? `・單字 ${v.known}／${v.total}` : ''}</span></div><div class="pp-bar"><i style="width:${p}%"></i></div></div>`
     })
     .join('')
   const ex = sess.filter((s) => s.k === 'exam')
@@ -8138,6 +8367,8 @@ function viewWatch(sid, keepScroll = false) {
             ? `${name} 正在玩閃電挑戰${l.n ? `，已答對 ${l.n} 題` : ''}`
             : l.view === 'notes'
               ? `${name} 在看重點總整理${l.title ? `（${l.title}）` : ''}`
+              : l.view === 'vocab'
+                ? `${name} 正在練單字${l.title ? `（${l.title}）` : ''}${l.of ? `，第 ${l.n}／${l.of}` : ''}。做聽音選字、句子填空、拼字時這裡會顯示那一題。`
               : l.view === 'book'
                 ? `${name} 在看錯題本`                : l.view === 'summary'
                 ? `${name} 做完「${l.title || ''}」，答對 ${l.s ?? '—'}%，正在看結果`
@@ -8208,12 +8439,12 @@ const hwExName = (ex) => {
   const e = EXAMS.find((x) => x.id === ex)
   return e ? (e.kind ? '會考模擬' : e.title) : ''
 }
-const hwTaskName = (t) => (t.k === 'mod' ? MODULES[t.id]?.title || t.id : t.k === 'exam' && t.ex ? `模擬段考（${hwExName(t.ex)}）` : { exam: '模擬段考', speak: '口說練習', book: '錯題本複習' }[t.k] || '')
+const hwTaskName = (t) => (t.k === 'mod' ? MODULES[t.id]?.title || t.id : t.k === 'vocab' ? `${t.u} 單字` : t.k === 'exam' && t.ex ? `模擬段考（${hwExName(t.ex)}）` : { exam: '模擬段考', speak: '口說練習', book: '錯題本複習' }[t.k] || '')
 const hwSessKey = (t) => (t.k === 'mod' ? 'm:' + t.id : t.k)
-// 一項作業的完成狀況：派出之後有沒有那個練習的紀錄（錯題本已經清空也算完成）
+// 一項作業的完成狀況：派出之後有沒有那個練習的紀錄（錯題本已經清空也算完成；單字＝那一課任何一組、任何一種玩法練完一回）
 function hwStatus(h, sess, attempts) {
   const res = (h.tasks || []).map((t) => {
-    const hit = sess.filter((s) => s.k === hwSessKey(t) && s.ts >= h.at && (!t.ex || (s.ex || 'e1') === t.ex))
+    const hit = sess.filter((s) => (t.k === 'vocab' ? String(s.k || '').startsWith(`vocab:${unitKey(t.u || '')}:`) : s.k === hwSessKey(t)) && s.ts >= h.at && (!t.ex || (s.ex || 'e1') === t.ex))
     const s = hit[hit.length - 1] || null
     const empty = t.k === 'book' && !s && (t.n0 === 0 || !bookIds(attempts).length) // n0：派出時錯題本有幾題（10/9：派的時候是空的，之後答錯不要倒退）
     return { t, s, ok: !!s || empty, empty }
@@ -8280,6 +8511,7 @@ function hwCardHTML(readonly = false) {
 // 學生點作業裡的一項：直接開始那個練習
 function startHwTask(t) {
   if (t.k === 'mod' && MODULES[t.id]) return startModule(t.id)
+  if (t.k === 'vocab' && VOCAB[t.u]) return go('#/vocab/' + encodeURIComponent(t.u))
   if (t.k === 'exam') {
     if (t.ex && EXAMS.some((e) => e.id === t.ex)) {
       S.profile.examPick = t.ex // 打開就是老師指定的那一次
@@ -8378,7 +8610,7 @@ function assignSheet(sids, edit = null, preset = null) {
   const due = new Date(edit?.h?.due || dayStart() + 3 * DAY)
   const ymd = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`
   const editTime = edit?.h?.due ? `${String(due.getHours()).padStart(2, '0')}:${String(due.getMinutes()).padStart(2, '0')}` : ''
-  const sel = new Set((edit?.h?.tasks || preset || []).map((t) => (t.k === 'mod' ? 'mod:' + t.id : t.k === 'exam' ? 'exam:' + (t.ex || 'e1') : t.k)))
+  const sel = new Set((edit?.h?.tasks || preset || []).map((t) => (t.k === 'mod' ? 'mod:' + t.id : t.k === 'vocab' ? 'vocab:' + t.u : t.k === 'exam' ? 'exam:' + (t.ex || 'e1') : t.k)))
   // 2.16（10/9 老師：派作業「看不到進度條」「太陽春」）：每個單元一張卡片＝這位學生的進度條、會了幾題、上次練習、最近錯幾題；
   // 還沒開放的課收在最下面；底部固定「已選幾項＋派出」
   const list = multi ? [] : Sync.attemptsOf(sid)
@@ -8415,12 +8647,20 @@ function assignSheet(sids, edit = null, preset = null) {
         : `會了 ${s.ok}／${s.total}・上次 ${fmtDate(s.lastTs)}${s.bad ? `<b class="hp-bad">・最近錯 ${s.bad} 題</b>` : ''}`
     return card('mod:' + mid, modIc(mid), `${esc(m.unit)}・${m.min} 分鐘${s.best ? `　${'★'.repeat(s.best)}` : ''}`, esc(m.title), `<span class="hp-bar"><i style="width:${pct}%"></i></span>`, status, s.ok === s.total ? ' mastered' : !s.done ? ' fresh' : '')
   }
+  // 2.26 單字：每一課一張「單字」卡（派了＝那一課任何一組練完一回就算完成）
+  const vocabCard = (unit) => {
+    if (!VOCAB[unit]) return ''
+    const locked = !units.has(unit)
+    const v = multi || locked ? null : vocabKnownOf(unit, list)
+    const n = vgroupsOf(unit).flatMap((g) => g.words).length
+    return card('vocab:' + unit, actIc('vocab'), `${esc(unit)}・5 分鐘`, `${esc(unit)} 單字`, v ? `<span class="hp-bar"><i style="width:${Math.round((v.known / Math.max(1, v.total)) * 100)}%"></i></span>` : '', locked ? `${ti('lock', 'ic-lead')}還沒開放・派了就會一起開放` : v ? (v.known ? `會了 ${v.known}／${v.total} 個` : `${n} 個單字・還沒開始`) : `${n} 個單字`, locked ? ' locked' : v?.known === v?.total && v ? ' mastered' : '')
+  }
   const lessonHTML = (L) => {
     const mods = L.modules
     const open = mods.filter((m) => units.has(MODULES[m].unit))
     const ok = multi ? 0 : open.reduce((n, m) => n + MODULES[m].scored.filter((i) => last[i.id]?.r === 'ok').length, 0)
     const total = open.reduce((n, m) => n + MODULES[m].scored.length, 0)
-    return `<div class="hw-g"><div class="hw-gh"><b>${esc(L.title)}</b>${multi ? '' : `<span>會了 ${ok}／${total}</span>`}</div><div class="hp-grid">${mods.map(modCard).join('')}</div></div>`
+    return `<div class="hw-g"><div class="hw-gh"><b>${esc(L.title)}</b>${multi ? '' : `<span>會了 ${ok}／${total}</span>`}</div><div class="hp-grid">${vocabCard(MODULES[mods[0]]?.unit)}${mods.map(modCard).join('')}</div></div>`
   }
   const openL = LESSONS.filter((L) => L.modules.some((m) => units.has(MODULES[m].unit)))
   const lockedL = LESSONS.filter((L) => !L.modules.some((m) => units.has(MODULES[m].unit)))
@@ -8445,6 +8685,11 @@ function assignSheet(sids, edit = null, preset = null) {
     if (k.startsWith('exam:')) {
       const e = EXAMS.find((x) => x.id === k.slice(5))
       return { icon: actIc('exam'), title: `模擬段考：${exName(e)}`, detail: `範圍：${esc(e.range)}・約 ${e.kind ? 35 : 40} 題・約 45 分鐘`, min: 45 }
+    }
+    if (k.startsWith('vocab:')) {
+      const u = k.slice(6)
+      const n = vgroupsOf(u).flatMap((g) => g.words).length
+      return { icon: actIc('vocab'), title: `${u} 單字`, detail: `${n} 個單字・任何一組、任何一種玩法練完一回就算完成・約 5 分鐘${units.has(u) ? '' : `<b class="hp-bad">・會一起開放 ${esc(u)}</b>`}`, min: 5 }
     }
     if (k === 'speak') return { icon: actIc('speak'), title: '口說練習', detail: '練完一回就算完成（約 3 分鐘，學生自己選模式和範圍）', min: 3 }
     return { icon: actIc('book'), title: '錯題本複習', detail: multi ? '每位學生練自己的錯題，一次最多 12 題' : book ? `現在有 ${book} 題，一次最多 12 題` : '現在沒有錯題，派了會直接算完成', min: 10 }
@@ -8544,7 +8789,7 @@ function assignSheet(sids, edit = null, preset = null) {
     if (e.target.closest('[data-ok]') && sel.size) return showConfirm()
     if (e.target.closest('[data-edit]')) return hideConfirm()
     if (e.target.closest('[data-send]') && sel.size) {
-      const tasks = [...sel].map((k) => (k.startsWith('mod:') ? { k: 'mod', id: k.slice(4) } : k.startsWith('exam:') ? { k: 'exam', ex: k.slice(5) } : k === 'book' && sids.length === 1 ? { k, n0: bookIds(Sync.attemptsOf(sids[0])).length } : { k }))
+      const tasks = [...sel].map((k) => (k.startsWith('mod:') ? { k: 'mod', id: k.slice(4) } : k.startsWith('vocab:') ? { k: 'vocab', u: k.slice(6) } : k.startsWith('exam:') ? { k: 'exam', ex: k.slice(5) } : k === 'book' && sids.length === 1 ? { k, n0: bookIds(Sync.attemptsOf(sids[0])).length } : { k }))
       const dueTs = due2()
       // 記住這次選的截止時間，下次預設用它
       ;(S.ui ||= {}).hwTime = $('#hw-time', b).value || '23:59'
@@ -8606,7 +8851,7 @@ function shareTextSheet(title, text, sub = '', onClose = null) {
 // 作業的 LINE 訊息：截止、每一項（約幾分鐘）、老師的話、連結
 function hwMessage(sid, id, h) {
   const items = (h.tasks || []).map((t, i) => {
-    const min = t.k === 'mod' ? MODULES[t.id]?.min : t.k === 'exam' ? 45 : t.k === 'speak' ? 3 : 10
+    const min = t.k === 'mod' ? MODULES[t.id]?.min : t.k === 'exam' ? 45 : t.k === 'speak' ? 3 : t.k === 'vocab' ? 5 : 10
     return `${i + 1}. ${hwTaskName(t)}（約 ${min} 分鐘）`
   })
   return [
@@ -9376,7 +9621,431 @@ function go(h) {
   else location.hash = h
 }
 // 「返回」：有上一頁（在這個 App 裡）就回上一頁；直接打開這一頁的（例如點連結進來），回到上一層
-const PARENT = (h) => (/^#\/watch\//.test(h) ? '#/student/' + h.split('/')[2] : /^#\/(student\/|manage)/.test(h) ? '#/students' : /^#\/teacher/.test(h) ? (teacherMode() ? '#/students' : '#/settings') : '#/')
+const PARENT = (h) => (/^#\/watch\//.test(h) ? '#/student/' + h.split('/')[2] : /^#\/(student\/|manage)/.test(h) ? '#/students' : /^#\/teacher/.test(h) ? (teacherMode() ? '#/students' : '#/settings') : /^#\/vocab\/[^/]+\/\d/.test(h) ? '#/vocab/' + h.split('/')[2] : '#/')
+// ───────────────────────── 單字練習畫面（2.26） ─────────────────────────
+const vocabHome = (unit) => '#/vocab/' + encodeURIComponent(unit)
+const vocabModeName = (m) => VOCAB_MODES.find(([k]) => k === m)?.[1] || ''
+// 每一課的單字頁：幾組（對話、主題字、閱讀、認識字彙），每組六種玩法；點「看單字」展開單字表（可以點來聽）
+function viewVocab(unit, gi, mode) {
+  if (!VOCAB[unit]) return go('#/')
+  if (!myUnits().has(unit)) {
+    toast('這一課老師上課後才會開放', '🔒')
+    return go('#/')
+  }
+  if (gi !== '' && mode) {
+    const g = vgroup(`${unitKey(unit)}:${gi}`)
+    if (!g) return go(vocabHome(unit))
+    if (mode === 'cards') return vocabCards(g)
+    if (mode === 'match') return vocabMatch(g)
+    if (mode === 'speak' && !g.r) return vocabSpeak(g)
+    return go(vocabHome(unit))
+  }
+  const known = vocabKnownBy()
+  const st = vocabStats(unit)
+  Sync.presence({ view: 'vocab', title: `${unit} 單字` })
+  setView(
+    `<div class="page narrow vocab">
+      ${header(`${unit} 單字`, `${st.total} 個單字・會了 ${st.known} 個`, '', true)}
+      ${vgroupsOf(unit)
+        .map((g) => {
+          const k = g.words.filter(known).length
+          const best = S.vocab.best?.[g.id]
+          return `<section class="card vg-card${g.r ? ' recog' : ''}" data-gid="${g.id}">
+            <div class="sec-h"><div><h2>${esc(g.t)}</h2><p>${g.words.length} 個・會了 ${k} 個${best ? `・配對最快 ${best} 秒` : ''}</p></div><button type="button" class="link" data-vlist="${g.id}" aria-expanded="false">👀 看單字</button></div>
+            <div class="vg-bar"><i style="width:${Math.round((k / g.words.length) * 100)}%"></i></div>
+            <div class="vg-words" hidden>${g.words.map((w) => `<button type="button" class="vg-word${known(w) ? ' ok' : ''}" data-say="${esc(w.en)}"><span lang="en">${esc(w.en)}</span><small>${esc(w.pos ? w.pos + ' ' : '')}${esc(w.zh)}</small></button>`).join('')}</div>
+            <div class="vg-modes">${vocabModes(g)
+              .map(([m, name, icon, desc]) => {
+                const run = vocabRunState(g, m)
+                return `<button type="button" class="vg-mode${run ? ' running' : ''}" data-vm="${g.id}:${m}">${ti(icon)}<b>${name}</b><small>${run || desc}</small></button>`
+              })
+              .join('')}</div>
+            ${g.r ? '<p class="vg-note">認識字彙：知道意思、聽得懂就好，段考不考拼寫。</p>' : ''}
+          </section>`
+        })
+        .join('')}
+      <p class="foot">單字照課本的單字表；例句自編。答錯的字會進錯題本，練單字這一課的植物也會長大。</p>
+    </div>`,
+  )
+  $('.vocab').addEventListener('click', (e) => {
+    // 返回：固定回首頁（遊戲的 ✕ 會回到這一頁，再按瀏覽器的上一頁會跳回遊戲）
+    if (e.target.closest('[data-back]')) {
+      e.stopPropagation()
+      return go('#/')
+    }
+    const l = e.target.closest('[data-vlist]')
+    if (l) {
+      const box = $(`.vg-card[data-gid="${l.dataset.vlist}"] .vg-words`)
+      box.hidden = !box.hidden
+      l.setAttribute('aria-expanded', !box.hidden)
+      l.innerHTML = box.hidden ? '👀 看單字' : '🔼 收起'
+      iconize(l) // 換掉的字開頭的 emoji → 線條圖示
+      return
+    }
+    const b = e.target.closest('[data-vm]')
+    if (b) {
+      const [gid, m] = [b.dataset.vm.slice(0, b.dataset.vm.lastIndexOf(':')), b.dataset.vm.slice(b.dataset.vm.lastIndexOf(':') + 1)]
+      return startVocabMode(vgroup(gid), m)
+    }
+  })
+}
+function startVocabMode(g, m) {
+  if (!g) return
+  if (['cards', 'match', 'speak'].includes(m)) return go(`${vocabHome(g.unit)}/${g.gi}/${m}`)
+  const pre = { listen: 'vl', fill: 'vf', spell: 'vs' }[m]
+  if (!pre) return
+  const key = `vocab:${g.id}:${m}`
+  const ids = shuffle(g.words.map((w) => `${pre}:${w.key}`).filter((id) => ITEM[id]))
+  // 做到一半離開：接著做（跟單元一樣）
+  const pr = S.progress[key]
+  if (pr && !pr.done && pr.i > 0 && pr.i < pr.ids.length && [...pr.ids].sort().join() === [...ids].sort().join()) return go('#/run/' + encodeURIComponent(key))
+  startRun(key, `${g.unit} 單字・${vocabModeName(m)}`, ids)
+}
+// 練習到一半的玩法：玩法按鈕上標「進行中・第 N 題」
+const vocabRunState = (g, m) => {
+  const pr = S.progress[`vocab:${g.id}:${m}`]
+  return pr && !pr.done && pr.i > 0 && pr.i < pr.ids.length ? `進行中・第 ${pr.i + 1}／${pr.ids.length} 題` : ''
+}
+// 練完一回的結果頁（單字卡、配對、念單字共用）
+function vocabEndHTML(g, title, big, msg, extra = '') {
+  const modes = vocabModes(g)
+  return `<div class="page narrow summary vocab-sum">
+    <div class="sum-hero"><div class="vsum-big"><b>${big}</b></div><h1>${esc(title)}</h1><p class="muted">${esc(g.unit)} 單字・${esc(g.t)}</p></div>
+    ${msg ? `<p class="vsum-msg">${msg}</p>` : ''}${extra}
+    <div class="group"><div class="group-h">再換一種玩法</div><div class="vg-modes">${modes.map(([m, name, icon]) => `<button type="button" class="vg-mode" data-vm="${g.id}:${m}">${ti(icon)}<b>${name}</b></button>`).join('')}</div></div>
+    <div class="sum-actions"><button class="btn primary big" data-act="again">🔄<span>再練一回</span></button><button class="btn ghost big" data-act="back">📚<span>回單字</span></button></div>
+  </div>`
+}
+function vocabEndBind(g, again) {
+  $('.vocab-sum').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-vm]')
+    if (b) return startVocabMode(g, b.dataset.vm.slice(b.dataset.vm.lastIndexOf(':') + 1))
+    const a = e.target.closest('[data-act]')?.dataset.act
+    if (a === 'again') return again()
+    if (a === 'back') return go(vocabHome(g.unit))
+  })
+}
+const vocabBar = (g, label, i, n) =>
+  `<header class="run-bar"><button class="icon-btn" data-act="close" aria-label="離開">${ICON.x}</button><div class="run-mid"><div class="run-title">${esc(g.unit)} 單字・${label}</div><div class="run-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${i}"><i style="width:${(i / Math.max(1, n)) * 100}%"></i></div></div><span class="icon-btn sp-ph" aria-hidden="true"></span></header>`
+
+// ── 單字卡：看英文想中文，翻面看答案、聽發音；「還不熟」的這一回最後會再出現；按過兩次「記得了」就算會了 ──
+let VC = null
+function vocabCards(g) {
+  if (VC?.gid !== g.id || VC.over) VC = { gid: g.id, queue: shuffle([...g.words]), i: 0, ok: 0, no: 0, again: [], t0: Date.now(), over: false }
+  const w = VC.queue[VC.i]
+  if (!w) return vocabCardsEnd(g)
+  const n = VC.queue.length
+  setView(
+    `<div class="run vocab-run">
+      ${vocabBar(g, '單字卡', VC.i, n)}
+      <div class="run-stage"><div class="run-count">第 ${VC.i + 1}／${n} 張${VC.again.includes(w) ? '・再看一次' : ''}</div>
+        <button type="button" class="vcard" data-act="flip" aria-label="翻面看答案">
+          <span class="vcard-in">
+            <span class="vcard-face front"><span class="vcard-en" lang="en">${esc(w.en)}</span>${w.pos ? `<span class="vcard-pos">${esc(w.pos)}</span>` : ''}<span class="vcard-hint">點一下看中文</span></span>
+            <span class="vcard-face back"><span class="vcard-zh">${esc(w.zh)}</span><span class="vcard-ex" lang="en">${esc(w.ex)}</span><span class="vcard-exzh">${esc(w.exZh)}</span></span>
+          </span>
+        </button>
+        <div class="sp-listen"><button type="button" class="pill" data-act="play">${ICON.speaker}<span>聽發音</span></button></div>
+      </div>
+      <footer class="run-actions vcard-acts"><button class="btn primary big" data-act="flip">🔄<span>翻面看答案</span></button></footer>
+    </div>`,
+    { tabs: false },
+  )
+  Sync.presence({ view: 'vocab', title: `${g.unit} 單字・單字卡`, n: VC.i + 1, of: n, text: w.en })
+  let flipped = false
+  $('.vocab-run').addEventListener('click', (e) => {
+    const a = e.target.closest('[data-act]')?.dataset.act
+    if (!a) return
+    if (a === 'close') {
+      VC.over = true
+      Voice.stop()
+      return go(vocabHome(g.unit))
+    }
+    if (a === 'play') return Voice.speak(w.en)
+    if (a === 'flip') {
+      flipped = !flipped
+      $('.vcard').classList.toggle('flipped', flipped)
+      $('.vcard-acts').innerHTML = flipped ? `<button class="btn ghost big" data-act="no">🤔<span>還不熟</span></button><button class="btn primary big" data-act="ok">✅<span>記得了</span></button>` : `<button class="btn primary big" data-act="flip">🔄<span>翻面看答案</span></button>`
+      buzz(6)
+      return
+    }
+    if (a === 'ok' || a === 'no') {
+      const rec = ((S.vocab ||= { w: {}, best: {} }).w[w.key] ||= { k: 0, ts: 0 })
+      if (a === 'ok') {
+        rec.k = Math.min(5, (rec.k || 0) + 1)
+        VC.ok++
+        buzz(15)
+      } else {
+        rec.k = 0
+        VC.no++
+        if (!VC.again.includes(w)) {
+          VC.again.push(w)
+          VC.queue.push(w)
+        }
+        buzz([10, 60, 10])
+      }
+      rec.ts = Date.now()
+      save()
+      VC.i++
+      Voice.stop()
+      vocabCards(g)
+    }
+  })
+}
+function vocabCardsEnd(g) {
+  VC.over = true
+  const first = g.words.length - VC.again.length // 第一次就記得的
+  const pct = Math.round((first / g.words.length) * 100)
+  addSession({ k: `vocab:${g.id}:cards`, m: g.mid, title: `${g.unit} 單字・單字卡`, s: pct, n: g.words.length, ok: first, ts: Date.now(), dur: Date.now() - VC.t0, d: S.profile.id })
+  save()
+  checkBadges()
+  Sync.presence({ view: 'home' })
+  const known = vocabKnownBy()
+  const left = g.words.filter((w) => !known(w))
+  setView(
+    vocabEndHTML(g, pct >= 90 ? '記得很牢！' : pct >= 60 ? '不錯！' : '看完一輪了', `${first}<small>／${g.words.length}</small>`, VC.again.length ? `還不熟的 ${VC.again.length} 個字已經多看一次：${VC.again.map((w) => `<b lang="en">${esc(w.en)}</b>`).join('、')}。` : '每一張第一次就記得，很棒！', left.length ? `<p class="muted vsum-left">按過兩次「記得了」才算會了；還差 ${left.length} 個。</p>` : ''),
+    { tabs: false },
+  )
+  vocabEndBind(g, () => vocabCards(g))
+}
+
+// ── 配對消除：英文和中文配成一對就消失；6 對一回合，一組分幾回合；計時，跟自己最快的紀錄比 ──
+let VM = null
+function vocabMatch(g) {
+  if (VM?.gid !== g.id || VM.over) {
+    const ws = shuffle([...g.words])
+    const rounds = Math.max(1, Math.ceil(ws.length / 6))
+    const size = Math.ceil(ws.length / rounds)
+    VM = { gid: g.id, rounds: Array.from({ length: rounds }, (_, r) => ws.slice(r * size, (r + 1) * size)), r: 0, t0: 0, timer: null, wrong: 0, over: false, sel: null }
+  }
+  const words = VM.rounds[VM.r]
+  if (!words) return vocabMatchEnd(g)
+  // 中文那一格只放意思，括號裡的補充（複數、＝…）拿掉，格子才不會太長；同一回合有兩個字意思一樣（am／is 都是「是」）就留括號
+  const short = (w) => w.zh.replace(/（[^）]*）/g, '').trim() || w.zh
+  const zhOf = (w) => (words.filter((x) => short(x) === short(w)).length > 1 ? w.zh : short(w))
+  const tiles = shuffle([...words.map((w) => ({ k: w.key, t: w.en, en: true })), ...words.map((w) => ({ k: w.key, t: zhOf(w), en: false }))])
+  const fmt = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}.${Math.floor((ms % 1000) / 100)}`
+  setView(
+    `<div class="run vocab-run vm-run">
+      ${vocabBar(g, '配對消除', VM.r, VM.rounds.length)}
+      <div class="run-stage"><div class="run-count">第 ${VM.r + 1}／${VM.rounds.length} 回合・<span class="vm-time">${fmt(VM.t0 ? Date.now() - VM.t0 : 0)}</span>${S.vocab.best?.[g.id] ? `・最快 ${S.vocab.best[g.id]} 秒` : ''}</div>
+        <p class="vm-hint">點一個英文，再點它的中文；配對成功就會消失。</p>
+        <div class="vm-grid c${tiles.length}">${tiles.map((t, i) => `<button type="button" class="vm-tile${t.en ? ' en' : ''}" data-k="${esc(t.k)}" data-en="${t.en ? 1 : 0}" data-i="${i}" ${t.en ? 'lang="en"' : ''}>${esc(t.t)}</button>`).join('')}</div>
+      </div>
+      <footer class="run-actions"><div class="ra-left"></div><span class="muted small">第一次點下去才開始計時</span></footer>
+    </div>`,
+    { tabs: false },
+  )
+  Sync.presence({ view: 'vocab', title: `${g.unit} 單字・配對消除`, n: VM.r + 1, of: VM.rounds.length })
+  clearInterval(VM.timer)
+  const me = VM
+  const tid = setInterval(() => {
+    const el = $('.vm-time')
+    if (!el || VM !== me || me.over) return clearInterval(tid) // 換頁、換組：自己停掉（code review：不能靠 VM.timer，會指到新的）
+    if (me.t0) el.textContent = fmt(Date.now() - me.t0)
+  }, 100)
+  VM.timer = tid
+  let left = words.length
+  let lock = false
+  VM.sel = null
+  $('.vm-run').addEventListener('click', (e) => {
+    if (e.target.closest('[data-act=close]')) {
+      clearInterval(VM.timer)
+      VM.over = true
+      return go(vocabHome(g.unit))
+    }
+    const t = e.target.closest('.vm-tile')
+    if (!t || lock || t.classList.contains('gone')) return
+    if (!VM.t0) VM.t0 = Date.now()
+    if (t.dataset.en === '1') Voice.speak(t.textContent.trim())
+    if (!VM.sel) {
+      VM.sel = t
+      t.classList.add('sel')
+      return
+    }
+    if (VM.sel === t) {
+      t.classList.remove('sel')
+      VM.sel = null
+      return
+    }
+    if (VM.sel.dataset.en === t.dataset.en) {
+      VM.sel.classList.remove('sel')
+      VM.sel = t
+      t.classList.add('sel')
+      return
+    }
+    const a = VM.sel
+    VM.sel = null
+    if (a.dataset.k === t.dataset.k) {
+      a.classList.remove('sel')
+      a.classList.add('hit')
+      t.classList.add('hit')
+      buzz(15)
+      setTimeout(() => {
+        a.classList.add('gone')
+        t.classList.add('gone')
+      }, 260)
+      left--
+      if (!left) {
+        lock = true
+        setTimeout(() => {
+          VM.r++
+          vocabMatch(g)
+        }, 500)
+      }
+    } else {
+      VM.wrong++
+      lock = true
+      a.classList.add('bad')
+      t.classList.add('bad')
+      buzz([10, 60, 10])
+      setTimeout(() => {
+        a.classList.remove('sel', 'bad')
+        t.classList.remove('bad')
+        lock = false
+      }, 420)
+    }
+  })
+}
+function vocabMatchEnd(g) {
+  clearInterval(VM.timer)
+  VM.over = true
+  const secs = Math.round(((Date.now() - (VM.t0 || Date.now())) / 1000) * 10) / 10
+  const best = S.vocab.best?.[g.id]
+  const record = !best || secs < best
+  ;(S.vocab.best ||= {})[g.id] = record ? secs : best
+  addSession({ k: `vocab:${g.id}:match`, m: g.mid, title: `${g.unit} 單字・配對消除`, s: Math.max(0, 100 - VM.wrong * 5), n: g.words.length, t: secs, ts: Date.now(), d: S.profile.id })
+  save()
+  checkBadges()
+  Sync.presence({ view: 'home' })
+  setView(vocabEndHTML(g, record ? '新紀錄！' : '全部配對完成', `${secs}<small> 秒</small>`, `${g.words.length} 個字${VM.wrong ? `，配錯 ${VM.wrong} 次` : '，一次都沒配錯'}${!record && best ? `；最快紀錄 ${best} 秒` : ''}。`), { tabs: false })
+  if (record) setTimeout(celebrate, 300)
+  vocabEndBind(g, () => vocabMatch(g))
+}
+
+// ── 念單字：一個一個念，用口說練習的評分（聽發音→按麥克風→看分數） ──
+let VS = null
+function vocabSpeak(g) {
+  if (VS?.gid !== g.id || VS.over) VS = { gid: g.id, list: shuffle([...g.words]), i: 0, res: [], over: false, played: {} }
+  const w = VS.list[VS.i]
+  if (!w) return vocabSpeakEnd(g)
+  const r = VS.res[VS.i]
+  const n = VS.list.length
+  setView(
+    `<div class="run speak-run vocab-run vsp-run">
+      ${vocabBar(g, '念單字', VS.i, n)}
+      <div class="run-stage">
+        <div class="run-count">第 ${VS.i + 1}／${n} 個</div>
+        <section class="card sp-card vsp-card">
+          <div class="sp-en vsp-en" lang="en">${r ? speakWordsHTML(r.words) : esc(w.en)}</div>
+          <div class="sp-zh">${esc(w.pos ? w.pos + ' ' : '')}${esc(w.zh)}</div>
+          <div class="sp-listen"><button type="button" class="pill" data-act="play">${ICON.speaker}<span>播放示範</span></button><button type="button" class="pill" data-act="slow">🐢<span>慢速</span></button></div>
+        </section>
+        <div class="sp-mic-wrap">
+          <div class="sp-mic-box"><span class="sp-lv" aria-hidden="true"></span><button class="sp-mic" data-act="mic" aria-label="${r ? '再念一次' : '開始錄音'}">${ICON.mic}</button></div>
+          <div class="sp-mic-label">${r ? '再念一次' : '按下麥克風，念出這個字'}</div>
+          <div class="sp-live" aria-live="polite"></div>
+        </div>
+        <section class="sp-result card" ${r ? '' : 'hidden'}>${r ? speakResultHTML(r) : ''}</section>
+      </div>
+      <footer class="run-actions"><div class="ra-left">${r ? '' : '<button class="pill" data-act="skip">⏭️<span>跳過</span></button>'}</div><button class="btn primary big" data-act="next" ${r ? '' : 'disabled'}>${VS.i + 1 >= n ? '🏁<span>看結果</span>' : '➡️<span>下一個</span>'}</button></footer>
+    </div>`,
+    { tabs: false },
+  )
+  Sync.presence({ view: 'vocab', title: `${g.unit} 單字・念單字`, n: VS.i + 1, of: n, text: w.en, ...(r ? { said: r.heard, sc: r.score } : {}) })
+  let L = null
+  $('.vsp-run').addEventListener('click', async (e) => {
+    const a = e.target.closest('[data-act]')?.dataset.act
+    if (!a) {
+      const sw = e.target.closest('.spw')
+      if (sw) Voice.speak(sw.textContent.replace(/[^A-Za-z' -]/g, ''))
+      return
+    }
+    if (a === 'close') {
+      L?.stop()
+      VS.over = true
+      Voice.stop()
+      return go(vocabHome(g.unit))
+    }
+    if (a === 'play' || a === 'slow') return Voice.speak(w.en, a === 'slow')
+    if (a === 'skip' || a === 'next') {
+      L?.stop()
+      Voice.stop()
+      if (a === 'skip' && !VS.res[VS.i]) VS.res[VS.i] = null
+      VS.i++
+      return vocabSpeak(g)
+    }
+    if (a === 'mine') return playURL(VS.res[VS.i]?.audio)
+    if (a === 'mic') {
+      const mic = $('.sp-mic')
+      if (L) return L.stop()
+      Voice.stop()
+      mic.classList.add('on')
+      $('.sp-mic-label').textContent = '錄音中，說完會自動停止'
+      const idx = VS.i
+      const live = $('.sp-live')
+      L = { stop() {} }
+      const engine = engineNow()
+      if (engine === 'wait') {
+        mic.classList.remove('on')
+        $('.sp-mic-label').textContent = r ? '再念一次' : '按下麥克風開始'
+        L = null
+        const start = () =>
+          getASR()
+            .then((A) => A.load())
+            .catch(() => toast('辨識模型下載失敗，請檢查網路（建議 Wi‑Fi）再試一次', '⚠️'))
+        if (!asrAllowed()) return askASRDownload(start)
+        start()
+        return toast(`辨識模型下載中（${Math.round((ASR_MOD?.progress || 0) * 100)}%），完成後再按一次`, '⏳')
+      }
+      const meter = micMeter()
+      let got
+      try {
+        L = await (engine === 'local' ? listenLocal : listen)((t) => (live.textContent = t), w.en, meter)
+        got = await L.done
+      } catch {
+        got = { alts: [], err: 'error', blob: null }
+      } finally {
+        L = null
+        meter.end()
+      }
+      const { alts, err, blob, clash } = got
+      mic.classList.remove('on')
+      if (VS.over || VS.i !== idx || !mic.isConnected) return
+      if (!alts.length) {
+        $('.sp-mic-label').textContent = VS.res[VS.i] ? '再念一次' : '按下麥克風開始'
+        $('.sp-live').textContent = ''
+        if (clash) return toast('已經調整好，請再按一次麥克風說一次', '🎤')
+        return toast(SPEAK_ERR[err] || '沒有辨識到內容，請再念一次', '🎤')
+      }
+      const res = speakScore(w.en, alts)
+      const prev = VS.res[VS.i]
+      if (prev?.audio && blob) URL.revokeObjectURL(prev.audio)
+      VS.res[VS.i] = { ...res, tries: (prev?.tries || 0) + 1, best: Math.max(prev?.best || 0, res.score), audio: blob ? URL.createObjectURL(blob) : prev?.audio || '' }
+      buzz(res.score >= 85 ? 15 : [10, 60, 10])
+      vocabSpeak(g)
+      if (blob) Rec.upload(w.en, blob, res.score, res.heard).catch(() => {})
+    }
+  })
+}
+function vocabSpeakEnd(g) {
+  VS.over = true
+  const done = VS.list.map((w, i) => ({ w, r: VS.res[i] })).filter((x) => x.r)
+  const avg = done.length ? Math.round(done.reduce((n, x) => n + x.r.best, 0) / done.length) : 0
+  if (done.length) {
+    addSession({ k: `vocab:${g.id}:speak`, m: g.mid, title: `${g.unit} 單字・念單字`, s: avg, n: done.length, ts: Date.now(), d: S.profile.id })
+    save()
+    checkBadges()
+  }
+  Sync.presence({ view: 'home' })
+  const low = done.filter((x) => x.r.best < 85)
+  setView(
+    vocabEndHTML(g, avg >= 85 ? '發音很清楚！' : avg >= 65 ? '很不錯' : done.length ? '多聽幾次再念' : '這一回沒有念', done.length ? `${avg}<small> 分</small>` : '—', done.length ? `念了 ${done.length} 個字${low.length ? `；再練一下：${low.map((x) => `<button type="button" class="chip say" data-say="${esc(x.w.en)}">${esc(x.w.en)}</button>`).join(' ')}` : '，每個都很清楚'}` : ''),
+    { tabs: false },
+  )
+  vocabEndBind(g, () => vocabSpeak(g))
+}
+
 function navBack() {
   if (history.state?.root || history.length <= 1) go(PARENT(location.hash || '#/'))
   else history.back()
@@ -9391,9 +10060,11 @@ function route() {
     releaseMics()
   }
   if (a !== 'exam' && EXAM && !EXAM.graded) clearInterval(EXAM.timer)
+  if (a !== 'vocab' && VM?.timer) clearInterval(VM.timer)
   if (a !== 'watch' && WAKE) WAKE.release().catch(() => {})
   if (a === 'watch' && b) return viewWatch(b)
   if (a === 'run' && b) return viewRun(decodeURIComponent(b))
+  if (a === 'vocab' && b) return viewVocab(decodeURIComponent(b), h.split('/')[3] || '', h.split('/')[4] || '')
   if (a === 'book') return viewBook()
   if (a === 'exam') return viewExam()
   if (a === 'flash') return viewFlash()

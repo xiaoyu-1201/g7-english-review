@@ -54,7 +54,8 @@ with sync_playwright() as p:
     pg.goto(URL)
     pg.wait_for_selector(".home")
     pg.screenshot(path=str(OUT / "01-home-empty.png"), full_page=True)
-    mods = pg.evaluate("() => Object.fromEntries(Object.entries(window.__app.MODULES).map(([k,m]) => [k, m.items]))")
+    # 2.26 單字的模組（v:…）不在首頁的單元列表裡，另外由 test_vocab 測
+    mods = pg.evaluate("() => Object.fromEntries(Object.entries(window.__app.MODULES).filter(([, m]) => !m.vocab).map(([k,m]) => [k, m.items]))")
     order = [m for m in mods if not only or m in only]
     # 沒連結老師的裝置只看得到第一次段考；其他的課用老師的裝置做（全部的課都看得到）
     shown = set(pg.evaluate("[...document.querySelectorAll('[data-mod]')].map(e => e.dataset.mod)"))
