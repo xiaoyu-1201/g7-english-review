@@ -6,7 +6,7 @@ import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 import { VOCAB, unitKey, wordSlug } from './vocab.js'
 
-const VERSION = '2.26（10/13）'
+const VERSION = '2.26.1（10/13）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -7511,6 +7511,12 @@ function parentProgressHTML(list, sess, units, l, name) {
       ${line(ico('exam', ICON.doc), '模擬段考', ex.length ? `最近 ${Math.min(5, ex.length)} 次` : '還沒寫過', ex.length ? `<div class="pp-scores">${scores(ex)}</div>` : '')}
       ${ls.length ? line(ico('listen', ICON.speaker), '聽力練習卷', `最近 ${Math.min(5, ls.length)} 次`, `<div class="pp-scores">${scores(ls)}</div>`) : ''}
       ${line(ico('speak', ICON.mic), '口說練習', sp.length ? `最近 ${lastOf(sp).s} 分・最高 ${max(sp)} 分・共 ${sp.length} 次` : '還沒練過', sp.length && lastOf(sp).weak?.length ? `<small class="pp-sub">要再練的字：${esc(lastOf(sp).weak.slice(0, 4).join('、'))}</small>` : '')}
+      ${(() => {
+        // 2.26 單字：單字卡、配對、念單字的紀錄只存在孩子的裝置，這裡用練習紀錄（session）列最近幾回
+        const vs = sess.filter((s) => String(s.k || '').startsWith('vocab:'))
+        const last3 = vs.slice(-3).reverse()
+        return line(ico('vocab', ti('abc')), '單字練習', vs.length ? `共 ${vs.length} 回・最近 ${fmtDate(lastOf(vs).ts)}` : '還沒練過', vs.length ? `<small class="pp-sub">${last3.map((s) => `${esc(s.title || '單字')}：${s.t ? `${s.t} 秒` : `${s.s} 分`}`).join('；')}</small>` : '')
+      })()}
       ${line(ico('book', ICON.book), '錯題本', book ? `還有 ${book} 題要再練` : '目前沒有答錯的題目', book ? '<small class="pp-sub">答對 3 次（或相隔 8 小時答對 2 次）才會從錯題本移除</small>' : '')}
       ${line(ico('flash', ICON.bolt), '閃電挑戰', fl.length ? `最高 ${max(fl)} 題（60 秒內答對）・共 ${fl.length} 次` : '還沒玩過')}
       ${line(ico('notes', ICON.notes), '重點總整理', nt.length ? `最近看 ${esc(lastOf(nt).u || '')}・${fmtDate(lastOf(nt).ts)}・共 ${nt.length} 次` : '還沒看過')}
@@ -9944,6 +9950,7 @@ function vocabSpeak(g) {
         <div class="sp-mic-wrap">
           <div class="sp-mic-box"><span class="sp-lv" aria-hidden="true"></span><button class="sp-mic" data-act="mic" aria-label="${r ? '再念一次' : '開始錄音'}">${ICON.mic}</button></div>
           <div class="sp-mic-label">${r ? '再念一次' : '按下麥克風，念出這個字'}</div>
+          ${!r && speakEngine() === 'local' && !asrReady() && !asrAllowed() ? `<p class="vsp-note">第一次要先下載辨識模型（約 ${asrSizeMB()}MB，建議用 Wi‑Fi），按麥克風時會問你。</p>` : ''}
           <div class="sp-live" aria-live="polite"></div>
         </div>
         <section class="sp-result card" ${r ? '' : 'hidden'}>${r ? speakResultHTML(r) : ''}</section>

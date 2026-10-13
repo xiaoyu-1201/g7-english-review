@@ -11457,3 +11457,12 @@ img.xiaoya {
     background: rgba(155, 127, 240, 0.24);
   }
 }
+.vsp-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--label2);
+  text-align: center;
+}
+.pp-ico.ic-vocab {
+  background: var(--orange-v);
+}
