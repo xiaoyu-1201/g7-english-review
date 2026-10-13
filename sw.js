@@ -1,7 +1,7 @@
 // 讓 App 沒有網路也能打開
 // 更新：每次都先問 GitHub 有沒有新版（跳過 10 分鐘暫存）；新版裝好會自動重新整理一次
 // 改版時：app.js 的 VERSION 和這裡的 CACHE 都要改
-const CACHE = 'g7review-v83'
+const CACHE = 'g7review-v84'
 // 2.25.3 主畫面圖示（老師 10/12：加到主畫面還是沒有圖示）→ 照拐乖記帳的做法：圖示和 manifest 裝的時候就先存好，
 // iPhone「加入主畫面」來抓的時候直接從暫存給（快取優先，沒網路、網路慢也拿得到）
 const ICONS = ['manifest.webmanifest', 'icons/apple-touch-icon-v4.png', 'icons/icon-192-v4.png', 'icons/icon-512-v4.png']

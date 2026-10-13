@@ -11466,3 +11466,26 @@ img.xiaoya {
 .pp-ico.ic-vocab {
   background: var(--orange-v);
 }
+/* 電腦大螢幕（QA 1920）：單字卡、念單字、配對的內容放在一塊白底上，字不會疊在插畫上 */
+@media (min-width: 1000px) {
+  [data-skin='garden'] .vocab-run .run-stage {
+    flex: 0 0 auto; /* 不要撐到整個畫面高（會變一大塊空白） */
+    max-width: 760px;
+    margin: 18px auto 0;
+    padding: 28px 32px 32px;
+    border-radius: 28px;
+    background: var(--card);
+    border: var(--glass-b);
+    box-shadow: var(--shadow);
+  }
+  [data-skin='garden'] .vocab-run .run-count {
+    text-shadow: none;
+  }
+  .vcard {
+    max-width: 520px;
+    height: 300px;
+  }
+  .vsp-run .sp-mic-wrap {
+    background: none;
+  }
+}
