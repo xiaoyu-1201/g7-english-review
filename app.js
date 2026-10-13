@@ -6,7 +6,7 @@ import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 import { VOCAB, unitKey, wordSlug } from './vocab.js'
 
-const VERSION = '2.26.2（10/13）'
+const VERSION = '2.27（10/13）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -49,7 +49,7 @@ const EMO = {
   '🚀': ['rocket', 'blue'], '🔟': ['list-numbers', 'orange'], '⚡': ['bolt', 'orange'], '🥈': ['medal', 'gray'], '🥇': ['medal', 'orange'], '💯': ['award', 'red'],
   '📘': ['book', 'blue'], '📒': ['notebook', 'green'], '🌱': ['sparkles', 'green'], '🙌': ['thumb-up', 'green'], '🏆': ['trophy', 'orange'], '🔄': ['refresh', 'blue'],
   '🔤': ['abc', 'orange'], '🧩': ['puzzle', 'purple'], '🃏': ['cards', 'indigo'], '🔼': ['chevron-up', 'blue'], '🏠': ['home', 'blue'], '➡️': ['arrow-right', 'blue'],
-  '⏭️': ['player-track-next', 'gray'], '🏁': ['flag', 'green'],
+  '⏭️': ['player-track-next', 'gray'], '🏁': ['flag', 'green'], '🔍': ['search', 'blue'],
 }
 const EMO_LEAD = /^\s*(\p{Extended_Pictographic}️?)\s*/u
 const emoIc = (e, cls = '') => (EMO[e] ? ti(EMO[e][0], `ic-${EMO[e][1]}${cls ? ' ' + cls : ''}`) : '')
@@ -2923,6 +2923,13 @@ function warmIds() {
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
   {
+    v: '2.27',
+    date: '10/13',
+    student: [['🔍', '字體大小可以自由調', '設定 → 字體大小：拉滑桿 100%～170%，整個畫面一起放大。平板、電腦看的時候可以拉大一點。']],
+    parent: [['🔍', '字體大小可以自由調', '設定 → 字體大小：拉滑桿就能放大整個畫面。']],
+    teacher: [['🔍', '字體大小可以自由調', '設定 → 字體大小：100%～170% 滑桿（上課用電腦投影可以拉到超大）。每個裝置自己設。']],
+  },
+  {
     v: '2.26',
     date: '10/13',
     student: [['🔤', '每課單字練習', '每一課多了「單字」：單字卡、聽音選字、配對消除、拼字方塊、句子填空、念單字六種玩法。答錯的字會進錯題本，練單字植物也會長大。']],
@@ -4496,7 +4503,8 @@ function viewSettings() {
 
       <div class="group"><div class="group-h">上課</div><div class="list form">
         <div class="row field"><span class="row-t">先說答案，再看選項<small>選擇題的選項先遮住，學生先口頭回答</small></span><div class="seg small" data-seg="oral"><button class="${p.oral === 'on' ? 'on' : ''}" data-v="on">開</button><button class="${p.oral !== 'on' ? 'on' : ''}" data-v="off">關</button></div></div>
-        <div class="row field"><span class="row-t">字體大小</span><div class="seg small" data-seg="size"><button class="${p.size !== 'lg' ? 'on' : ''}" data-v="std">標準</button><button class="${p.size === 'lg' ? 'on' : ''}" data-v="lg">大</button></div></div>
+        <div class="row field zoom-row"><span class="row-t">字體大小<em class="new-tag">新</em><small>整個畫面一起放大；電腦大螢幕可以拉大一點</small></span><div class="seg small" data-seg="zoom">${[[100, '標準'], [115, '大'], [135, '特大'], [160, '超大']].map(([z, t]) => `<button class="${uiZoom() === z ? 'on' : ''}" data-v="${z}">${t}</button>`).join('')}</div></div>
+        <div class="row field zoom-slide"><input type="range" id="f-zoom" min="100" max="170" step="5" value="${uiZoom()}" aria-label="字體大小"><output for="f-zoom" id="f-zoom-v">${uiZoom()}%</output></div>
       </div><p class="group-f">「先說答案」：自己想出答案再對照，比直接看選項記得更牢（生成效應）。學生回家自己練時可以關掉。<br>有實體鍵盤時：按 1～4 選選項，Enter 檢查／下一題。</p></div>
 
       <div id="sync-sec">${syncSettingsHTML(role)}</div>
@@ -4535,6 +4543,9 @@ function viewSettings() {
     codeSheet('', v) // 貼到代碼
   }
   $('#f-pair')?.addEventListener('change', onPair)
+  // 字體大小滑桿：拉的時候馬上變，放開才存
+  $('#f-zoom')?.addEventListener('input', (e) => setZoom(+e.target.value, false))
+  $('#f-zoom')?.addEventListener('change', (e) => setZoom(+e.target.value))
   v.addEventListener('click', (e) => {
     const b = e.target.closest('[data-seg] button')
     if (b) {
@@ -4573,6 +4584,8 @@ function viewSettings() {
           .catch(() => toast('沒有成功，請檢查網路再試一次', '⚠️'))
         return
       }
+      // 2.27 字體大小：預設鈕＝把滑桿拉到那個值
+      if (k === 'zoom') return setZoom(+b.dataset.v)
       S.profile[k] = k === 'goal' ? +b.dataset.v : b.dataset.v
       save()
       if (k === 'size') applySize()
@@ -10094,8 +10107,22 @@ window.addEventListener('hashchange', () => {
   route()
   window.scrollTo(0, 0)
 })
+// 2.27 字體大小（老師 10/13「可不可以自由調整大小」）：100～170%，整個畫面一起放大（CSS zoom）；以前的「大」＝115%
+const uiZoom = () => Math.min(170, Math.max(100, +S.profile.zoom || (S.profile.size === 'lg' ? 115 : 100)))
 function applySize() {
-  document.documentElement.classList.toggle('size-lg', S.profile.size === 'lg')
+  document.documentElement.classList.remove('size-lg')
+  document.documentElement.style.setProperty('--ui-zoom', String(uiZoom() / 100))
+}
+function setZoom(z, persist = true) {
+  z = Math.min(170, Math.max(100, Math.round(z / 5) * 5))
+  S.profile.zoom = z
+  applySize()
+  const out = $('#f-zoom-v')
+  if (out) out.textContent = `${z}%`
+  const sl = $('#f-zoom')
+  if (sl && +sl.value !== z) sl.value = z
+  $$('[data-seg="zoom"] button').forEach((x) => x.classList.toggle('on', +x.dataset.v === z))
+  if (persist) save()
 }
 // 實體鍵盤：1～4／A～D 選選項，Enter 檢查／下一題
 document.addEventListener('keydown', (e) => {

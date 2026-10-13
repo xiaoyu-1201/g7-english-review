@@ -83,8 +83,8 @@ with sync_playwright() as p:
     wait_until(lambda: st(P) == "member")
     P.click('.tabbar a[href="#/live/home"]')  # 配對完先在「即時作答」（原本的設計），花園在「學習進度」
     check(wait_until(lambda: P.locator(".sheet .news-row").count() >= 2, 10), "parent sees the what's-new sheet once")
-    # 最新兩版的家長版（2.26 單字練習、2.25 花園外觀）；更早的在「設定 → 更新紀錄」
-    check("單字練習" in txt(P, ".sheet") and "花園外觀" in txt(P, ".sheet"), "parent version of what's new (latest two versions)")
+    # 最新兩版的家長版（2.27 字體大小、2.26 單字練習）；更早的在「設定 → 更新紀錄」
+    check("字體大小" in txt(P, ".sheet") and "單字練習" in txt(P, ".sheet"), "parent version of what's new (latest two versions)")
     P.screenshot(path=str(OUT / "garden-5-news-parent.png"))
     P.click(".sheet [data-close]")
     time.sleep(0.4)
@@ -99,7 +99,7 @@ with sync_playwright() as p:
     N = page(b, 390, 844, "N", seed=FORCE)
     N.goto(URL)
     N.wait_for_selector(".home .garden")
-    check(wait_until(lambda: N.locator(".sheet .news-row").count() >= 3, 5), "student sees the what's-new sheet (2.22 + 2.21 items)")
+    check(wait_until(lambda: N.locator(".sheet .news-row").count() >= 2, 5), "student sees the what's-new sheet (latest two versions)")
     check(N.locator(".sheet .pp-pick").count() == 4, "and can pick a plant right there")
     N.screenshot(path=str(OUT / "garden-6-news.png"))
     N.click('.sheet [data-plant="sakura"]')

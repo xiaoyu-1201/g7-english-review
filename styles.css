@@ -3130,6 +3130,12 @@ ul.plain b {
 .size-lg .flash-stage {
   zoom: 1.13;
 }
+/* 2.27 字體大小滑桿：100～170%（applySize 設 --ui-zoom） */
+.page,
+.run-stage,
+.flash-stage {
+  zoom: var(--ui-zoom, 1);
+}
 
 .row.task .row-t {
   color: var(--label);
@@ -11488,4 +11494,21 @@ img.xiaoya {
   .vsp-run .sp-mic-wrap {
     background: none;
   }
+}
+
+/* 2.27 字體大小滑桿 */
+.zoom-slide {
+  gap: 12px;
+}
+.zoom-slide input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--blue);
+}
+.zoom-slide output {
+  min-width: 48px;
+  text-align: right;
+  font-family: var(--round);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
