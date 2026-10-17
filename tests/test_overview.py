@@ -63,7 +63,9 @@ with sync_playwright() as p:
     T.click(".sheet [data-close]")
     time.sleep(0.4)
     check(wait_until(lambda: len(http("GET", f"/classes/{code}/hw/{amy}.json")[1] or {}) == 1 and len(http("GET", f"/classes/{code}/hw/{ben}.json")[1] or {}) == 1), "each student got one homework")
-    check((http("GET", f"/classes/{code}/students/{amy}/units.json")[1] or {}).get("Unit 2") is True, "homework auto-opened Unit 2 for Amy")
+    # 2.28：派還沒開放的單元 → 只開那一個單元（mods），不是整課
+    check((http("GET", f"/classes/{code}/students/{amy}/mods.json")[1] or {}).get("u2a") is True, "homework auto-opened the u2a module for Amy")
+    check((http("GET", f"/classes/{code}/students/{amy}/units.json")[1] or {}).get("Unit 2") is not True, "the whole Unit 2 is not opened")
     # 勾選多個 → 開放課程（設定成一樣）
     T.click("[data-pick]")  # 完成
     T.click("[data-pick]")  # 再選一次

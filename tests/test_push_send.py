@@ -86,10 +86,11 @@ cls = {
     "members": {"S1": {"role": "student", "sid": "amy", "at": 1}, "S2": {"role": "student", "sid": "ben", "at": 1}, "P1": {"role": "parent", "sid": "amy", "at": 1}, "S3": {"role": "student", "sid": "ben", "at": 1}},
     "hw": {
         "amy": {"h1": {"title": "Unit 1 練習", "tasks": [{"k": "mod", "id": "u1a"}, {"k": "exam"}], "at": NOW0 - 2 * 86400000, "due": ms(2026, 10, 12, 23, 59)}},
-        "ben": {"h2": {"title": "Unit 1", "tasks": [{"k": "mod", "id": "u1a"}], "at": NOW0 - 86400000}},
+        # Ben 的作業有一項是單字（2.26）：紀錄的 key 是 vocab:<課>:<玩法>，做過任何一種玩法就算
+        "ben": {"h2": {"title": "Unit 1", "tasks": [{"k": "mod", "id": "u1a"}, {"k": "vocab", "u": "Unit 1"}], "at": NOW0 - 86400000}},
     },
     "a": {"ben": {f"{t18 + i}-u1a-{i}-x": {"q": f"u1a-{i}", "r": "ok", "ts": t18 + i, "d": "x"} for i in range(3)}},
-    "s": {"ben": {f"{t18 + 9}-m_u1a-x": {"k": "m:u1a", "ts": t18 + 9, "d": "x", "s": 100, "n": 3}}},
+    "s": {"ben": {f"{t18 + 9}-m_u1a-x": {"k": "m:u1a", "ts": t18 + 9, "d": "x", "s": 100, "n": 3}, f"{t18 + 20}-vocab-x": {"k": "vocab:unit1:cards", "ts": t18 + 20, "d": "x", "s": 90, "n": 10}}},
 }
 http("PUT", f"/classes/{C}.json", cls)
 http("PUT", "/pushlog/2026-09-01.json", {"x": 1})  # 很舊的發送紀錄：要被清掉

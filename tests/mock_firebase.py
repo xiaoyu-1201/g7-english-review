@@ -179,7 +179,7 @@ def can_write(ps, uid, val, legacy, prov):
     return False
 
 
-STU_KEYS = {"name", "at", "code", "codeExp", "units"}
+STU_KEYS = {"name", "at", "code", "codeExp", "units", "mods"}
 MEM_KEYS = {"role", "sid", "name", "dev", "pid", "at"}
 
 
@@ -200,11 +200,11 @@ def valid(ps, val):
     units_ok = lambda u: isinstance(u, dict) and all(isinstance(v, bool) for v in u.values())
     if sec == "students":
         if len(rest) == 1:
-            return isinstance(val, dict) and set(val) <= STU_KEYS and units_ok(val.get("units", {}))
+            return isinstance(val, dict) and set(val) <= STU_KEYS and units_ok(val.get("units", {})) and units_ok(val.get("mods", {}))
         if len(rest) == 2:
-            return rest[1] in STU_KEYS and (rest[1] != "units" or units_ok(val))
+            return rest[1] in STU_KEYS and (rest[1] not in ("units", "mods") or val is None or units_ok(val))
         if len(rest) == 3:
-            return rest[1] == "units" and isinstance(val, bool)
+            return rest[1] in ("units", "mods") and isinstance(val, bool)
     if sec == "members":
         if len(rest) == 1:
             return isinstance(val, dict) and set(val) <= MEM_KEYS and val.get("role") in ("student", "parent", "teacher") and "at" in val

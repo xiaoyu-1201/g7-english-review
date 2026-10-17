@@ -13,6 +13,7 @@
 import crypto from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { b64u, ub64, vapidKeys, sendPush } from './webpush.mjs'
+import { unitKey } from '../../vocab.js'
 
 const MODE = ['run', 'dry', 'test'].includes(process.env.MODE) ? process.env.MODE : 'run'
 const DB = (process.env.DB || 'https://g7-english-review-default-rtdb.asia-southeast1.firebasedatabase.app').replace(/\/+$/, '')
@@ -63,11 +64,20 @@ async function accessToken(sa) {
   if (!r.ok) throw new Msg(`服務帳戶換不到權杖（HTTP ${r.status}）：檢查 GitHub Secrets 的 FIREBASE_SA 是不是整份 JSON`)
   return (await r.json()).access_token
 }
+const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))
 async function db(method, path, body, query = '') {
   const q = [query, TOKEN ? 'access_token=' + encodeURIComponent(TOKEN) : ''].filter(Boolean).join('&')
-  const r = await fetch(`${DB}/${path}.json${q ? '?' + q : ''}`, { method, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) })
-  if (!r.ok) throw new Msg(`資料庫 ${method} 失敗（HTTP ${r.status}）`)
-  return r.json()
+  // 網路瞬斷、連線被對方關掉（fetch failed／逾時）就再試，最多 3 次；這裡的 PUT、DELETE 重做結果都一樣，不會重複寫
+  for (let n = 0; ; n++) {
+    try {
+      const r = await fetch(`${DB}/${path}.json${q ? '?' + q : ''}`, { method, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) })
+      if (!r.ok) throw new Msg(`資料庫 ${method} 失敗（HTTP ${r.status}）`)
+      return r.json()
+    } catch (e) {
+      if (e instanceof Msg || n >= 2) throw e
+      await sleep(300 * (n + 1) * (n + 1))
+    }
+  }
 }
 const byKey = (q) => `orderBy=${encodeURIComponent('"$key"')}&${q}`
 const byKeyFrom = (from) => byKey(`startAt=${encodeURIComponent(JSON.stringify(String(from)))}`)
@@ -127,12 +137,14 @@ function stu(c, sid) {
 }
 // 作業的完成狀況（跟 App 的 hwStatus 一樣：派出之後有沒有那個練習的紀錄；錯題本已經清空也算）
 const hwKey = (t) => (t.k === 'mod' ? 'm:' + t.id : t.k)
+// 單字作業（2.26）：紀錄是 vocab:<課>:<玩法>，那一課任何一種玩法做過就算
+const hwHit = (t, s) => (t.k === 'vocab' ? String(s.k || '').startsWith(`vocab:${unitKey(t.u || '')}:`) : s.k === hwKey(t))
 async function hwStatus(h, st) {
   let done = 0
   let lastTs = 0
   const tasks = (h.tasks || []).filter((t) => t && t.k)
   for (const t of tasks) {
-    const hit = st.sess.filter((s) => s.k === hwKey(t) && s.ts >= h.at && (!t.ex || (s.ex || 'e1') === t.ex))
+    const hit = st.sess.filter((s) => hwHit(t, s) && s.ts >= h.at && (!t.ex || (s.ex || 'e1') === t.ex))
     const s = hit[hit.length - 1]
     if (s) lastTs = Math.max(lastTs, s.ts)
     if (s || (t.k === 'book' && (t.n0 === 0 || (await st.bookEmpty())))) done++
@@ -404,7 +416,10 @@ async function main() {
       if (MODE === 'run' && NOW - cl.notifyRun > 6 * 3600000) await db('PUT', `classes/${c}/notifyRun`, NOW)
     } catch (e) {
       out.失敗++ // 一個班級出錯不要拖垮其他班級
-      console.error('有一個班級沒處理完：' + (e instanceof Msg ? e.message : e?.name || 'Error'))
+      // JS 引擎自己的錯誤（TypeError 這類）訊息裡只有程式碼的事，連出錯的那一行一起印，不然查不出原因；其他錯誤還是只印種類
+      const engine = e instanceof TypeError || e instanceof RangeError || e instanceof ReferenceError
+      const where = engine ? String(e.stack || '').split('\n').find((l) => /\.mjs:\d+/.test(l)) || '' : ''
+      console.error('有一個班級沒處理完：' + (e instanceof Msg ? e.message : engine ? `${e.name}：${e.message} ${where.trim()}`.trim() : e?.name || 'Error'))
     }
   }
   if (MODE === 'run') {

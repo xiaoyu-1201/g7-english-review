@@ -76,6 +76,11 @@ try:
     expect(True, db("PUT", f"{C}/students/{amy}/units", T, {"Starter": True, "Unit 1": False}), "teacher sets open units")
     expect(False, db("PUT", f"{C}/students/{amy}/units/Unit%201", S1, True), "student cannot open units")
     expect(False, db("PUT", f"{C}/students/{amy}/units", T, {"Starter": "yes"}), "units must be true/false")
+    # 2.28 只開其中幾塊（mods）
+    expect(True, db("PUT", f"{C}/students/{amy}/mods", T, {"u3a": True, "vocab_unit3": True}), "teacher opens single parts")
+    expect(False, db("PUT", f"{C}/students/{amy}/mods/u4a", S1, True), "student cannot open parts")
+    expect(False, db("PUT", f"{C}/students/{amy}/mods", T, {"u3a": "yes"}), "parts must be true/false")
+    expect(True, db("PUT", f"{C}/students/{amy}/mods", T, {}), "teacher clears parts")
     expect(False, db("PUT", f"{C}/members/{s1u}/admin", S1, True), "student cannot self-promote")
     att = {"q": "u2b-02", "m": "u2b", "r": "ok", "t": [], "a": "x", "h": 0, "c": 0, "x": "p", "ts": now, "d": "p"}
     expect(True, db("PATCH", f"{C}/a/{amy}", S1, {"k1": att}), "Amy writes her answer")

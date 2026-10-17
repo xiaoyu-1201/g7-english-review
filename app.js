@@ -5,8 +5,9 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 import { VOCAB, unitKey, wordSlug } from './vocab.js'
+import { initPen, penAttach } from './pen.js'
 
-const VERSION = '2.27（10/13）'
+const VERSION = '2.28（10/17）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -339,7 +340,7 @@ const UNITS = [...new Set(MOD_ORDER.map((m) => MODULES[m].unit))]
 const FIRST_EXAM = EXAMS[0].units // 沒設定過的學生、沒連結老師的裝置：只看得到第一次段考的範圍
 // 看得到的段考（至少開放了一課）
 const openExams = () => {
-  const u = myUnits()
+  const u = touchedUnits()
   return EXAMS.filter((e) => e.units.some((x) => u.has(x)))
 }
 // 首頁副標：一次段考 →「第二次段考：Unit 3～Review 2」；好幾次 →「第一、二次段考：Starter～Review 2」
@@ -351,6 +352,11 @@ function examLabel() {
   return `第${nums.join('、')}次段考：${ex[0].range.split('～')[0]}～${ex[ex.length - 1].range.split('～')[1]}`
 }
 const unitsOfStu = (st) => (st?.units ? new Set(Object.keys(st.units).filter((u) => st.units[u])) : new Set(FIRST_EXAM))
+// 2.28（老師 10/17「開放要細到單元裡的單字啊、文法啊那幾塊」）：一課沒整課開，也可以只開其中幾塊 → students/<sid>/mods = { u3a: true, vocab_unit3: true, … }
+// 單字那一塊的代號：vocab_<unitKey>（Firebase 的 key 不能有 . # $ [ ] /）
+const vocabKeyOf = (u) => 'vocab_' + unitKey(u)
+const isVocabKey = (k) => String(k).startsWith('vocab_')
+const modsOfStu = (st) => new Set(Object.keys(st?.mods || {}).filter((m) => st.mods[m] && (MODULES[m] || isVocabKey(m))))
 // 這個裝置現在看得到哪些課：老師全部；學生模式、學生、家長照老師的設定；沒連結老師的照預設
 function myUnits() {
   if (teacherMode()) return new Set(UNITS)
@@ -358,11 +364,31 @@ function myUnits() {
   if (S.sync?.code && S.sync.sid) return unitsOfStu(Sync.stu || S.stuCache)
   return new Set(FIRST_EXAM)
 }
-const modOpen = (mid) => myUnits().has(MODULES[mid]?.unit)
-const openMods = () => {
-  const u = myUnits()
-  return MOD_ORDER.filter((m) => u.has(MODULES[m].unit))
+function myMods() {
+  if (teacherMode()) return new Set(MOD_ORDER)
+  if (ACTIVE) return modsOfStu(Sync.students[ACTIVE])
+  if (S.sync?.code && S.sync.sid) return modsOfStu(Sync.stu || S.stuCache)
+  return new Set()
 }
+const modOpen = (mid) => myUnits().has(MODULES[mid]?.unit) || myMods().has(mid)
+const vocabOpen = (u) => !!VOCAB[u] && (myUnits().has(u) || myMods().has(vocabKeyOf(u)))
+// 這一課有開到（整課或其中幾塊）：段考、重點總整理用
+const unitTouched = (u) => myUnits().has(u) || vocabOpen(u) || MOD_ORDER.some((m) => MODULES[m].unit === u && myMods().has(m))
+const touchedUnits = () => new Set(UNITS.filter(unitTouched))
+const openMods = () => MOD_ORDER.filter(modOpen)
+// 一課裡可以分開開的「塊」：單字（有的話）＋每個單元
+const partsOf = (u) => [...(VOCAB[u] ? [vocabKeyOf(u)] : []), ...MOD_ORDER.filter((m) => MODULES[m].unit === u)]
+const partName = (k) => (isVocabKey(k) ? `${UNITS.find((u) => vocabKeyOf(u) === k) || ''} 單字` : MODULES[k]?.title || k)
+// 老師看某個學生：哪些課整課開、哪些課只開一部分（幾塊）
+const unitStateOf = (st, u) => {
+  const parts = partsOf(u)
+  if (unitsOfStu(st).has(u)) return { all: true, n: parts.length, total: parts.length }
+  const n = parts.filter((m) => modsOfStu(st).has(m)).length
+  return { all: false, n, total: parts.length }
+}
+// 這個學生「有開到」的課（整課開，或有開其中幾塊）：進度、錯題統整、備課、家長頁用
+const touchedUnitsOf = (st) => new Set(UNITS.filter((u) => unitsOfStu(st).has(u) || partsOf(u).some((m) => modsOfStu(st).has(m))))
+const openUnitsText = (st) => UNITS.map((u) => ({ u, s: unitStateOf(st, u) })).filter((x) => x.s.all || x.s.n).map((x) => (x.s.all ? x.u : `${x.u}（${x.s.n}／${x.s.total} 塊）`)).join('、')
 const openScored = () => openMods().flatMap((m) => MODULES[m].scored)
 // 一堂課只開了一部分：副標只寫開放的課（不露出還沒開放的課名）
 const lessonSub = (L) => (L.modules.every(modOpen) ? L.sub : [...new Set(L.modules.filter(modOpen).map((m) => MODULES[m].unit))].join('＋'))
@@ -372,7 +398,7 @@ const nextUnit = (sid) => {
   return UNITS.find((x) => !u.has(x)) || ''
 }
 const lastOpenUnit = (sid) => {
-  const u = unitsOfStu(Sync.students[sid])
+  const u = touchedUnitsOf(Sync.students[sid])
   return [...UNITS].reverse().find((x) => u.has(x) && !x.startsWith('會考')) || ''
 }
 
@@ -1140,8 +1166,9 @@ const okOrd = (o, n) => Array.isArray(o) && o.length === n && o.every((x) => Num
 const sendOrd = (it) => LAST_ORD?.q === it.id && Sync.last?.q === it.id && Sync.presence({ ...Sync.last, ord: LAST_ORD.ord })
 function makeItem(it, mode = 'practice') {
   const el = document.createElement('article')
-  el.className = `qcard t-${it.t}`
+  el.className = `qcard t-${it.t} pen-target` // 2.28 畫筆：題目卡可以直接寫
   el.dataset.id = it.id
+  el.dataset.ink = (mode === 'exam' ? 'q:exam:' : 'q:') + it.id // 段考另外存：練習時寫的答案不能出現在考卷上
   const C = CTRL[it.t](it, mode)
   const pre = mode === 'exam' ? '' : passageHTML(it.passage, mode)
   el.innerHTML = `${metaHTML(it, mode)}${pre}${it.t === 'learn' ? '' : figure(it.fig)}${audioHTML(it)}${C.html}<div class="q-feedback" hidden></div>`
@@ -1966,7 +1993,10 @@ function snapCurrent() {
   if (!done) return false
   $$('input', C.el).forEach((i) => i.setAttribute('value', i.value))
   $$('textarea', C.el).forEach((t) => (t.textContent = t.value))
-  ;(SNAPS[key] ||= {})[it.id] = C.el.outerHTML
+  // 快照不帶筆跡那兩層（回顧時畫筆會自己畫回來；不然快照越存越大）
+  const snap = C.el.cloneNode(true)
+  $$(':scope > .ink', snap).forEach((x) => x.remove())
+  ;(SNAPS[key] ||= {})[it.id] = snap.outerHTML
   return true
 }
 // 還沒作答就往回：把寫到一半的答案先留著
@@ -2331,7 +2361,7 @@ function notesHTML(mid, hidden = false, unitFirst = false, marks = null) {
       .map((c, ci) => {
         const g = marks?.get(`${mid}:${ci}`)
         const hl = g?.lines || {}
-        return `<section class="note${g ? ' marked' : ''}" data-k="${mid}:${ci}"><h3>${esc(c.title)}${g ? `<span class="fx-badge">還有 ${g.ids.length} 題沒練回來</span>` : ''}</h3>${c.fig && c.fig.k !== 'preps' ? figure(c.fig) : ''}${notePoints(c.show, hl)}<div class="note-rule${hl.r ? ' hl' : ''}">${rich(c.rule)}</div>${c.tip ? `<div class="tip${hl.t ? ' hl' : ''}"><b>易錯提醒</b>${rich(c.tip)}</div>` : ''}${g ? fxMineHTML(g) : ''}</section>`
+        return `<section class="note pen-target${g ? ' marked' : ''}" data-k="${mid}:${ci}" data-ink="note:${mid}:${ci}"><h3>${esc(c.title)}${g ? `<span class="fx-badge">還有 ${g.ids.length} 題沒練回來</span>` : ''}</h3>${c.fig && c.fig.k !== 'preps' ? figure(c.fig) : ''}${notePoints(c.show, hl)}<div class="note-rule${hl.r ? ' hl' : ''}">${rich(c.rule)}</div>${c.tip ? `<div class="tip${hl.t ? ' hl' : ''}"><b>易錯提醒</b>${rich(c.tip)}</div>` : ''}${g ? fxMineHTML(g) : ''}</section>`
       })
       .join('')}</div>`
 }
@@ -2400,7 +2430,7 @@ function lineText(card, line) {
 }
 const lineOrder = (l) => (l === 'r' ? 100 : l === 't' ? 101 : +l.slice(1))
 // 錯的題目 → 依重點卡分組（錯最多的在前面）；對不到卡片的放 other
-function focusOf(ids, units = myUnits()) {
+function focusOf(ids, units = touchedUnits()) {
   const byKey = new Map()
   const other = []
   for (const id of uniq(ids)) {
@@ -2654,7 +2684,7 @@ function pdfSheet(unit, prepare, marks = 0) {
     const r = e.target.closest('[data-pdf]')
     if (r && cs[+r.dataset.pdf].mine) {
       closeSheet()
-      return focusPDF(S.attempts, myUnits(), '我')
+      return focusPDF(S.attempts, touchedUnits(), '我')
     }
     if (r) return sharePDF(cs[+r.dataset.pdf])
     if (e.target.closest('[data-doprint]')) {
@@ -2804,12 +2834,12 @@ function viewHome() {
         <button class="qk qk-notes" data-go="#/notes"><span class="qk-ic">${ICON.notes}</span><span class="qk-t">重點總整理</span><span class="qk-s">考前一頁看完</span></button>
       </section>
 
-      ${LESSONS.filter((L) => L.modules.some(modOpen)).map((L, i, arr) => {
-        // 一堂課全部做完就收起來（可以點開；點過的狀態會記住）
+      ${LESSONS.filter((L) => L.modules.some(modOpen) || vocabOpen(MODULES[L.modules[0]]?.unit)).map((L, i, arr) => {
+        // 一堂課全部做完就收起來（可以點開；點過的狀態會記住）；只開了單字那一塊時不收
         const mods = L.modules.filter(modOpen)
         const stats = mods.map((m) => moduleStats(m))
-        const allDone = stats.every((s) => s.done >= s.total)
-        const folded = S.ui?.fold?.[L.id] ?? allDone
+        const allDone = mods.length > 0 && stats.every((s) => s.done >= s.total)
+        const folded = mods.length ? (S.ui?.fold?.[L.id] ?? allDone) : false
         const mastered = stats.reduce((n, s) => n + s.mastered, 0)
         const total = stats.reduce((n, s) => n + s.total, 0)
         return `${openExams().length > 1 && L.exam !== arr[i - 1]?.exam ? `<h2 class="exam-h">${esc(EXAMS.find((e) => e.id === L.exam)?.title || '')}</h2>` : ''}<section class="lesson${folded ? ' folded' : ''}" data-lesson="${L.id}">
@@ -2817,7 +2847,7 @@ function viewHome() {
           <div class="mods">${(() => {
             // 2.26 每課單字：這一課的第一張卡
             const u = MODULES[L.modules[0]]?.unit
-            if (!VOCAB[u] || !myUnits().has(u)) return ''
+            if (!vocabOpen(u)) return ''
             const v = vocabStats(u, (viewHome.vk ||= vocabKnownBy())) // 首頁一次算好（下面重設）
             return `<button class="mod vocab-mod" data-vocab="${esc(u)}">${actIc('vocab')}<span class="mod-body"><span class="eyebrow">${esc(u)}・5 分鐘・6 種玩法</span><span class="mod-t">${esc(u)} 單字<em class="new-tag">新</em></span><span class="mod-bar"><i style="width:${(v.known / Math.max(1, v.total)) * 100}%"></i></span><span class="mod-s">${v.known ? `會了 ${v.known}／${v.total} 個` : `${v.total} 個單字・還沒開始`}</span></span></button>`
           })()}${L.modules
@@ -2922,6 +2952,18 @@ function warmIds() {
 // 不跳：做題中（只在首頁類的畫面）、第一次用 App 的人（先看歡迎畫面）、只修 bug 的版本（NEWS 只列有新功能的版本）
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
+  {
+    v: '2.28',
+    date: '10/17',
+    student: [
+      ['✏️', '畫筆（像 Goodnotes）', 'Apple Pencil 直接在題目卡、重點卡上寫、畫螢光筆；沒有筆就按右下角的筆，再按「用手指畫」。筆跡存在這台裝置。'],
+    ],
+    parent: [['✏️', '畫筆', '孩子可以用 Apple Pencil 直接在題目卡、重點卡上寫；筆跡存在他的裝置。']],
+    teacher: [
+      ['✏️', '畫筆（像 Goodnotes）', '學生、老師都可以用 Apple Pencil 在題目卡、重點卡上寫、畫螢光筆、擦掉、復原；筆跡存在各自的裝置。'],
+      ['🔓', '開放可以細到每一塊', '學生頁 →「開放的課」：點一課右邊的箭頭，就能只勾「單字」「字母與書寫格式」這種一塊一塊的；派還沒開放的單元也只會開那一塊。'],
+    ],
+  },
   {
     v: '2.27',
     date: '10/13',
@@ -3430,7 +3472,7 @@ function growIds(g, list = S.attempts) {
 // 首頁上方：目前這一課的植物（大）＋怎麼長到下一階＋幫它長大＋各課的小植物（花園）
 function gardenHTML(nextBtn, resume) {
   const type = myPlant()
-  const units = UNITS.filter((u) => myUnits().has(u))
+  const units = UNITS.filter((u) => unitTouched(u))
   if (!units.length) return '' // 老師把課全部收回時（code review）
   const lastMod = [...S.attempts].reverse().find((a) => ITEM[a.q] && units.includes(MODULES[ITEM[a.q].mid]?.unit))
   const cur = units.includes(S.ui?.gardenUnit) ? S.ui.gardenUnit : lastMod ? MODULES[ITEM[lastMod.q].mid].unit : units[0]
@@ -3869,6 +3911,9 @@ function viewExam() {
     const pickId = exs.find((e) => e.id === S.profile.examPick)?.id || exs.filter((e) => !e.kind).pop()?.id || 'e1'
     const ex = EXAMS.find((e) => e.id === pickId) || EXAMS[0]
     const final = ex.kind === 'final'
+    // 2.28：這次段考的範圍只開了一部分（老師一塊一塊開）→ 題目只從開放的部分出，題數會比平常少，要先講
+    const fullPool = ex.all ? ALL_SCORED : ALL_SCORED.filter((i) => ex.units.includes(MODULES[i.mid]?.unit))
+    const partial = examPool(ex).length < fullPool.length
     setView(
       `<div class="page narrow">
         ${header('模擬段考', '', '', true)}
@@ -3876,7 +3921,7 @@ function viewExam() {
           ${(() => {
             const hist = S.sessions.filter((s) => s.k === 'exam' && (s.ex || 'e1') === ex.id)
             const bestS = hist.length ? Math.max(...hist.map((s) => s.s)) : 0
-            return `<div class="sp-hero"><div class="exam-ic">${ICON.doc}</div><div class="sp-hero-t"><b>${hist.length ? `最高 ${bestS} 分・考過 ${hist.length} 次` : '還沒考過這一回'}</b><small class="ex-range">範圍：${esc(ex.range)}${hist.length ? `・最近一次 ${hist[hist.length - 1].s} 分` : ''}</small></div></div>`
+            return `<div class="sp-hero"><div class="exam-ic">${ICON.doc}</div><div class="sp-hero-t"><b>${hist.length ? `最高 ${bestS} 分・考過 ${hist.length} 次` : '還沒考過這一回'}</b><small class="ex-range">範圍：${esc(ex.range)}${partial ? '（目前只開放了一部分，題目從已開放的部分出）' : ''}${hist.length ? `・最近一次 ${hist[hist.length - 1].s} 分` : ''}</small></div></div>`
           })()}
           ${exs.length > 1 ? `<div class="seg full" id="ex-pick">${exs.map((e) => `<button data-ex="${e.id}" class="${e.id === pickId ? 'on' : ''}">${esc(e.kind ? '會考模擬' : e.title)}</button>`).join('')}</div>` : ''}
           ${
@@ -3887,7 +3932,7 @@ function viewExam() {
             <li>交卷後除了分數，還會分開算<b>聽力</b>和<b>閱讀</b>的答對題數（會考就是這樣分）。</li>
             <li>題目有易、中、難的配比，先挑你還不會的。</li>
           </ul>`
-              : `<h2>約 40 題，滿分 100，比照段考＋會考題型</h2>
+              : `<h2>${partial ? '最多' : '約'} 40 題，滿分 100，比照段考＋會考題型</h2>
           <ul class="plain">
             <li>聽力（辨識句意、基本問答、言談理解）、字彙、單題、克漏字、閱讀題組、圖表題組、非選擇題，每大題都有配分。</li>
             <li>寫的時候<b>不會</b>馬上告訴你對錯，交卷後才一起批改。</li>
@@ -5180,7 +5225,7 @@ async function listenLocal(onInterim, _target, onLevel) {
 }
 
 let SP = null // { list, i, res: [{best, tries}], unit, over }
-const speakUnits = () => Object.keys(SPEAK).filter((u) => myUnits().has(u))
+const speakUnits = () => Object.keys(SPEAK).filter((u) => unitTouched(u))
 // 口說的難度：句子沒標 lv 就看長度（4 個字以內＝易、8 個字以內＝中、更長＝難）
 const spLv = (en, lv) => lv || (en.split(/\s+/).length <= 4 ? 1 : en.split(/\s+/).length <= 8 ? 2 : 3)
 // 基礎：只出易、中；標準：全部；挑戰：只出中、難
@@ -6379,12 +6424,42 @@ const Sync = {
     this.D = applyAt(this.D, ['students', sid, 'units'], units, 'put')
     onSyncChange('members')
   },
+  // 2.28 只開其中幾個單元：只存有開的（整課開的那一課，裡面的單元不用另外列）
+  async setMods(sid, set) {
+    const mods = Object.fromEntries([...set].filter((m) => MODULES[m] || isVocabKey(m)).map((m) => [m, true]))
+    await this.req('PUT', `students/${sid}/mods`, mods) // 空的 {} ＝ Firebase 會把這個節點拿掉
+    this.D = applyAt(this.D, ['students', sid, 'mods'], Object.keys(mods).length ? mods : null, 'put')
+    onSyncChange('members')
+  },
+  async openModules(sid, mids) {
+    const units = unitsOfStu(this.students[sid])
+    const set = modsOfStu(this.students[sid])
+    const unitOfKey = (m) => (isVocabKey(m) ? UNITS.find((u) => vocabKeyOf(u) === m) : MODULES[m]?.unit)
+    const add = mids.filter((m) => unitOfKey(m) && !units.has(unitOfKey(m)) && !set.has(m))
+    if (!add.length) return false
+    add.forEach((m) => set.add(m))
+    await this.setMods(sid, set)
+    return true
+  },
   async openUnit(sid, u) {
     const set = unitsOfStu(this.students[sid])
     if (set.has(u)) return false
     set.add(u)
     await this.setUnits(sid, set)
+    // 整課開了：這一課個別開的那幾塊就不用留著
+    const mods = modsOfStu(this.students[sid])
+    const parts = new Set(partsOf(u))
+    if ([...mods].some((m) => parts.has(m))) await this.setMods(sid, new Set([...mods].filter((m) => !parts.has(m))))
     return true
+  },
+  // 開放的課一次存（整課＋個別的塊）：一個 PATCH，不會只存到一半
+  async setAccess(sid, unitsSet, modsSet) {
+    const units = Object.fromEntries(UNITS.map((u) => [u, unitsSet.has(u)]))
+    const mods = Object.fromEntries([...modsSet].filter((m) => MODULES[m] || isVocabKey(m)).map((m) => [m, true]))
+    await this.req('PATCH', `students/${sid}`, { units, mods })
+    this.D = applyAt(this.D, ['students', sid, 'units'], units, 'put')
+    this.D = applyAt(this.D, ['students', sid, 'mods'], Object.keys(mods).length ? mods : null, 'put')
+    onSyncChange('members')
   },
   // 刪除學生：這個學生的裝置都移出，紀錄、代碼一起刪掉
   async deleteStudent(sid) {
@@ -6451,12 +6526,8 @@ const Sync = {
   // keepId：修改已經派出的作業（老師 10/9：不小心按錯要可以改）——同一個代號蓋過去，學生、家長那邊跟著更新
   async addHw(sid, h, keepId = '') {
     // 作業裡有還沒開放的課：一起開放（不然學生打不開）
-    const need = [...new Set(h.tasks.filter((t) => (t.k === 'mod' && MODULES[t.id]) || (t.k === 'vocab' && VOCAB[t.u])).map((t) => (t.k === 'vocab' ? t.u : MODULES[t.id].unit)))]
-    const set = unitsOfStu(this.students[sid])
-    if (need.some((u) => !set.has(u))) {
-      need.forEach((u) => set.add(u))
-      await this.setUnits(sid, set)
-    }
+    // 派了還沒開放的：只開那幾塊（單元、或那一課的單字），不開整課（2.28）
+    await this.openModules(sid, h.tasks.filter((t) => t.k === 'mod' || (t.k === 'vocab' && VOCAB[t.u])).map((t) => (t.k === 'vocab' ? vocabKeyOf(t.u) : t.id)))
     const id = keepId || Date.now().toString(36) + Math.random().toString(36).slice(2, 5)
     await this.req('PUT', `hw/${sid}/${id}`, h)
     this.D = applyAt(this.D, ['hw', sid, id], h, 'put')
@@ -6497,17 +6568,24 @@ const Sync = {
         .catch(() => {})
       const st = await this.req('GET', 'students/' + sid)
       const had = !!(this.stu || S.stuCache)
-      const prev = [...unitsOfStu(this.stu || S.stuCache)]
+      const prevSt = this.stu || S.stuCache
+      const prev = [...unitsOfStu(prevSt)]
+      const prevM = [...modsOfStu(prevSt)]
       this.stu = st
-      S.stuCache = st ? { name: st.name || '', ...(st.units ? { units: st.units } : {}) } : null
+      S.stuCache = st ? { name: st.name || '', ...(st.units ? { units: st.units } : {}), ...(st.mods ? { mods: st.mods } : {}) } : null
       if (st?.name && myRole() === 'student' && !S.profile.name) S.profile.name = st.name
       save()
       onSyncChange('members')
-      // 老師開放了新的課：首頁重畫，並提醒一下
+      // 老師開放了新的課（或其中幾個單元）：首頁重畫，並提醒一下
       const now = [...unitsOfStu(st)]
+      const nowM = [...modsOfStu(st)]
       const added = now.filter((u) => !prev.includes(u))
-      if (added.length || now.length !== prev.length) {
-        if (added.length && had && myRole() === 'student') toast(`老師開放了新的課：${added.join('、')}`, '🔓')
+      const addedM = nowM.filter((m) => !prevM.includes(m) && !now.includes(isVocabKey(m) ? UNITS.find((u) => vocabKeyOf(u) === m) : MODULES[m].unit))
+      if (added.length || addedM.length || now.length !== prev.length || nowM.length !== prevM.length) {
+        if (had && myRole() === 'student') {
+          if (added.length) toast(`老師開放了新的課：${added.join('、')}`, '🔓')
+          else if (addedM.length) toast(`老師開放了：${addedM.map(partName).join('、')}`, '🔓')
+        }
         if ((location.hash || '#/') === '#/' && !$('.sheet-wrap')) viewHome()
       }
     } catch {}
@@ -6569,13 +6647,13 @@ const teacherMode = () => !ACTIVE && !!S.sync?.code && myRole() === 'teacher'
 const BETA_KEY = 'g7review:beta'
 const BETA_LIST = [
   // ready：已經放進 App、打開開關就會出現；link：還在獨立的試寫頁
-  { k: 'pen', ic: '✏️', name: '畫筆（像 Goodnotes）', desc: 'Apple Pencil 直接在重點卡、題目卡上寫；現在先在試寫頁試手感', link: 'pen-test.html' },
+  // 2.28：畫筆已經正式放進 App（老師 10/17「畫筆模式可以」），目前沒有試用中的功能
 ]
 const teacherDevice = () => teacherMode() && Auth.isTeacher() && !!S.sync?.owner // teacherMode：學生模式（把 iPad 借學生）時不算
 // 功能真的打開：還要雲端確認過這台是老師後台（Sync.isAdmin）；只改裝置上的紀錄沒有用。沒網路時試用功能先不出現
 const beta = (k) => teacherDevice() && Sync.isAdmin() && lsGet(BETA_KEY) === 'on' && BETA_LIST.some((f) => f.k === k && f.ready)
 function betaSettingsHTML() {
-  if (!teacherDevice()) return ''
+  if (!teacherDevice() || !BETA_LIST.length) return ''
   const on = lsGet(BETA_KEY) === 'on'
   const anyReady = BETA_LIST.some((f) => f.ready) // 都還在試寫頁：開關沒有作用，先不放
   return `<div class="group beta-sec"><div class="group-h">試用新功能<em class="new-tag">新</em></div><div class="list form">
@@ -7349,7 +7427,7 @@ function viewLiveHome(keepScroll = false) {
       ${header('學習進度', `${name} 每一課做到哪裡、各項練習的成績`, syncPill(true), !parentMode())}
       ${parentMode() ? '' : liveSegHTML('home')}
       ${parentMode() ? a2hsCardHTML() + pushCardHTML('parent') : ''}
-      ${parentProgressHTML(list, sess, myUnits(), l, name)}
+      ${parentProgressHTML(list, sess, touchedUnits(), l, name)}
     </div>`,
   )
   if (keepScroll) window.scrollTo(0, y)
@@ -7361,8 +7439,8 @@ function viewLiveHome(keepScroll = false) {
     if (e.target.closest('[data-latestrec]')) playLatestRec(Sync.sid())
     const gr = e.target.closest('[data-growrule]')
     if (gr) return growRulesSheet(gr.dataset.growrule || undefined, 'parent')
-    if (e.target.closest('[data-fxsheet]')) return focusSheet(list, myUnits(), name)
-    if (e.target.closest('[data-fxpdf]')) return focusPDF(list, myUnits(), name)
+    if (e.target.closest('[data-fxsheet]')) return focusSheet(list, touchedUnits(), name)
+    if (e.target.closest('[data-fxpdf]')) return focusPDF(list, touchedUnits(), name)
   })
 }
 // 這段時間的學習摘要（家長的學習進度、老師複製給家長的 LINE 摘要共用）
@@ -7699,6 +7777,9 @@ function stuCardHTML(sid) {
     .find((x) => !x.all)
   const nu = nextUnit(sid)
   const lu = lastOpenUnit(sid)
+  // 2.28：最後一課可能只開了幾塊 →「開放到 Unit 3（2／4 塊）」；下一課已經開了幾塊 → 按鈕寫「開放 Unit 3 整課」
+  const luS = lu ? unitStateOf(st, lu) : null
+  const nuS = nu ? unitStateOf(st, nu) : null
   const on = SEL.has(sid)
   return `<section class="card sc${isActive(l) ? ' live' : ''}${on ? ' sel' : ''}" data-card="${sid}">
     <div class="sc-head"><span class="sc-chk" aria-hidden="true">${on ? ICON.check : ''}</span><button class="sc-ava" data-act="watch" aria-label="跟隨 ${esc(st.name || '學生')}"><span>${esc((st.name || '學')[0])}</span><i class="ld-dot${isActive(l) ? ' on' : ''}"></i></button><b class="sc-name">${esc(st.name || '學生')}</b></div>
@@ -7717,10 +7798,10 @@ function stuCardHTML(sid) {
     <div class="sc-stats">
       <div><b>${today.length} 題</b><span>今天${today.length ? `・對 ${Math.round((ok / today.length) * 100)}%` : ''}</span></div>
       <button type="button" class="sc-stat-btn" data-act="hwlist" aria-label="看${esc(st.name || '學生')}的作業"><b>${hw ? `${hw.done}／${hw.total}` : '—'}</b><span>${hw ? '作業進度' : '沒有作業'}${ICON.chev}</span></button>
-      <div><b>${esc(lu || '—')}</b><span>開放到</span></div>
+      <div><b>${esc(lu || '—')}</b><span>開放到${luS && !luS.all ? `（${luS.n}／${luS.total} 塊）` : ''}</span></div>
     </div>
     <div class="sc-acts">
-      ${nu ? `<button class="btn ghost small-btn" data-act="next">🔓 開放 ${esc(nu)}</button>` : ''}
+      ${nu ? `<button class="btn ghost small-btn" data-act="next">🔓 開放 ${esc(nu)}${nuS?.n ? ' 整課' : ''}</button>` : ''}
       <button class="btn ghost small-btn" data-act="hw">📌 派作業</button>
       <button class="btn ghost small-btn" data-act="watch">${ICON.eye}<span>課堂檢視</span></button>
       <button class="btn ghost small-btn" data-act="parent">👪 傳給家長</button>
@@ -7754,28 +7835,78 @@ async function openNextUnit(sid, btn) {
   }
 }
 // 開放的課：一個學生，或勾選的好幾個學生（設定成一樣）
+// 2.28：一課可以整課開，也可以點開那一課只勾其中幾個單元（老師 10/17「要細到 U3 的其中幾個」）
 function unitsSheet(sids) {
   const multi = sids.length > 1
-  const sets = sids.map((s) => unitsOfStu(Sync.students[s]))
-  const cur = new Set(UNITS.filter((u) => sets.every((x) => x.has(u))))
+  const sts = sids.map((s) => Sync.students[s])
+  const curU = new Set(UNITS.filter((u) => sts.every((st) => unitsOfStu(st).has(u))))
+  const modsIn = partsOf // 單字（有的話）＋每個單元
+  const curM = new Set(UNITS.flatMap((u) => (curU.has(u) ? [] : modsIn(u).filter((m) => sts.every((st) => unitsOfStu(st).has(u) || modsOfStu(st).has(m))))))
   const b = sheet(
     `<h2 class="sheet-title">開放的課</h2>
-    <p class="sheet-p">${multi ? `${esc(sids.map((s) => Sync.students[s]?.name || '學生').join('、'))}：設定成一樣。` : `${esc(Sync.students[sids[0]]?.name || '學生')} 只看得到打勾的課。`}還沒開放的課，學生的畫面完全看不到。</p>
-    <div class="list units-list">${UNITS.map((u) => `<button class="row unit-row" data-u="${esc(u)}"><span class="row-t">${esc(u)}<small>${esc(MOD_ORDER.filter((m) => MODULES[m].unit === u).map((m) => MODULES[m].title).join('、'))}</small></span><span class="u-chk"></span></button>`).join('')}</div>
-    <div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn primary" data-ok>儲存</button></div>`,
+    <p class="sheet-p">${multi ? `${esc(sids.map((s) => Sync.students[s]?.name || '學生').join('、'))}：設定成一樣。` : `${esc(Sync.students[sids[0]]?.name || '學生')} 只看得到打勾的。`}點課名＝整課；點右邊的箭頭可以只勾其中幾個單元。還沒開放的，學生的畫面完全看不到。</p>
+    <div class="units-list">${UNITS.map(
+      (u) => `<div class="unit-block" data-u="${esc(u)}"><div class="row unit-row" data-u="${esc(u)}"><button type="button" class="unit-main" data-u="${esc(u)}"><span class="u-chk"></span><span class="row-t">${esc(u)}<small class="u-sub"></small></span></button><button type="button" class="unit-fold" data-fold="${esc(u)}" aria-expanded="false" aria-label="展開單元">${ICON.chev}</button></div>
+        <div class="unit-mods" hidden>${modsIn(u)
+          .map((m) => (isVocabKey(m) ? `<button type="button" class="row mod-row" data-m="${m}"><span class="u-chk"></span>${actIc('vocab', 'sm')}<span class="row-t">${esc(u)} 單字<small>${vgroupsOf(u).flatMap((g) => g.words).length} 個字・六種玩法</small></span></button>` : `<button type="button" class="row mod-row" data-m="${m}"><span class="u-chk"></span>${modIc(m, 'sm')}<span class="row-t">${esc(MODULES[m].title)}<small>${MODULES[m].scored.length} 題</small></span></button>`))
+          .join('')}</div></div>`,
+    ).join('')}</div>
+    <div class="sheet-actions"><button class="btn ghost" data-close>取消</button><button class="btn primary" data-ok>💾<span>儲存</span></button></div>`,
+    { wide: true },
   )
-  const draw = () => $$('.unit-row', b).forEach((r) => r.classList.toggle('on', cur.has(r.dataset.u)))
+  const draw = () => {
+    for (const blk of $$('.unit-block', b)) {
+      const u = blk.dataset.u
+      const mods = modsIn(u)
+      const n = curU.has(u) ? mods.length : mods.filter((m) => curM.has(m)).length
+      const row = $('.unit-row', blk)
+      row.classList.toggle('on', curU.has(u))
+      row.classList.toggle('part', !curU.has(u) && n > 0)
+      $('.u-sub', blk).textContent = curU.has(u) ? '整課開放' : n ? `開放 ${n}／${mods.length} 塊` : mods.map(partName).join('、')
+      $$('.mod-row', blk).forEach((r) => r.classList.toggle('on', curU.has(u) || curM.has(r.dataset.m)))
+    }
+  }
   draw()
   b.addEventListener('click', async (e) => {
-    const r = e.target.closest('.unit-row')
-    if (r) {
-      cur.has(r.dataset.u) ? cur.delete(r.dataset.u) : cur.add(r.dataset.u)
+    const f = e.target.closest('[data-fold]')
+    if (f) {
+      const box = $(`.unit-block[data-u="${f.dataset.fold}"] .unit-mods`, b)
+      box.hidden = !box.hidden
+      f.setAttribute('aria-expanded', String(!box.hidden))
+      f.classList.toggle('open', !box.hidden)
+      return
+    }
+    const um = e.target.closest('.unit-main')
+    if (um) {
+      const u = um.dataset.u
+      if (curU.has(u)) curU.delete(u)
+      else curU.add(u)
+      modsIn(u).forEach((m) => curM.delete(m)) // 整課開或整課關：單元的個別設定清掉
+      return draw()
+    }
+    const mr = e.target.closest('.mod-row')
+    if (mr) {
+      const m = mr.dataset.m
+      const u = mr.closest('.unit-block').dataset.u
+      if (curU.has(u)) {
+        // 整課開著 → 拿掉這一個：變成「其他單元個別開」
+        curU.delete(u)
+        modsIn(u).forEach((x) => x !== m && curM.add(x))
+      } else if (curM.has(m)) curM.delete(m)
+      else {
+        curM.add(m)
+        if (modsIn(u).every((x) => curM.has(x))) {
+          // 全部勾了＝整課
+          modsIn(u).forEach((x) => curM.delete(x))
+          curU.add(u)
+        }
+      }
       return draw()
     }
     if (e.target.closest('[data-ok]')) {
       e.target.closest('[data-ok]').disabled = true
       try {
-        for (const s of sids) await Sync.setUnits(s, cur)
+        for (const s of sids) await Sync.setAccess(s, curU, curM)
         closeSheet()
         toast(multi ? `已更新 ${sids.length} 位學生的課程` : '已更新開放的課', '🔓')
         if (multi) SEL.clear()
@@ -7874,7 +8005,7 @@ function viewStudent(sid, keepScroll = false) {
       ${stuActionsHTML(sid)}
       ${stuSegHTML(sid, 'live')}
       ${hwTeacherHTML(sid)}
-      ${focusSummaryHTML(list, unitsOfStu(st), st.name || '學生', 'teacher')}
+      ${focusSummaryHTML(list, touchedUnitsOf(st), st.name || '學生', 'teacher')}
       ${parentNoteCardHTML(sid)}
       ${recSectionHTML(sid)}
       <section class="card live-dev">
@@ -7895,7 +8026,7 @@ function viewStudent(sid, keepScroll = false) {
       ${selfRecHTML(list, sess)}
       <div class="group"><div class="list">
         <button class="row" data-class><span class="row-ic">📱</span><span class="row-t">學生模式<small>學生沒帶平板時，用老師的平板或手機練習；作答算在 ${esc(st.name || '這個學生')} 的紀錄</small></span>${ICON.chev}</button>
-        <button class="row" data-units><span class="row-ic">🔓</span><span class="row-t">開放的課<small>${esc([...unitsOfStu(st)].filter((u) => UNITS.includes(u)).join('、') || '還沒有開放')}</small></span>${ICON.chev}</button>
+        <button class="row" data-units><span class="row-ic">🔓</span><span class="row-t">開放的課<small>${esc(openUnitsText(st) || '還沒有開放')}</small></span>${ICON.chev}</button>
         <button class="row" data-rename><span class="row-ic">✏️</span><span class="row-t">改暱稱</span>${ICON.chev}</button>
         <button class="row" data-go="#/manage"><span class="row-ic">👥</span><span class="row-t">裝置管理<small>看這個學生、家長有哪些裝置，可以移除</small></span>${ICON.chev}</button>
         <button class="row" data-clear><span class="row-ic">🧹</span><span class="row-t">清除練習紀錄<small>可以只刪你自己測試的，學生做的不會動</small></span>${ICON.chev}</button>
@@ -7910,8 +8041,8 @@ function viewStudent(sid, keepScroll = false) {
     feedClick(e, list, sid, () => viewStudent(sid, true))
     const sh = e.target.closest('[data-share]')
     if (sh) return shareStudent(sid, sh.dataset.share)
-    if (e.target.closest('[data-fxsheet]')) return focusSheet(list, unitsOfStu(st), st.name || '學生')
-    if (e.target.closest('[data-fxpdf]')) return focusPDF(list, unitsOfStu(st), st.name || '學生')
+    if (e.target.closest('[data-fxsheet]')) return focusSheet(list, touchedUnitsOf(st), st.name || '學生')
+    if (e.target.closest('[data-fxpdf]')) return focusPDF(list, touchedUnitsOf(st), st.name || '學生')
     if (e.target.closest('[data-class]')) return enterClass(sid)
     if (e.target.closest('[data-assign]')) return assignSheet(sid)
     if (e.target.closest('[data-units]')) return unitsSheet([sid])
@@ -8018,7 +8149,7 @@ function prepData(sid) {
   const st = Sync.students[sid] || {}
   const list = Sync.attemptsOf(sid)
   const sess = Sync.sessionsOf(sid)
-  const units = unitsOfStu(st)
+  const units = touchedUnitsOf(st)
   const since = dayStart() - 6 * DAY // 這 7 天＝今天加前 6 個日曆天（不會出現「練了 8 天」）
   const week = list.filter((a) => a.ts >= since && ITEM[a.q])
   const days = new Set([...week.map((a) => dayStart(a.ts)), ...sess.filter((s) => s.ts >= since && !['plant', 'grow'].includes(s.k)).map((s) => dayStart(s.ts))]).size
@@ -8115,8 +8246,8 @@ function viewStudentPrep(sid, keepScroll = false) {
     if (tb) return switchTab(tb.dataset.tab)
     if (e.target.closest('[data-att]')) return feedClick(e, d.list, sid, () => viewStudentPrep(sid, true))
     if (e.target.closest('[data-prephw]')) return assignSheet([sid], null, d.tasks.length && !d.today.length ? d.tasks : null)
-    if (e.target.closest('[data-fxsheet]')) return focusSheet(d.list, unitsOfStu(st), name)
-    if (e.target.closest('[data-fxpdf]')) return focusPDF(d.list, unitsOfStu(st), name)
+    if (e.target.closest('[data-fxsheet]')) return focusSheet(d.list, touchedUnitsOf(st), name)
+    if (e.target.closest('[data-fxpdf]')) return focusPDF(d.list, touchedUnitsOf(st), name)
     if (e.target.closest('[data-report]')) return shareTextSheet('本週摘要（傳給家長）', weekReportText(sid), '把下面的訊息傳到家長的 LINE；連結點了就是孩子的學習進度。')
     if (e.target.closest('[data-note]')) return noteSheet(sid)
     const sh = e.target.closest('[data-share]')
@@ -8207,7 +8338,7 @@ function viewStudentHome(sid, keepScroll = false) {
 }
 function stuHomeHTML(sid, list, sess, l) {
   const st = Sync.students[sid]
-  const units = unitsOfStu(st)
+  const units = touchedUnitsOf(st)
   const open = (mid) => units.has(MODULES[mid].unit)
   const live = isActive(l) ? l : null
   const liveMid = live?.view === 'run' ? ITEM[live.q]?.mid : ''
@@ -8341,7 +8472,7 @@ function stuModSheet(sid, mid, list, sess) {
   )
   b.addEventListener('click', (e) => {
     if (e.target.closest('[data-modlink]'))
-      return shareTextSheet('傳這個單元給學生', `📘 請做：${m.unit}｜${m.title}（約 ${m.min} 分鐘）\n👉 點這裡開始：${goLink(sid, 'm-' + mid)}\n（平常從主畫面的 App 練習的話，直接打開 App 找這個單元）`, unitsOfStu(Sync.students[sid]).has(m.unit) ? '' : `⚠️ ${esc(m.unit)} 還沒開放給這位學生，請先開放。`)
+      return shareTextSheet('傳這個單元給學生', `📘 請做：${m.unit}｜${m.title}（約 ${m.min} 分鐘）\n👉 點這裡開始：${goLink(sid, 'm-' + mid)}\n（平常從主畫面的 App 練習的話，直接打開 App 找這個單元）`, unitsOfStu(Sync.students[sid]).has(m.unit) || modsOfStu(Sync.students[sid]).has(mid) ? '' : `⚠️ 這個單元還沒開放給這位學生，請先開放。`)
     feedClick(e, list, sid)
   })
 }
@@ -8636,6 +8767,8 @@ function assignSheet(sids, edit = null, preset = null) {
   const sess = multi ? [] : Sync.sessionsOf(sid)
   const last = lastByItem(list)
   const units = multi ? new Set(UNITS) : unitsOfStu(Sync.students[sid])
+  const stMods = multi ? new Set(MOD_ORDER) : modsOfStu(Sync.students[sid]) // 2.28 只開其中幾個單元
+  const modLocked = (mid) => !units.has(MODULES[mid].unit) && !stMods.has(mid)
   const t14 = Date.now() - 14 * DAY
   const modStat = (mid) => {
     const sc = MODULES[mid].scored
@@ -8655,8 +8788,8 @@ function assignSheet(sids, edit = null, preset = null) {
     `<button type="button" class="hw-pick hp-card${cls}" data-t="${key}" aria-pressed="false">${icon}<span class="hp-body">${eyebrow ? `<span class="eyebrow">${eyebrow}</span>` : ''}<span class="hp-t">${title}</span>${bar}<span class="hp-s">${status}</span></span>${chk}</button>`
   const modCard = (mid) => {
     const m = MODULES[mid]
-    const locked = !units.has(m.unit)
-    if (multi || locked) return card('mod:' + mid, modIc(mid), `${esc(m.unit)}・${m.min} 分鐘`, esc(m.title), '', locked ? `${ti('lock', 'ic-lead')}還沒開放・派了就會一起開放` : `${m.scored.length} 題`, locked ? ' locked' : '')
+    const locked = modLocked(mid)
+    if (multi || locked) return card('mod:' + mid, modIc(mid), `${esc(m.unit)}・${m.min} 分鐘`, esc(m.title), '', locked ? `${ti('lock', 'ic-lead')}還沒開放・派了就會開放這個單元` : `${m.scored.length} 題`, locked ? ' locked' : '')
     const s = modStat(mid)
     const pct = Math.round((s.ok / Math.max(1, s.total)) * 100)
     const status = !s.done
@@ -8669,20 +8802,20 @@ function assignSheet(sids, edit = null, preset = null) {
   // 2.26 單字：每一課一張「單字」卡（派了＝那一課任何一組練完一回就算完成）
   const vocabCard = (unit) => {
     if (!VOCAB[unit]) return ''
-    const locked = !units.has(unit)
+    const locked = !units.has(unit) && !stMods.has(vocabKeyOf(unit))
     const v = multi || locked ? null : vocabKnownOf(unit, list)
     const n = vgroupsOf(unit).flatMap((g) => g.words).length
-    return card('vocab:' + unit, actIc('vocab'), `${esc(unit)}・5 分鐘`, `${esc(unit)} 單字`, v ? `<span class="hp-bar"><i style="width:${Math.round((v.known / Math.max(1, v.total)) * 100)}%"></i></span>` : '', locked ? `${ti('lock', 'ic-lead')}還沒開放・派了就會一起開放` : v ? (v.known ? `會了 ${v.known}／${v.total} 個` : `${n} 個單字・還沒開始`) : `${n} 個單字`, locked ? ' locked' : v?.known === v?.total && v ? ' mastered' : '')
+    return card('vocab:' + unit, actIc('vocab'), `${esc(unit)}・5 分鐘`, `${esc(unit)} 單字`, v ? `<span class="hp-bar"><i style="width:${Math.round((v.known / Math.max(1, v.total)) * 100)}%"></i></span>` : '', locked ? `${ti('lock', 'ic-lead')}還沒開放・派了就會開放這一課的單字` : v ? (v.known ? `會了 ${v.known}／${v.total} 個` : `${n} 個單字・還沒開始`) : `${n} 個單字`, locked ? ' locked' : v?.known === v?.total && v ? ' mastered' : '')
   }
   const lessonHTML = (L) => {
     const mods = L.modules
-    const open = mods.filter((m) => units.has(MODULES[m].unit))
+    const open = mods.filter((m) => !modLocked(m))
     const ok = multi ? 0 : open.reduce((n, m) => n + MODULES[m].scored.filter((i) => last[i.id]?.r === 'ok').length, 0)
     const total = open.reduce((n, m) => n + MODULES[m].scored.length, 0)
     return `<div class="hw-g"><div class="hw-gh"><b>${esc(L.title)}</b>${multi ? '' : `<span>會了 ${ok}／${total}</span>`}</div><div class="hp-grid">${vocabCard(MODULES[mods[0]]?.unit)}${mods.map(modCard).join('')}</div></div>`
   }
-  const openL = LESSONS.filter((L) => L.modules.some((m) => units.has(MODULES[m].unit)))
-  const lockedL = LESSONS.filter((L) => !L.modules.some((m) => units.has(MODULES[m].unit)))
+  const openL = LESSONS.filter((L) => L.modules.some((m) => !modLocked(m)))
+  const lockedL = LESSONS.filter((L) => !L.modules.some((m) => !modLocked(m)))
   const ex = sess.filter((s) => s.k === 'exam')
   const sp = sess.filter((s) => s.k === 'speak')
   const book = multi ? 0 : bookIds(list).length
@@ -8697,9 +8830,9 @@ function assignSheet(sids, edit = null, preset = null) {
   const taskInfo = (k) => {
     if (k.startsWith('mod:')) {
       const m = MODULES[k.slice(4)]
-      const locked = !units.has(m.unit)
+      const locked = modLocked(k.slice(4))
       const s = multi || locked ? null : modStat(k.slice(4))
-      return { icon: modIc(k.slice(4)), title: m.title, detail: `${esc(m.unit)}・${m.scored.length} 題・約 ${m.min} 分鐘${s ? `・現在會了 ${s.ok}／${s.total}` : ''}${locked ? `<b class="hp-bad">・會一起開放 ${esc(m.unit)}</b>` : ''}`, min: m.min }
+      return { icon: modIc(k.slice(4)), title: m.title, detail: `${esc(m.unit)}・${m.scored.length} 題・約 ${m.min} 分鐘${s ? `・現在會了 ${s.ok}／${s.total}` : ''}${locked ? '<b class="hp-bad">・派了會開放這個單元</b>' : multi ? '・還沒開放的學生會開放這個單元' : ''}`, min: m.min }
     }
     if (k.startsWith('exam:')) {
       const e = EXAMS.find((x) => x.id === k.slice(5))
@@ -8708,7 +8841,7 @@ function assignSheet(sids, edit = null, preset = null) {
     if (k.startsWith('vocab:')) {
       const u = k.slice(6)
       const n = vgroupsOf(u).flatMap((g) => g.words).length
-      return { icon: actIc('vocab'), title: `${u} 單字`, detail: `${n} 個單字・任何一組、任何一種玩法練完一回就算完成・約 5 分鐘${units.has(u) ? '' : `<b class="hp-bad">・會一起開放 ${esc(u)}</b>`}`, min: 5 }
+      return { icon: actIc('vocab'), title: `${u} 單字`, detail: `${n} 個單字・任何一組、任何一種玩法練完一回就算完成・約 5 分鐘${units.has(u) || stMods.has(vocabKeyOf(u)) ? '' : '<b class="hp-bad">・派了會開放這一課的單字</b>'}`, min: 5 }
     }
     if (k === 'speak') return { icon: actIc('speak'), title: '口說練習', detail: '練完一回就算完成（約 3 分鐘，學生自己選模式和範圍）', min: 3 }
     return { icon: actIc('book'), title: '錯題本複習', detail: multi ? '每位學生練自己的錯題，一次最多 12 題' : book ? `現在有 ${book} 題，一次最多 12 題` : '現在沒有錯題，派了會直接算完成', min: 10 }
@@ -8960,7 +9093,7 @@ function noteSheet(sid) {
     r.mods[0] ? `這週學會了「${r.mods[0].title}」。` : '',
     r.fixed.length ? `以前錯的題目，這週答對了 ${r.fixed.length} 題，進步很多。` : '',
     r.examLast && r.examPrev && r.examLast.s > r.examPrev.s ? `模擬段考從 ${r.examPrev.s} 分進步到 ${r.examLast.s} 分！` : '',
-    focusOf(bookIds(Sync.attemptsOf(sid)), unitsOfStu(Sync.students[sid])).groups[0] ? `下次上課會加強「${focusOf(bookIds(Sync.attemptsOf(sid)), unitsOfStu(Sync.students[sid])).groups[0].card.title}」。` : '',
+    focusOf(bookIds(Sync.attemptsOf(sid)), touchedUnitsOf(Sync.students[sid])).groups[0] ? `下次上課會加強「${focusOf(bookIds(Sync.attemptsOf(sid)), touchedUnitsOf(Sync.students[sid])).groups[0].card.title}」。` : '',
     '考前請再看一次重點總整理。',
     bookIds(Sync.attemptsOf(sid)).length ? `錯題本還有 ${bookIds(Sync.attemptsOf(sid)).length} 題，週末記得練完。` : '',
     r.speakLast && r.speakLast.s >= 85 ? '口說發音越來越清楚了 👍' : '',
@@ -9007,7 +9140,7 @@ function weekReportText(sid) {
     const hs = hwStatus(hw[1], Sync.sessionsOf(sid), Sync.attemptsOf(sid))
     lines.push(`📌 作業「${hw[1].title}」：${hs.all ? '全部完成' : `完成 ${hs.done}／${hs.total}`}`)
   }
-  const fx = focusOf(bookIds(Sync.attemptsOf(sid)), unitsOfStu(Sync.students[sid]))
+  const fx = focusOf(bookIds(Sync.attemptsOf(sid)), touchedUnitsOf(Sync.students[sid]))
   if (fx.groups.length) lines.push(`🎯 下次加強：${fx.groups.slice(0, 2).map((g) => g.card.title).join('、')}`)
   if (n && Date.now() - n.at < 14 * DAY) lines.push(`💬 老師：${n.msg}`)
   lines.push(`👉 完整進度：${goLink(sid, 'p')}`)
@@ -9647,7 +9780,7 @@ const vocabModeName = (m) => VOCAB_MODES.find(([k]) => k === m)?.[1] || ''
 // 每一課的單字頁：幾組（對話、主題字、閱讀、認識字彙），每組六種玩法；點「看單字」展開單字表（可以點來聽）
 function viewVocab(unit, gi, mode) {
   if (!VOCAB[unit]) return go('#/')
-  if (!myUnits().has(unit)) {
+  if (!vocabOpen(unit)) {
     toast('這一課老師上課後才會開放', '🔒')
     return go('#/')
   }
@@ -10161,6 +10294,12 @@ document.addEventListener('click', (e) => {
 })
 applySize()
 checkBadges(true)
+// 2.28 畫筆：筆跡存在這台裝置；學生模式（老師的 iPad 借學生用）另外存一份
+try {
+  initPen({ key: 'g7review:ink' + (ACTIVE ? '@' + ACTIVE : '') })
+} catch (e) {
+  console.warn('pen', e)
+}
 // 2.0 以前建立配對碼的老師平板：升級後自動成為班級的管理裝置
 if (S.sync && S.sync.role === 'teacher' && S.sync.owner === undefined && !S.sync.joined) {
   S.sync.owner = true
