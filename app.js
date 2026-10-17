@@ -7,7 +7,7 @@ import { SPOTS, KP, ADD_LINES } from './focus.js'
 import { VOCAB, unitKey, wordSlug } from './vocab.js'
 import { initPen, penAttach } from './pen.js'
 
-const VERSION = '2.28（10/17）'
+const VERSION = '2.29（10/17）'
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -2953,6 +2953,13 @@ function warmIds() {
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
   {
+    v: '2.29',
+    date: '10/17',
+    student: [['💧', '植物要每天澆水', '每一課的植物多了「澆水天數」：那一課當天練滿 5 題就算澆一次水（單字也算），一天只算一次。長葉要 3 天、花苞 5 天、開花 7 天，所以每天來練一下最快。']],
+    parent: [['💧', '植物要每天澆水', '孩子的植物現在要「每天澆水」才會長：一課當天練滿 5 題算一次，開花要 7 天。每天練一點比一次練很多有用。']],
+    teacher: [['💧', '植物每天最多長一點', '一課的植物除了會了幾成，還要看澆水天數（當天練滿 5 題算一次）：長葉 3 天、花苞 5 天、開花 7 天。學生每天都要打開練，才會開花；已經長到的階段不會倒退。']],
+  },
+  {
     v: '2.28',
     date: '10/17',
     student: [
@@ -3407,6 +3414,18 @@ const PLANTS = {
 }
 const PLANT_ART = ['sun', 'cactus', 'sakura', 'apple'] // 有圖的種類才給學生選（10/9 老師在 ChatGPT 生成）
 const STAGE_AT = [0, 0.01, 0.25, 0.6, 0.9] // 會了幾成就到這個階段
+// 2.29（老師 10/17：「花盆要讓學生每天打開練習，一天要限制長的速度，大約 7 天種出一盆花」）：
+// 除了會了幾成，還要看「澆水天數」＝那一課在不同天各練滿 WATER_N 題（單字也算）的天數；一天只算一次，所以練再多也要隔天再來
+// 發芽不用澆水（答對 1 題馬上發芽才有動力）；長葉 3 天、花苞 5 天、開花 7 天
+const WATER_N = 5
+const DAYS_AT = [0, 0, 3, 5, 7]
+const BLOOM_DAYS = DAYS_AT[4]
+function waterOf(unit, list = S.attempts) {
+  const per = {}
+  for (const a of list) if (MODULES[ITEM[a.q]?.mid]?.unit === unit) per[dayStart(a.ts)] = (per[dayStart(a.ts)] || 0) + 1
+  const todayN = per[dayStart()] || 0
+  return { days: Object.values(per).filter((n) => n >= WATER_N).length, todayN, watered: todayN >= WATER_N }
+}
 const stageNames = (type) => ['種子', '發芽', '長葉', '花苞', PLANTS[type]?.last || '開花']
 const gardenReady = () => PLANT_ART.length > 0
 // 學生選的植物：自己的裝置存在 S.profile.plant；同步給老師、家長用練習紀錄 {k:'plant'}（最新的那筆）
@@ -3422,7 +3441,7 @@ const plantImg = (type, stage, cls = '') => `<img class="plant ${cls}" src="img/
 // 一課的狀況（2.21 生長規則，老師 10/9：要清楚、學生家長都看得到；不能太容易也不能太難）
 // 「會了」＝最後一次作答答對：答對 1 題發芽、會了 1/4 長葉、6 成花苞、9 成＋錯題本裡這課的題目都練回來 → 開花
 // 不會變小：長到的最高階段記在練習紀錄 {k:'grow', u, st}（同步給老師、家長），之後答錯也不會倒退
-// （不做「一天最多長一階」：練很多卻不長會打擊學生；錯題本畢業本來就要隔開時間練）
+// 2.29 起階段＝min(會了幾成的階段, 澆水天數的階段)：老師要學生每天來、大約 7 天開一盆花（之前 2.21 決定不限速，10/17 老師改要限速）
 function unitGrowth(unit, list = S.attempts, sess = S.sessions) {
   const items = MOD_ORDER.filter((m) => MODULES[m].unit === unit).flatMap((m) => MODULES[m].scored)
   const ids = items.map((i) => i.id)
@@ -3436,21 +3455,28 @@ function unitGrowth(unit, list = S.attempts, sess = S.sessions) {
   const okV = v?.total ? (v.known / v.total) * total * 0.25 : 0
   const r = Math.min(1, (ok + okV) / total)
   const bookLeft = bookIds(list).filter((q) => inUnit.has(q)).length
-  let calc = 0
-  if (ok > 0) calc = 1
-  if (r >= STAGE_AT[2]) calc = 2
-  if (r >= STAGE_AT[3]) calc = 3
-  if (r >= STAGE_AT[4] && !bookLeft) calc = 4
+  let mast = 0 // 會了幾成能到的階段
+  if (ok > 0) mast = 1
+  if (r >= STAGE_AT[2]) mast = 2
+  if (r >= STAGE_AT[3]) mast = 3
+  if (r >= STAGE_AT[4] && !bookLeft) mast = 4
+  const w = waterOf(unit, list)
+  const dayCalc = DAYS_AT.filter((d) => w.days >= d).length - 1 // 澆水天數能到的階段
+  const calc = Math.min(mast, dayCalc)
   const best = Math.min(4, Math.max(0, ...sess.filter((s) => s.k === 'grow' && s.u === unit).map((s) => +s.st || 0)))
   const stage = Math.max(calc, best)
   let need = 0
   let needBook = 0
+  let needDays = 0
   if (stage < 4) {
     need = Math.max(stage === 0 ? 1 : 0, Math.ceil(STAGE_AT[stage + 1] * total - okV) - ok)
     if (stage === 3) needBook = bookLeft
+    needDays = Math.max(0, DAYS_AT[stage + 1] - w.days)
   }
-  const toNext = stage < 4 ? Math.max(0, Math.min(1, (r - STAGE_AT[stage]) / (STAGE_AT[stage + 1] - STAGE_AT[stage]))) : 1
-  return { unit, ok, total, stage, calc, best, need, needBook, bookLeft, ids, pct: Math.round(r * 100), toNext }
+  // 進度條：會了幾成和澆水天數兩邊都看，取比較慢的那邊
+  const span = (at) => at[stage + 1] - at[stage]
+  const toNext = stage < 4 ? Math.max(0, Math.min(1, (r - STAGE_AT[stage]) / span(STAGE_AT), span(DAYS_AT) ? (w.days - DAYS_AT[stage]) / span(DAYS_AT) : 1)) : 1
+  return { unit, ok, total, stage, calc, best, need, needBook, needDays, days: w.days, todayN: w.todayN, watered: w.watered, bookLeft, ids, pct: Math.round(r * 100), toNext }
 }
 // 怎麼長到下一階（每一階段都要寫，老師 10/9）
 function growHint(g, names) {
@@ -3459,7 +3485,8 @@ function growHint(g, names) {
   const parts = []
   if (g.need) parts.push(`再答對 <b>${g.need}</b>&nbsp;題`)
   if (g.needBook) parts.push(`把錯題本裡這課的 <b>${g.needBook}</b>&nbsp;題練回來`)
-  return `${parts.join('，')}，就會${nx}`
+  if (g.needDays) parts.push(`再澆水 <b>${g.needDays}</b>&nbsp;天`)
+  return `${g.needDays && g.watered ? '今天澆過水了！' : ''}${parts.join('，')}，就會${nx}`
 }
 // 「幫它長大」要練的題目：先錯題本裡的（練回來才會開花），再練還不會的（照課本順序）；一次最多 10 題
 function growIds(g, list = S.attempts) {
@@ -3505,15 +3532,22 @@ function gardenHTML(nextBtn, resume) {
     fresh
       ? `<button class="resume gd-grow" data-next="mod:${fresh}"><span class="resume-k">幫它長大<em class="new-tag">新</em></span><span class="resume-t">先學「${esc(MODULES[fresh].title)}」・${MODULES[fresh].scored.length}&nbsp;題</span>${ICON.chev}</button>${resume ? `<button class="link gd-resume" data-resume="${esc(resume[0])}">或繼續上次：${esc(resume[1].title)}</button>` : ''}`
       : g.stage < 4 && ids.length
-      ? `<button class="resume gd-grow" data-grow="${esc(cur)}"><span class="resume-k">幫它長大<em class="new-tag">新</em></span><span class="resume-t">${g.stage === 3 && g.needBook ? `先練錯題本裡 ${esc(cur)} 的題目` : `練 ${esc(cur)} 還不會的題目`}・${ids.length}&nbsp;題</span>${ICON.chev}</button>${resume ? `<button class="link gd-resume" data-resume="${esc(resume[0])}">或繼續上次：${esc(resume[1].title)}</button>` : ''}`
+      ? `<button class="resume gd-grow" data-grow="${esc(cur)}"><span class="resume-k">${g.watered ? '幫它長大' : '今天的澆水'}<em class="new-tag">新</em></span><span class="resume-t">${g.stage === 3 && g.needBook ? `先練錯題本裡 ${esc(cur)} 的題目` : `練 ${esc(cur)} 還不會的題目`}・${ids.length}&nbsp;題</span>${ICON.chev}</button>${resume ? `<button class="link gd-resume" data-resume="${esc(resume[0])}">或繼續上次：${esc(resume[1].title)}</button>` : ''}`
       : nextBtn
   // 2.24 窗台花園＋小芽（老師 10/12 選 A＋小芽）：一扇窗、窗台上每一課一盆（長到哪＝學到哪），天空跟著早安／午安／晚安變；
   // 小芽（吉祥物）坐在窗框上說一句話。首頁不放名字（只寫「我的花園」）
   const tod = timeOfDay()
   const sd = streakDays()
   const nx = ['發芽', '長葉子', '長花苞', names[4]][g.stage]
+  // 2.29 小芽先講澆水：今天還沒澆 → 還差幾題；澆過了 → 明天再來（第幾天）
   const say =
-    g.stage < 4 && g.need && g.need <= 3 && !g.needBook
+    g.stage < 4 && !g.watered
+      ? g.todayN
+        ? `再練 ${WATER_N - g.todayN} 題，今天的水就澆好了！`
+        : `今天還沒幫 ${cur} 澆水，練 ${WATER_N} 題就算澆一次！`
+      : g.stage < 4 && g.needDays
+        ? `今天澆過水了，明天再來！已澆 ${g.days}／${BLOOM_DAYS} 天`
+        : g.stage < 4 && g.need && g.need <= 3 && !g.needBook
       ? `再答對 ${g.need} 題，${cur} 就會${nx}！`
       : t.n && sd >= 2
         ? `連續 ${sd} 天了，好厲害！`
@@ -3536,7 +3570,7 @@ function gardenHTML(nextBtn, resume) {
       <div class="gd-info">
         <p class="gd-k">${esc(cur)} 的${esc(PLANTS[type].name)}<button class="link gd-change" data-plantpick>${S.profile.plant || S.sessions.some((s) => s.k === 'plant') ? '換植物' : '選植物'}</button></p>
         <h2 class="gd-stage">${names[g.stage]}</h2>
-        <p class="gd-count">會了 <b>${g.ok}</b>／${g.total} 題</p>
+        <p class="gd-count">會了 <b>${g.ok}</b>／${g.total} 題・澆水 <b>${g.days}</b>／${BLOOM_DAYS} 天${g.watered ? '<span class="gd-wtd">今天 ✓</span>' : ''}</p>
         ${g.stage < 4 ? `<div class="gd-bar" role="progressbar" aria-valuenow="${Math.round(g.toNext * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(g.toNext * 100)}%"></i></div>` : ''}
         <p class="gd-next${g.stage >= 4 ? ' done' : ''}">${growHint(g, names)}</p>
         <button class="link gd-rule" data-growrule>植物怎麼長大？</button>
@@ -3623,11 +3657,11 @@ function growRulesSheet(type = myPlant(), who = 'student') {
   const steps = [
     ['種子', '老師開放一課，這一課就種下一顆種子'],
     ['發芽', '答對 1 題'],
-    ['長出葉子', '會了 4 分之 1 的題目'],
-    ['長出花苞', '會了 6 成的題目'],
-    [names[4], '會了 9 成，而且錯題本裡這課的題目都練回來'],
+    ['長出葉子', `會了 4 分之 1 的題目，澆水 ${DAYS_AT[2]} 天`],
+    ['長出花苞', `會了 6 成的題目，澆水 ${DAYS_AT[3]} 天`],
+    [names[4], `會了 9 成、錯題本裡這課的題目都練回來，澆水 ${DAYS_AT[4]} 天`],
   ]
-  sheet(`<h2 class="sheet-title">植物怎麼長大？</h2><p class="sheet-p">每一課種一株${esc(PLANTS[type].name)}。「會了」＝最後一次作答答對的題目。</p>
+  sheet(`<h2 class="sheet-title">植物怎麼長大？<em class="new-tag">新</em></h2><p class="sheet-p">每一課種一株${esc(PLANTS[type].name)}。「會了」＝最後一次作答答對的題目。「澆水」＝那一課當天練滿 ${WATER_N} 題（單字也算），一天只算一次，所以每天都要來，大約 ${BLOOM_DAYS} 天開一盆花。</p>
     <ol class="gr-steps">${steps.map(([what, how], i) => `<li>${plantImg(type, i, 'tiny')}<div><b>${esc(what)}</b><span>${esc(how)}</span></div></li>`).join('')}</ol>
     <ul class="gr-notes"><li>「練回來」＝錯題本裡的題目答對 3 次，或隔 8 小時以上答對 2 次。</li><li>植物不會枯死，也不會變小。</li>${who === 'parent' ? '<li>孩子練習時，植物會自動長大；每一課的植物都在這裡。</li>' : '<li>按「幫它長大」，會直接練這一課還不會的題目。</li><li>家長和老師也看得到你的花園。</li>'}</ul>
     <div class="sheet-actions"><button class="btn primary" data-close>知道了</button></div>`)
@@ -7569,7 +7603,7 @@ function parentProgressHTML(list, sess, units, l, name) {
                   return `<div class="gd-cell st${x.stage}" role="img" aria-label="${esc(u)}：${esc(names[x.stage])}，會了 ${x.ok}／${x.total} 題">${plantImg(type, x.stage, `small st${x.stage}`)}<span aria-hidden="true">${esc(u)}<small>${x.ok}／${x.total}</small></span></div>`
                 })
                 .join(''),
-            })}<p class="pp-garden-f"><span><em class="new-tag">新</em> ${esc(PLANTS[type].name)}・答對越多長越大；數字是會了幾題</span><button class="link gd-rule" data-growrule="${type}">植物怎麼長大？</button></p></section>`
+            })}<p class="pp-garden-f"><span><em class="new-tag">新</em> ${esc(PLANTS[type].name)}・每天澆水（練 ${WATER_N} 題）、答對越多長越大；數字是會了幾題</span><button class="link gd-rule" data-growrule="${type}">植物怎麼長大？</button></p></section>`
           })()
         : ''
     }
@@ -10370,4 +10404,4 @@ navigator.serviceWorker?.addEventListener?.('message', (e) => {
 })
 
 // 給測試用
-window.__app = { beta, teacherDevice, pushRole, pushSync, pushOn, pushStopped, micMeter, SPOTS, focusOf, lineText, spotsOf, S, ITEM, MODULES, MOD_ORDER, UNITS, EXAMS, SPEAK_PAIRS, pdfSlug, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }
+window.__app = { beta, teacherDevice, pushRole, pushSync, pushOn, pushStopped, micMeter, SPOTS, focusOf, lineText, spotsOf, S, ITEM, MODULES, MOD_ORDER, UNITS, EXAMS, unitGrowth, SPEAK_PAIRS, pdfSlug, checkText, formatIssues, diagnose, VERSION, Sync, Auth, speakScore, speakScoreAny, speakPool, AudioLib, VOICE_SAMPLE, listenLocal, speakEngine, engineNow, asrReady, takeMix, bookPick, newSpeak, micsOpen: () => MIC_STREAMS.size, get SP() { return SP } }

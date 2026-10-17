@@ -74,6 +74,27 @@ with sync_playwright() as p:
     check(A.evaluate("window.__app.S.sessions.some((s) => s.k === 'grow' && s.u === 'Unit 2' && s.st === 1)"), "highest stage recorded as {k:'grow'}")
     push_attempt(A, "bad")
     check(txt(A, ".gd-stage") == "發芽", "answering it wrong later does not shrink the plant")
+    # 2.29 每天澆水：一天練滿 5 題算澆一次；長葉 3 天、花苞 5 天、開花 7 天（一天全答對也只是發芽）
+    # 今天已經練了 2 題（上面塞的）：還差 3 題才算澆水
+    check("澆水 0／7 天" in txt(A, ".gd-count").replace("\xa0", " ") and "再練 3 題" in txt(A, ".gd-say"), f"home shows watering days and 小芽 says how many more for today's watering: {txt(A, '.gd-count')} / {txt(A, '.gd-say')}")
+    W = A.evaluate(
+        """() => {
+        const A = window.__app
+        const ids = Object.values(A.MODULES).filter((m) => m.unit === 'Unit 2' && !m.vocab).flatMap((m) => m.scored.map((i) => i.id))
+        const DAY = 86400000, now = Date.now()
+        const mk = (dayOf) => ids.map((q, i) => ({ q, r: 'ok', ts: now - dayOf(i) * DAY, d: 'x' }))
+        const st = (list) => A.unitGrowth('Unit 2', list, [])
+        const g1 = st(mk(() => 0))                       // 全部今天答對：會了 100%，但只澆 1 天
+        const g7 = st(mk((i) => i % 7))                  // 分 7 天、每天都 ≥5 題
+        const g4 = st(mk((i) => (i % 7 < 4 ? i % 7 : 0))) // 只有 4 天
+        const thin = st(mk((i) => (i < 4 ? 1 : 0)))      // 昨天只練 4 題：不算澆水
+        return [g1.stage, g1.needDays, g1.watered, g7.stage, g7.days, g4.stage, thin.days]
+      }"""
+    )
+    check(W[0] == 1 and W[1] == 2 and W[2] is True, f"all correct in one day: still a sprout, needs 2 more watering days, today watered ({W})")
+    check(W[3] == 4 and W[4] == 7, f"7 watering days + all correct: bloom ({W})")
+    check(W[5] == 2, f"4 watering days: leaves at most (bud needs 5) ({W})")
+    check(W[6] == 1, f"a day with only 4 answers does not count as watering ({W})")
     # 點另一課的小植物 → 大植物換成那一課
     A.click('.gd-cell[data-garden="Unit 1"]')
     check(wait_until(lambda: "Unit 1" in txt(A, ".gd-k")), "tapping a small plant switches the big one")
@@ -83,8 +104,8 @@ with sync_playwright() as p:
     wait_until(lambda: st(P) == "member")
     P.click('.tabbar a[href="#/live/home"]')  # 配對完先在「即時作答」（原本的設計），花園在「學習進度」
     check(wait_until(lambda: P.locator(".sheet .news-row").count() >= 2, 10), "parent sees the what's-new sheet once")
-    # 最新兩版的家長版（2.28 畫筆、2.27 字體大小）；更早的在「設定 → 更新紀錄」
-    check("畫筆" in txt(P, ".sheet") and "字體大小" in txt(P, ".sheet"), "parent version of what's new (latest two versions)")
+    # 最新兩版的家長版（2.29 澆水、2.28 畫筆）；更早的在「設定 → 更新紀錄」
+    check("澆水" in txt(P, ".sheet") and "畫筆" in txt(P, ".sheet"), "parent version of what's new (latest two versions)")
     P.screenshot(path=str(OUT / "garden-5-news-parent.png"))
     P.click(".sheet [data-close]")
     time.sleep(0.4)

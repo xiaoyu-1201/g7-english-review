@@ -7298,6 +7298,18 @@ h3 > .ti.ic-lead {
   color: var(--label);
   font-size: 17px;
 }
+/* 2.29 今天澆過水：小綠標 */
+.gd-wtd {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
 .gd-bar {
   height: 10px;
   border-radius: 5px;
