@@ -30,7 +30,7 @@ with sync_playwright() as p:
         time.sleep(0.2)
         return pg.locator(sel).first.bounding_box()
 
-    check(pg.locator(".pen-fab").is_visible(), "pen button shows on a page with cards")
+    check(wait_until(lambda: pg.locator(".pen-fab").is_visible(), 5), "pen button shows on a page with cards")
     first = pg.locator(".note.pen-target[data-ink]").first
     key = first.get_attribute("data-ink")
     sel = f'.note[data-ink="{key}"]'

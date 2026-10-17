@@ -5,9 +5,10 @@ import { figure, placeScene, REL_LABEL } from './art.js'
 import { ti } from './icons.js'
 import { SPOTS, KP, ADD_LINES } from './focus.js'
 import { VOCAB, unitKey, wordSlug } from './vocab.js'
-import { initPen, penAttach } from './pen.js'
+import { initPen, penAttach, penRemote, penStrokes } from './pen.js'
 
-const VERSION = '2.29（10/17）'
+const VERSION = '2.30（10/17）'
+const INK_MAX = 60 // 2.30 筆跡同步：一張卡每一邊最多傳 60 筆
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
 // 單元：彩色圓角方塊＋白色線條圖示（像 iOS 設定；彩色方塊只用在「分類」）。顏色依類型：文法靛藍、單字橘、閱讀青、聽力粉紅、總複習綠、會考紫
@@ -1862,6 +1863,27 @@ function runShell(pr, it, at, reviewing) {
     { tabs: false },
   )
   Sync.presence({ view: 'run', title: pr.title, n: Math.min(nBefore + 1, scored.length), of: scored.length, q: it.id })
+  Sync.inkChanged([`q:${it.id}`]) // 2.30 這張卡以前（沒網路時）寫的筆跡補傳
+}
+// 2.30 作答過程（老師 10/17「學生打字或是過程也可以看到，不是只有結果」）：填空、句子、拼字、複選打到哪、點到哪，
+// 0.3 秒內送一次給老師的課堂檢視（每格最多 120 字）；選擇題用下面的 tellSel、重組用 sendOrd
+function draftOf(C) {
+  const t = C.it.t
+  if (t === 'fill') return C.inputs().map((i) => i.value.slice(0, 120)).join(' / ')
+  if (t === 'write') return ($('.write-in', C.el)?.value || '').slice(0, 120)
+  if (t === 'spell') return C.value().slice(0, 120)
+  if (t === 'multi') return $$('.opt.sel .opt-text', C.el).map((o) => o.textContent).join('、')
+  return ''
+}
+let draftT
+function tellDraft(C) {
+  clearTimeout(draftT)
+  draftT = setTimeout(() => {
+    if (!Sync.last || Sync.last.view !== 'run' || Sync.last.q !== C.it.id || C.locked || (RUN?.C === C && RUN.checked)) return
+    const dr = draftOf(C)
+    if ((Sync.last.dr || '') === dr) return
+    Sync.presence({ ...Sync.last, dr })
+  }, 300)
 }
 // 學生選了選項還沒按檢查：老師的課堂檢視先看到「已選 X」（2.13）
 function tellSel(C) {
@@ -1903,6 +1925,7 @@ function viewRun(key, at) {
   C.onAnswer = () => {
     btn.disabled = !C.answered()
     tellSel(C)
+    tellDraft(C)
   }
   C.onEnter = () => C.answered() && btn.click()
   restoreDraft(key, it, C)
@@ -2059,6 +2082,7 @@ function showHint() {
 function checkItem() {
   const { C, it } = RUN
   if (!C.answered()) return
+  clearTimeout(draftT) // 2.30 還沒送出的草稿不要在檢查之後才送（會蓋過作答的時間，老師看不到結果）
   const res = C.grade()
   RUN.checked = true
   const pr = S.progress[RUN.key]
@@ -2117,11 +2141,13 @@ function retryItem() {
   C.onAnswer = () => {
     btn.disabled = !C.answered()
     tellSel(C)
+    tellDraft(C)
   }
   C.onEnter = () => C.answered() && btn.click()
   const scored = pr.ids.filter((id) => ITEM[id]?.t !== 'learn')
   const n = pr.ids.slice(0, RUN.at).filter((id) => ITEM[id]?.t !== 'learn').length + 1
   Sync.presence({ view: 'run', title: pr.title, n: Math.min(n, scored.length), of: scored.length, q: it.id, ord: LAST_ORD?.q === it.id ? LAST_ORD.ord : undefined })
+  Sync.inkChanged([`q:${it.id}`]) // 2.30 這張卡以前（沒網路時）寫的筆跡補傳
   if (C.focus && matchMedia('(pointer: fine)').matches) setTimeout(() => C.focus(), 60)
   window.scrollTo(0, 0)
 }
@@ -2252,7 +2278,10 @@ function reviewSheet(id, { onDone, quick = false } = {}) {
     let hints = 0
     acts.innerHTML = `<button class="btn ghost" data-hint>${ICON.bulb}<span>提示</span></button><button class="btn primary" data-check disabled>檢查</button>`
     const btn = $('[data-check]', acts)
-    C.onAnswer = () => (btn.disabled = !C.answered())
+    C.onAnswer = () => {
+      btn.disabled = !C.answered()
+      tellDraft(C)
+    }
     C.onEnter = () => C.answered() && btn.click()
     $('[data-hint]', acts).onclick = () => {
       const hs = hintsFor(it)
@@ -2263,6 +2292,7 @@ function reviewSheet(id, { onDone, quick = false } = {}) {
     }
     btn.onclick = () => {
       if (!C.answered()) return
+      clearTimeout(draftT) // 2.30 同上：檢查後不要再送草稿
       const res = C.grade()
       record(it, res, { h: hints, ...(quick ? { x: 'r' } : {}) })
       save()
@@ -2952,6 +2982,16 @@ function warmIds() {
 // 不跳：做題中（只在首頁類的畫面）、第一次用 App 的人（先看歡迎畫面）、只修 bug 的版本（NEWS 只列有新功能的版本）
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
+  {
+    v: '2.30',
+    date: '10/17',
+    student: [['🖊️', '老師可以直接在你的題目上畫', '上課時老師在課堂檢視寫的字、畫的線，會馬上出現在你的題目卡上；你寫的老師也看得到（各自只能擦自己的）。']],
+    parent: [['🖊️', '課堂筆跡即時共用', '老師上課在孩子的題目上畫重點，孩子的畫面馬上看得到；孩子寫的老師也看得到。']],
+    teacher: [
+      ['🖊️', '筆跡即時共用（像 Goodnotes）', '課堂檢視的題目卡上用 Apple Pencil 寫，學生的畫面馬上出現；學生寫的也會出現在你這裡。各自只能擦自己的；每個學生分開存。'],
+      ['⌨️', '作答過程即時看到', '學生在填空、句子、拼字、複選打到哪、點到哪，課堂檢視馬上顯示，不用等他按檢查。'],
+    ],
+  },
   {
     v: '2.29',
     date: '10/17',
@@ -6052,6 +6092,90 @@ const Sync = {
       .then((u) => fetch(u, { method: 'PUT', body: JSON.stringify(body), keepalive: true }))
       .catch(() => {})
   },
+  // ── 2.30 筆跡即時共用（老師 10/17「像 Goodnotes 那樣我畫學生可以看到、學生畫我也馬上看到」） ──
+  // 資料：/ink/<班級>/<學生>/<卡片 key>/{t|s}/<筆畫 id>＝筆畫（t＝老師寫的、s＝學生寫的；各寫各的、只擦得掉自己的）
+  // 老師在課堂檢視寫的卡片 data-ink 是 w:<學生>:q:<題目>（每個學生分開存），上傳時去掉 w:<學生>: 就是學生那張卡的 key
+  inkRoot(sid) {
+    return `ink/${this.code()}/${sid}`
+  },
+  inkSide() {
+    return this.isAdmin() && !ACTIVE ? 't' : 's'
+  },
+  inkSidOf(k) {
+    const m = /^w:([^:]+):/.exec(k)
+    return m ? m[1] : this.sid()
+  },
+  inkKeyOf(k) {
+    return k.replace(/^w:[^:]+:/, '')
+  },
+  inkLocalKey(sid, k) {
+    return this.inkSide() === 't' ? `w:${sid}:${k}` : k
+  },
+  inkSent: {},
+  ink: {},
+  inkKeys: new Set(),
+  // 自己這台寫、擦、復原了：只傳差異（新的筆畫寫上去、不見的刪掉），一張卡最多 INK_MAX 筆
+  async inkChanged(keys) {
+    if (!this.ready() || myRole() === 'parent') return
+    for (const k of keys) {
+      const sid = this.inkSidOf(k)
+      const rk = this.inkKeyOf(k)
+      if (!sid || !rk.startsWith('q:') || /[.#$[\]/]/.test(rk)) continue // 先做題目卡（重點卡之後再說）；Firebase 的 key 不能有這些字
+      if (this.inkSide() === 't' && sid !== this.inkWatching) continue
+      const list = penStrokes(k).slice(-INK_MAX)
+      const ids = new Set(list.map((s) => s.id))
+      const sent = (this.inkSent[k] ||= new Set())
+      const patch = {}
+      for (const s of list) if (!sent.has(s.id)) patch[s.id] = s
+      for (const id of sent) if (!ids.has(id)) patch[id] = null
+      if (!Object.keys(patch).length) continue
+      try {
+        await this.req('PATCH', `${this.inkRoot(sid)}/${rk}/${this.inkSide()}`, patch, true)
+        for (const [id, v] of Object.entries(patch)) v ? sent.add(id) : sent.delete(id)
+      } catch {}
+    }
+  },
+  // 雲端的筆跡來了：另一邊的畫到卡片上；自己這邊已經在雲端的記下來（之後只傳差異）
+  inkApply(sid, tree) {
+    const me = this.inkSide()
+    const other = me === 't' ? 's' : 't'
+    const keys = new Set(Object.keys(tree || {}))
+    for (const k of this.inkKeys) if (!keys.has(k)) penRemote(this.inkLocalKey(sid, k), [])
+    this.inkKeys = keys
+    for (const [k, v] of Object.entries(tree || {})) {
+      const lk = this.inkLocalKey(sid, k)
+      penRemote(lk, Object.values(v?.[other] || {}))
+      const mine = new Set(Object.keys(v?.[me] || {}))
+      const local = new Set(penStrokes(lk).map((s) => s.id))
+      this.inkSent[lk] = new Set([...mine].filter((id) => local.has(id)))
+    }
+  },
+  async inkListen(sid, keep = false) {
+    this.ink = {}
+    this.inkKeys = new Set()
+    return this.listen(
+      this.inkRoot(sid),
+      (p, d, ev) => {
+        this.ink = applyAt(this.ink, p.split('/').filter(Boolean), d, ev) || {}
+        this.inkApply(sid, this.ink)
+      },
+      { top: true, keep, soft: true },
+    )
+  },
+  // 老師的課堂檢視：看哪個學生就聽哪個學生的筆跡；換學生、離開就關掉
+  async inkWatch(sid) {
+    if (this.inkWatching === sid) return
+    this.inkUnwatch()
+    this.inkWatching = sid
+    try {
+      this.inkEs = await this.inkListen(sid, true)
+    } catch {}
+  },
+  inkUnwatch() {
+    this.inkEs?.close()
+    this.inkEs = null
+    this.inkWatching = null
+  },
   // 開始：確認這台的身分（管理裝置／成員），不在名單上就自動加入
   async start() {
     this.stop()
@@ -6174,8 +6298,9 @@ const Sync = {
       this.fail('invalid')
     }
   },
-  async listen(path, fn) {
-    const es = new EventSource(await this.url(path))
+  // top：不在 classes/<班級> 底下的路徑；keep：自己管開關（不跟著 stop 一起關）；soft：出錯就安靜關掉，不影響同步狀態（2.30 筆跡）
+  async listen(path, fn, { top = false, keep = false, soft = false } = {}) {
+    const es = new EventSource(await this.url(path, top))
     const on = (ev) => (e) => {
       try {
         const { path: p, data } = JSON.parse(e.data)
@@ -6184,13 +6309,19 @@ const Sync = {
     }
     es.addEventListener('put', on('put'))
     es.addEventListener('patch', on('patch'))
-    es.addEventListener('open', () => this.state !== 'wait' && this.setStatus('on'))
-    es.addEventListener('cancel', () => {
-      es.close()
-      this.recheck()
-    })
-    es.onerror = () => this.setStatus('error')
-    this.es.push(es)
+    if (soft) {
+      es.addEventListener('cancel', () => es.close())
+      es.onerror = () => es.close()
+    } else {
+      es.addEventListener('open', () => this.state !== 'wait' && this.setStatus('on'))
+      es.addEventListener('cancel', () => {
+        es.close()
+        this.recheck()
+      })
+      es.onerror = () => this.setStatus('error')
+    }
+    if (!keep) this.es.push(es)
+    return es
   },
   // 一般成員：盯著自己在名單上的那一筆（被移出、被設為可管理、被歸到學生時馬上重新確認）
   async listenSelf() {
@@ -6218,6 +6349,9 @@ const Sync = {
         this.fetchHw()
         this.fetchStu()
       }
+      // 2.30 老師在課堂檢視寫的筆跡：學生（和學生模式的老師裝置）多聽一條；家長不用
+      const isid = this.sid()
+      if (isid && (ACTIVE || myRole() === 'student')) this.inkListen(isid).catch(() => {})
     } catch {
       this.setStatus('error')
       return this.retry(20000)
@@ -8514,10 +8648,44 @@ function stuModSheet(sid, mid, list, sess) {
 // 課堂檢視：學生用自己的裝置上課時，老師在自己的裝置上跟著看（現在這一題、題目、正確答案；學生一按檢查，答案和對錯馬上出現）
 let WAKE = null // 螢幕保持開著
 let watchFresh = ''
+// 課堂檢視題目卡的標題列：答了→對錯；沒答→已選／正在輸入（2.30 打到哪看到哪）／正在作答
+function wqHeadHTML(it, l, ans) {
+  const inner = ans
+    ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '不太確定・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>`
+    : it.t === 'learn'
+      ? '正在看觀念卡'
+      : l.sel
+        ? `已選「${esc(l.sel)}」，還沒檢查${l.sels?.length > 1 ? `<small>先選 ${esc(l.sels.slice(0, -1).join('、'))}，改成 ${esc(l.sel)}</small>` : ''}`
+        : l.dr
+          ? `正在輸入…<small>${esc(String(l.dr).split(' / ').map((p) => p || '＿').join('　/　'))}</small>` // 還沒填的格子用 ＿
+          : '正在作答…'
+  return `<span class="ld-dot on"></span>${inner}`
+}
+// 2.30 學生打到一半的答案放進老師這張卡（填空、句子、拼字格子、複選）
+function watchDraft(card, it, l, ans) {
+  if (!card || ans) return
+  const dr = String(l?.dr || '')
+  const parts = dr.split(' / ')
+  const ins = $$('input.blank, textarea.write-in, input.spell-in', card)
+  ins.forEach((inp, i) => (inp.value = ins.length === 1 ? dr : parts[i] || ''))
+  if (it.t === 'spell' && !ins.length) {
+    const ch = [...dr.replace(/[^A-Za-z]/g, '')]
+    $$('.spell-slot', card).forEach((s, i) => {
+      s.textContent = ch[i] || ''
+      s.classList.toggle('on', !!ch[i])
+    })
+  }
+  if (it.t === 'multi') {
+    const set = new Set(dr ? dr.split('、') : [])
+    $$('.opt', card).forEach((o) => o.classList.toggle('sel', set.has($('.opt-text', o)?.textContent)))
+  }
+}
+let WATCH_CUR = null // 課堂檢視現在畫的是哪個學生、哪一題、答了沒（只有過程變了就不重建卡片）
 function viewWatch(sid, keepScroll = false) {
   if (!Sync.isAdmin()) return viewStudents()
   const st = Sync.students[sid]
   if (!st) return Sync.loaded ? go('#/students') : setView(`<div class="page narrow">${header('課堂檢視', '', '', true)}<div class="empty card"><div class="empty-ic">📡</div><h2>載入中…</h2></div></div>`)
+  Sync.inkWatch(sid) // 2.30 這個學生的筆跡
   if (!WAKE && navigator.wakeLock && document.visibilityState === 'visible')
     navigator.wakeLock
       .request('screen')
@@ -8539,6 +8707,17 @@ function viewWatch(sid, keepScroll = false) {
   const today = list.filter((a) => a.ts >= t0)
   const ok = today.filter((a) => a.r === 'ok').length
   const name = st.name || '學生'
+  // 2.30 同一題、還沒答，只是過程變了（選了、打字、筆跡）：只更新標題列和草稿，不重建卡片（老師正在卡片上畫會被打斷）
+  const ansKey = ans ? Sync.akey(ans) : ''
+  const oldCard = keepScroll && it && it.t !== 'order' && WATCH_CUR?.sid === sid && WATCH_CUR.q === it.id && WATCH_CUR.ans === ansKey && $('.watch-page .watch-slot .qcard')
+  if (oldCard) {
+    const h = $('.watch-page .wq-h')
+    if (h) h.innerHTML = wqHeadHTML(it, l, ans)
+    if (!ans && it.t === 'mcq') $$('.opt', oldCard).forEach((o) => o.classList.toggle('sel', !!l.sel && it.opts[+o.dataset.i] === l.sel))
+    watchDraft(oldCard, it, l, ans)
+    return
+  }
+  WATCH_CUR = { sid, q: it ? it.id : '', ans: ansKey }
   const statusTxt = !l
     ? `${name} 還沒有上線`
     : !isActive(l)
@@ -8580,7 +8759,7 @@ function viewWatch(sid, keepScroll = false) {
           : it
           ? `<div class="watch-run">${run.map((a) => `<i class="wr ${a.r}" title="${esc(snippet(ITEM[a.q] || {}))}"></i>`).join('')}<span>今天 ${today.length} 題・對 ${today.length ? Math.round((ok / today.length) * 100) : 0}%</span></div>
             <section class="card watch-q${ans ? ' answered ' + ans.r : ''}${ans && Sync.akey(ans) !== watchFresh ? ' fresh' : ''}">
-              <div class="wq-h"><span class="ld-dot on"></span>${ans ? (ans.r === 'ok' ? '答對了' : ans.r === 'care' ? '格式粗心' : '答錯了') + `<small>${ans.c ? '不太確定・' : ''}${ans.h ? `看了 ${ans.h} 個提示・` : ''}${new Date(ans.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</small>` : it.t === 'learn' ? '正在看觀念卡' : l.sel ? `已選「${esc(l.sel)}」，還沒檢查${l.sels?.length > 1 ? `<small>先選 ${esc(l.sels.slice(0, -1).join('、'))}，改成 ${esc(l.sel)}</small>` : ''}` : '正在作答…'}</div>
+              <div class="wq-h">${wqHeadHTML(it, l, ans)}</div>
               <div class="watch-slot"></div>
             </section>`
           : `<div class="empty card"><div class="empty-ic">${isActive(l) ? '📱' : '💤'}</div><h2>${esc(statusTxt)}</h2><p class="muted">${name} 開始做題目時，這裡會自動顯示那一題。</p></div>`
@@ -8602,6 +8781,10 @@ function viewWatch(sid, keepScroll = false) {
     // 還沒檢查：學生目前選的那個先用藍框標出來
     if (!ans && l.sel && it.t === 'mcq') $$('.opt', card).forEach((o) => it.opts[+o.dataset.i] === l.sel && o.classList.add('sel'))
     $('.watch-slot').append(card)
+    // 2.30 老師在這張卡寫的筆跡：每個學生分開存，上傳到 ink/<班級>/<學生>/q:<題目>/t；學生寫的從雲端畫上來
+    card.dataset.ink = `w:${sid}:q:${it.id}`
+    Sync.inkChanged([card.dataset.ink])
+    watchDraft(card, it, l, ans)
   }
   if (ans) watchFresh = Sync.akey(ans)
   if (spKey) watchFresh = spKey
@@ -10249,6 +10432,7 @@ function route() {
   if (a !== 'exam' && EXAM && !EXAM.graded) clearInterval(EXAM.timer)
   if (a !== 'vocab' && VM?.timer) clearInterval(VM.timer)
   if (a !== 'watch' && WAKE) WAKE.release().catch(() => {})
+  if (a !== 'watch') Sync.inkUnwatch() // 2.30 離開課堂檢視：不再聽那個學生的筆跡
   if (a === 'watch' && b) return viewWatch(b)
   if (a === 'run' && b) return viewRun(decodeURIComponent(b))
   if (a === 'vocab' && b) return viewVocab(decodeURIComponent(b), h.split('/')[3] || '', h.split('/')[4] || '')
@@ -10330,7 +10514,7 @@ applySize()
 checkBadges(true)
 // 2.28 畫筆：筆跡存在這台裝置；學生模式（老師的 iPad 借學生用）另外存一份
 try {
-  initPen({ key: 'g7review:ink' + (ACTIVE ? '@' + ACTIVE : '') })
+  initPen({ key: 'g7review:ink' + (ACTIVE ? '@' + ACTIVE : ''), onChange: (keys) => Sync.inkChanged(keys) }) // 2.30 寫了就同步給老師／學生
 } catch (e) {
   console.warn('pen', e)
 }

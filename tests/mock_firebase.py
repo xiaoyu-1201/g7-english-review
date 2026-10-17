@@ -57,7 +57,7 @@ def can_read(ps, uid, legacy, prov):
         return legacy or (bool(uid) and ps[1] == uid)
     if len(ps) == 2 and ps[0] == "codes":
         return bool(uid) or legacy
-    if ps and ps[0] == "recs":
+    if ps and ps[0] in ("recs", "ink"):  # 2.30 筆跡 ink/<班級>/<學生>/<卡片>/{t|s}/<筆畫>：跟錄音一樣，老師和那個學生的裝置讀得到
         if legacy:
             return True
         return len(ps) >= 3 and bool(uid) and (is_admin(ps[1], uid, prov) or mem(ps[1], uid).get("sid") == ps[2])
@@ -88,8 +88,16 @@ def can_read(ps, uid, legacy, prov):
 
 
 def can_write(ps, uid, val, legacy, prov):
-    if legacy and ps and ps[0] in ("codes", "recs", "teachers", "push", "pushlog"):
+    if legacy and ps and ps[0] in ("codes", "recs", "ink", "teachers", "push", "pushlog"):
         return True  # 測試用：沒帶 auth 直接改（排程的服務帳戶也是這樣）
+    if ps and ps[0] == "ink":
+        if len(ps) < 3 or not uid:
+            return False
+        if is_admin(ps[1], uid, prov):
+            return True  # 老師：t 那一邊，也可以整個清掉
+        m = mem(ps[1], uid)
+        # 學生只能寫自己卡片的 s 那一邊（ink/<班級>/<學生>/<卡片>/s/<筆畫>）
+        return len(ps) >= 5 and ps[4] == "s" and m.get("sid") == ps[2] and m.get("role") == "student"
     if ps and ps[0] == "pushlog":
         return False
     if ps and ps[0] == "push":
@@ -194,6 +202,11 @@ def valid(ps, val):
                 and s("p", 200) and s("a", 100) and val["role"] in ("student", "parent", "teacher") and ("sid" not in val or s("sid", 20)) and ("k" not in val or s("k", 120)) and isinstance(val["at"], (int, float)))
     if val is not None and len(ps) == 3 and ps[0] == "classes" and ps[2] == "notify":
         return isinstance(val, bool)
+    if val is not None and ps[0] == "ink" and len(ps) >= 5:
+        if ps[4] not in ("t", "s"):
+            return False
+        strokes = [val] if len(ps) == 6 else (list(val.values()) if isinstance(val, dict) else [None])
+        return all(isinstance(s, dict) and isinstance(s.get("t"), str) and isinstance(s.get("w"), (int, float)) and isinstance(s.get("p"), list) and s["p"] for s in strokes)
     if val is None or len(ps) < 3 or ps[0] != "classes":
         return True
     sec, rest = ps[2], ps[3:]

@@ -14,6 +14,21 @@
         ".validate": "newData.hasChildren(['c', 's', 'exp']) && newData.child('c').isString() && newData.child('s').isString() && newData.child('exp').isNumber()"
       }
     },
+    "ink": {
+      "$code": {
+        "$sid": {
+          ".read": "auth != null && ((root.child('classes/' + $code + '/owner').val() === auth.uid && auth.provider === 'password') || root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid)",
+          ".write": "auth != null && root.child('classes/' + $code + '/owner').val() === auth.uid && auth.provider === 'password'",
+          "$k": {
+            "$side": {
+              ".write": "$side === 's' && auth != null && root.child('classes/' + $code + '/members/' + auth.uid + '/sid').val() === $sid && root.child('classes/' + $code + '/members/' + auth.uid + '/role').val() === 'student'",
+              ".validate": "$side === 't' || $side === 's'",
+              "$i": { ".validate": "newData.hasChildren(['t', 'w', 'p']) && newData.child('t').isString() && newData.child('w').isNumber() && newData.child('p').hasChildren()" }
+            }
+          }
+        }
+      }
+    },
     "recs": {
       "$code": {
         "$sid": {

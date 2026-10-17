@@ -24,6 +24,10 @@ const okStroke = (s) => s && (s.t === 'pen' || s.t === 'hl') && Number.isFinite(
 
 let KEY = 'g7review:ink'
 let ink = {}
+// 2.30 別人的筆跡（老師↔學生即時共用，app.js 從雲端拿來放這裡）：只畫、不能擦、不存在這台
+const remote = {}
+const sigs = {} // 每張卡的筆畫 id 簽名：存檔時比對，知道哪幾張卡變了（告訴 app.js 去同步）
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 const undo = []
 let cur = null // 正在畫的這一筆
 let erasing = null
@@ -45,7 +49,10 @@ function load() {
     }
     if (d && typeof d === 'object' && !Array.isArray(d)) for (const [k, l] of Object.entries(d)) if (Array.isArray(l)) ink[k] = l.filter(okStroke)
   } catch {}
+  for (const l of Object.values(ink)) for (const s of l) s.id ||= newId() // 2.30 以前存的筆畫沒有 id：補上（同步要靠 id 認）
+  for (const [k, l] of Object.entries(ink)) sigs[k] = sigOf(l)
 }
+const sigOf = (l) => (l || []).map((s) => s.id).join()
 let savedT
 function save() {
   refreshUndo()
@@ -56,6 +63,14 @@ function save() {
   }
   const keys = Object.keys(ink)
   for (const k of keys.slice(0, Math.max(0, keys.length - MAX_KEYS))) delete ink[k]
+  // 哪幾張卡的筆畫變了（寫、擦、復原、清掉、被擠掉）
+  const changed = []
+  for (const k of new Set([...Object.keys(sigs), ...Object.keys(ink)])) {
+    const sg = sigOf(ink[k])
+    if (sg !== (sigs[k] || '')) changed.push(k)
+    if (sg) sigs[k] = sg
+    else delete sigs[k]
+  }
   try {
     localStorage.setItem(KEY, JSON.stringify(ink))
     const el = $('.pen-saved', bar)
@@ -69,7 +84,16 @@ function save() {
     if (w) w.hidden = false
     setOn(true)
   }
-  onChange?.()
+  if (changed.length) onChange?.(changed)
+}
+// 2.30 外面拿這張卡自己寫的筆畫（上傳用）；放別人的筆畫進來（畫在自己的下面，擦不掉）
+export const penStrokes = (key) => ink[key] || []
+export function penRemote(key, list) {
+  const l = (list || []).filter(okStroke)
+  if (!l.length) delete remote[key]
+  else remote[key] = l
+  const b = $(`.pen-target[data-ink="${CSS.escape(key)}"]`)
+  if (b) redraw(b)
 }
 
 // ── 畫出來：perfect-freehand 把筆的點變成墨水的外框（有粗細變化、頭尾自然） ──
@@ -111,10 +135,11 @@ function layers(block) {
   return { hl, pen }
 }
 const colorOf = (s) => s.k || (s.t === 'hl' ? 'hl' : 'black')
-function pathEl(s, W) {
+function pathEl(s, W, cls = '') {
   const el = document.createElementNS(NS, 'path')
   el.setAttribute('d', strokeD(s, W))
   el.style.fill = `var(--ink-${colorOf(s)})`
+  if (cls) el.setAttribute('class', cls)
   return el
 }
 const box = (block) => layers(block).pen.getBoundingClientRect()
@@ -125,12 +150,19 @@ function render(block, force = false) {
   const { hl, pen } = layers(block)
   // 筆跡沒變、寬度沒變：不重畫（code review：重畫會動到 DOM，觀察器又來一次 → 停不下來）
   const list = ink[block.dataset.ink] || []
-  const sig = `${Math.round(W)}|${list.length}|${list === block.__penList}`
+  const rl = remote[block.dataset.ink] || []
+  const sig = `${Math.round(W)}|${list.length}|${list === block.__penList}|${rl.length}|${rl === block.__penRemote}`
   if (!force && block.__penSig === sig && cur?.block !== block) return
   block.__penSig = sig
   block.__penList = list
+  block.__penRemote = rl
   hl.replaceChildren()
   pen.replaceChildren()
+  for (const s of rl) {
+    try {
+      ;(s.t === 'hl' ? hl : pen).append(pathEl(s, W, 'remote'))
+    } catch {}
+  }
   for (const s of list) {
     try {
       ;(s.t === 'hl' ? hl : pen).append(pathEl(s, W))
@@ -247,7 +279,7 @@ function onDown(e) {
   const rect = box(block)
   const t = TOOLS[st.tool]
   const size = SIZES[st.size]
-  const s = { t, k: st.tool, w: r4((t === 'hl' ? size.hl : size.pen) / rect.width), pr: e.pointerType === 'pen' ? 1 : 0, p: [pt(e, rect)] }
+  const s = { id: newId(), t, k: st.tool, w: r4((t === 'hl' ? size.hl : size.pen) / rect.width), pr: e.pointerType === 'pen' ? 1 : 0, p: [pt(e, rect)] }
   const { hl, pen } = layers(block)
   const el = pathEl(s, rect.width)
   ;(t === 'hl' ? hl : pen).append(el)

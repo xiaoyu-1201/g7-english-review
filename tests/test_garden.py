@@ -104,8 +104,8 @@ with sync_playwright() as p:
     wait_until(lambda: st(P) == "member")
     P.click('.tabbar a[href="#/live/home"]')  # 配對完先在「即時作答」（原本的設計），花園在「學習進度」
     check(wait_until(lambda: P.locator(".sheet .news-row").count() >= 2, 10), "parent sees the what's-new sheet once")
-    # 最新兩版的家長版（2.29 澆水、2.28 畫筆）；更早的在「設定 → 更新紀錄」
-    check("澆水" in txt(P, ".sheet") and "畫筆" in txt(P, ".sheet"), "parent version of what's new (latest two versions)")
+    # 最新兩版的家長版（2.30 筆跡共用、2.29 澆水）；更早的在「設定 → 更新紀錄」
+    check("筆跡" in txt(P, ".sheet") and "澆水" in txt(P, ".sheet"), "parent version of what's new (latest two versions)")
     P.screenshot(path=str(OUT / "garden-5-news-parent.png"))
     P.click(".sheet [data-close]")
     time.sleep(0.4)

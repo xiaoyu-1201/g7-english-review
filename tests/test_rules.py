@@ -121,6 +121,20 @@ try:
     expect(False, db("DELETE", f"{R}/{amy}/s1", S1), "student cannot delete recordings")
     expect(False, db("DELETE", f"{C}/a/{amy}/k1", S1), "student cannot delete answers")
     expect(False, db("PUT", f"{R}/{amy}/s2", P1, rec), "parent cannot upload recording")
+    # 2.30 筆跡即時共用：ink/<班級>/<學生>/<卡片>/{t|s}/<筆畫>；學生只能寫自己卡片的 s、老師寫 t；家長只能看
+    I = f"ink/{C.split('/')[1]}"
+    stroke = {"t": "pen", "k": "black", "w": 0.006, "pr": 1, "p": [[0.1, 0.2, 0.5], [0.2, 0.2, 0.5]]}
+    expect(True, db("PATCH", f"{I}/{amy}/q:u1a-1/s", S1, {"k1": stroke}), "student writes own stroke")
+    expect(False, db("PATCH", f"{I}/{amy}/q:u1a-1/t", S1, {"k2": stroke}), "student cannot write the teacher side")
+    expect(False, db("PATCH", f"{I}/{amy}/q:u1a-1/s", S2, {"k3": stroke}), "other student cannot write Amy's strokes")
+    expect(False, db("PATCH", f"{I}/{amy}/q:u1a-1/s", P1, {"k4": stroke}), "parent cannot write strokes")
+    expect(False, db("PATCH", f"{I}/{amy}/q:u1a-1/s", S1, {"k5": {"t": "pen"}}), "a stroke needs t, w, p")
+    expect(True, db("PATCH", f"{I}/{amy}/q:u1a-1/t", T, {"k6": stroke}), "teacher writes the teacher side")
+    expect(True, db("PATCH", f"{I}/{amy}/q:u1a-1/s", S1, {"k1": None}), "student erases own stroke")
+    expect(True, db("GET", f"{I}/{amy}", S1), "student reads own ink")
+    expect(True, db("GET", f"{I}/{amy}", P1), "parent reads child's ink")
+    expect(False, db("GET", f"{I}/{amy}", S2), "other student cannot read ink")
+    expect(True, db("DELETE", f"{I}/{amy}", T), "teacher clears a student's ink")
     expect(True, db("GET", f"{R}/{amy}", P1), "parent reads child's recordings")
     expect(False, db("GET", f"{R}/{amy}", S2), "other student cannot read recordings")
     expect(True, db("GET", f"{R}/{amy}", T), "teacher reads recordings")
