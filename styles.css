@@ -9443,7 +9443,7 @@ a.row:active {
 [data-skin='notebook'] .tabbar {
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  bottom: max(10px, calc(env(safe-area-inset-bottom) - 14px)); /* 2.32 老師：再下去一點；貼近 iPhone 底部橫條（跟拐乖旅行同一個做法） */
   max-width: 440px;
   margin: 0 auto;
   padding: 5px;
