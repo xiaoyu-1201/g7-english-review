@@ -30,7 +30,7 @@ with sync_playwright() as p:
     time.sleep(0.4)
     check(P.evaluate("document.documentElement.dataset.skin") == "notebook", "settings: switch to 講義")
     check(P.evaluate("localStorage.getItem('g7review:skin')") == "notebook", "the choice is saved on this device")
-    check(P.evaluate("!!document.querySelector('link[href*=\"LXGW+WenKai\"]')"), "講義 font is loaded after switching")
+    check(not P.evaluate("!!document.querySelector('link[href*=\"fonts.googleapis\"]')"), "no web font after switching")
     check(P.evaluate("getComputedStyle(document.body, '::before').backgroundImage") in ("none", ""), "no garden picture in 講義")
     check("on" in (P.get_attribute('[data-seg="skin"] [data-v="notebook"]', "class") or ""), "settings redraws with 講義 selected")
     P.click('[data-seg="skin"] [data-v="garden"]')

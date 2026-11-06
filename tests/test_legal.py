@@ -37,7 +37,7 @@ with sync_playwright() as p:
     check(A.locator('a.row[href="privacy.html"]').count() == 1 and A.locator('a.row[href="licenses.html"]').count() == 1, "settings links to both pages")
     check(not BANNED.search(txt(A, "body")), "settings has no publisher names")
     # 兩頁本身：打得開、有重點內容、沒有出版社名稱、沒有人名或 Email
-    for path, must in (("privacy.html", ["收哪些資料", "新加坡", "3 個月", "15 天"]), ("licenses.html", ["SIL Open Font License", "Tabler Icons", "DENSO WAVE", "Kokoro"])):
+    for path, must in (("privacy.html", ["收哪些資料", "新加坡", "3 個月", "15 天"]), ("licenses.html", ["BudouX", "Tabler Icons", "DENSO WAVE", "Kokoro"])):
         A.goto(URL + path)
         A.wait_for_selector("main")
         body = txt(A, "main")

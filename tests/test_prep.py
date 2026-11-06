@@ -76,11 +76,11 @@ with sync_playwright() as p:
     time.sleep(0.4)
     # ③ 外觀
     check(T.evaluate("document.documentElement.dataset.skin") == "garden", "garden skin is on by default")
-    check(T.evaluate("!!document.querySelector('link[href*=\"Nunito\"]')"), "garden number font is linked")
+    check(not T.evaluate("!!document.querySelector('link[href*=\"fonts.googleapis\"]')"), "no web fonts (Apple system fonts only)")
     T.evaluate("localStorage.setItem('g7review:skin', 'notebook')")
     T.reload()
     T.wait_for_selector(".stu-prep")
-    check(T.evaluate("!!document.querySelector('link[href*=\"LXGW+WenKai\"]')"), "notebook: handwriting heading font is linked")
+    check(not T.evaluate("!!document.querySelector('link[href*=\"fonts.googleapis\"]')"), "notebook: no web fonts")
     T.evaluate("localStorage.setItem('g7review:skin', 'old')")
     T.reload()
     T.wait_for_selector(".stu-prep")

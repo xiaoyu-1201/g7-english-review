@@ -8518,7 +8518,7 @@ p, small, .task, .wq-h, .qk-s, .sp-mode small {
   color: var(--blue);
 }
 /* ═══════════ 2.22 講義筆記本風格（老師 10/10 選的 A：「小宇老師親手整理的講義」） ═══════════
-   紙張底＋淡淡的橫線、左邊紅色邊線、標題用霞鶩文楷、可以點的字用鋼筆藍、主按鈕用墨水黑、
+   紙張底＋淡淡的橫線、左邊紅色邊線、可以點的字用鋼筆藍、主按鈕用墨水黑、
    重點用螢光筆、要注意的數字用紅筆圈、單元標籤像便利貼。<html data-skin="notebook">（index.html 設定） */
 :root[data-skin='notebook'] {
   --bg: #f7f3ea;
@@ -8565,7 +8565,7 @@ p, small, .task, .wq-h, .qk-s, .sp-mode small {
   --r-sm: 10px;
   --shadow: 0 1px 0 rgba(90, 75, 45, 0.12);
   --bar-bg: rgba(255, 253, 248, 0.94);
-  --hand: 'LXGW WenKai TC', 'Kaiti TC', 'STKaiti', serif;
+  --hand: var(--font); /* 2.32 老師：字體都換成 Apple 的（原本霞鶩文楷） */
 }
 @media (prefers-color-scheme: dark) {
   :root[data-skin='notebook'] {
@@ -8638,7 +8638,7 @@ p, small, .task, .wq-h, .qk-s, .sp-mode small {
   border: 1px solid var(--sep);
   box-shadow: var(--shadow);
 }
-/* 標題：霞鶩文楷（像老師手寫的講義標題） */
+/* 標題（2.32 起用系統字） */
 [data-skin='notebook'] h1,
 [data-skin='notebook'] h2,
 [data-skin='notebook'] .sheet-title,
@@ -10331,7 +10331,7 @@ img.xiaoya {
 }
 
 /* ═══════════ 2.25 花園外觀（老師 10/12「整體介面美術風格」，ChatGPT 設計圖）═══════════
-   整個畫面後面是湖邊花園插畫（img/bg-garden*.webp）、卡片是毛玻璃、數字用圓潤的 Nunito、
+   整個畫面後面是湖邊花園插畫（img/bg-garden*.webp）、卡片是毛玻璃、數字用 SF 圓體（ui-rounded）、
    進度和選到的分頁用綠色、選到的選項用紫色、主按鈕用深咖啡。<html data-skin="garden">（index.html 設定，預設）
    跟 2.20 薄荷綠的版面一樣，只換顏色和質感（講義外觀的規則都是 [data-skin='notebook'] 開頭，這裡不會吃到） */
 :root[data-skin='garden'] {
@@ -10371,7 +10371,7 @@ img.xiaoya {
   --glass-blur: blur(16px) saturate(150%);
   --shadow: 0 4px 18px rgba(50, 60, 40, 0.1);
   --bar-bg: rgba(255, 255, 255, 0.72);
-  --round: 'Nunito', ui-rounded, 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --round: ui-rounded, 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
   --veil: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, 0.1) 100%);
 }
 @media (prefers-color-scheme: dark) {
@@ -10510,7 +10510,7 @@ img.xiaoya {
 [data-skin='garden'] .lesson-h h2 {
   font-weight: 800;
 }
-/* 數字：Nunito（圓潤）；中文還是系統黑體 */
+/* 數字：SF 圓體（ui-rounded）；中文是蘋方 */
 [data-skin='garden'] :is(.sticky b, .tile-v, .sum-pct b, .sr-v, .book-n, .today-row b, .hm b, .pp-stat b, .ld-today b, .sc-stats b, .streak b, .flash-score) {
   font-family: var(--round);
   font-weight: 800;

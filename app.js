@@ -7,7 +7,7 @@ import { SPOTS, KP, ADD_LINES } from './focus.js'
 import { VOCAB, unitKey, wordSlug } from './vocab.js'
 import { initPen, penAttach, penRemote, penStrokes } from './pen.js'
 
-const VERSION = '2.31（11/7）'
+const VERSION = '2.32（11/7）'
 const INK_MAX = 60 // 2.30 筆跡同步：一張卡每一邊最多傳 60 筆
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
@@ -5836,21 +5836,13 @@ const lsSet = (k, v) => {
   } catch {}
 }
 // 2.25 外觀（index.html 開頭先設好 <html data-skin>，這裡給設定頁切換）
-const SKIN_FONT = { garden: 'Nunito:wght@700;800', notebook: 'LXGW+WenKai+TC:wght@400;700' }
 const SKIN_BAR = { garden: '#cfe6f2', notebook: '#f7f3ea' }
 const skinNow = () => document.documentElement.dataset.skin || 'garden'
 function setSkin(s) {
-  if (!Object.prototype.hasOwnProperty.call(SKIN_FONT, s)) return
+  if (!Object.prototype.hasOwnProperty.call(SKIN_BAR, s)) return
   lsSet('g7review:skin', s)
   document.documentElement.dataset.skin = s
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', SKIN_BAR[s]) // 第一個是淺色用的
-  const href = `https://fonts.googleapis.com/css2?family=${SKIN_FONT[s]}&display=swap`
-  if (![...document.querySelectorAll('link[rel=stylesheet]')].some((l) => l.href === href)) {
-    const l = document.createElement('link')
-    l.rel = 'stylesheet'
-    l.href = href
-    document.head.appendChild(l)
-  }
 }
 const dbBase = () => (lsGet('g7review:db') || SYNC_DB).replace(/\/+$/, '')
 const ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789' // 沒有 0／o、1／l／i，念、抄都不會看錯

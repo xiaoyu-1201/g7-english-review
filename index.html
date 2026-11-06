@@ -16,26 +16,16 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192-v4.png" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <script>
       // 外觀：花園（2.25，預設）／講義筆記本（2.22，設定 → 外觀）；設 g7review:skin=old 可以看回 2.20（拍前後對照用）
-      // 字型（開源 SIL OFL）：花園＝數字用 Nunito（只有英數，很小）；講義＝標題用霞鶩文楷（依字切片）
-      // 不擋畫面：字型連不到（網路過濾、Wi-Fi 不穩）時先用系統字，App 照常打開
+      // 外觀；字型一律用 Apple 系統字（2.32），不載入網路字型
       ;(function () {
         var s = 'garden'
         try { s = localStorage.getItem('g7review:skin') || 'garden' } catch (e) {}
         if (s !== 'notebook' && s !== 'old') s = 'garden' // 不認得的值（打錯、舊版）一律當花園
         document.documentElement.dataset.skin = s
         if (s === 'notebook') document.querySelector('meta[name=theme-color]').setAttribute('content', '#f7f3ea')
-        var f = s === 'notebook' ? 'LXGW+WenKai+TC:wght@400;700' : s === 'garden' ? 'Nunito:wght@700;800' : ''
-        if (!f) return
-        var l = document.createElement('link')
-        l.rel = 'stylesheet'
-        l.href = 'https://fonts.googleapis.com/css2?family=' + f + '&display=swap'
-        l.media = 'print'
-        l.onload = function () { this.media = 'all' }
-        document.head.appendChild(l)
       })()
     </script>
     <link rel="stylesheet" href="styles.css" />
