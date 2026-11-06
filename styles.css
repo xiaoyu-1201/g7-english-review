@@ -11794,3 +11794,16 @@ img.xiaoya {
     display: none !important;
   }
 }
+
+/* 2.31 中文換行：app.js 的 wbr() 已在詞和詞中間放 <wbr>，這裡不准在詞中間斷；太長的照樣斷開不撐破版面 */
+w-b {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  line-break: strict;
+}
+/* 最後一行不要只剩一兩個字（不支援的瀏覽器照舊換行） */
+p,
+li,
+.opt-text {
+  text-wrap: pretty;
+}

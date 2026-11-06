@@ -7,7 +7,7 @@ import { SPOTS, KP, ADD_LINES } from './focus.js'
 import { VOCAB, unitKey, wordSlug } from './vocab.js'
 import { initPen, penAttach, penRemote, penStrokes } from './pen.js'
 
-const VERSION = '2.30（10/17）'
+const VERSION = '2.31（11/7）'
 const INK_MAX = 60 // 2.30 筆跡同步：一張卡每一邊最多傳 60 筆
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
@@ -113,11 +113,54 @@ function iconize(root) {
 new MutationObserver((list) => {
   for (const r of list)
     for (const n of r.addedNodes) {
+      if (n.nodeName === 'W-B') continue
       if (n.nodeType === 1 && n.namespaceURI === 'http://www.w3.org/1999/xhtml') iconize(n)
       // 按鈕換字（例如「檢查」→「繼續」）：重新補圖示
       else if (n.nodeType === 3 && r.target.matches?.(LABEL_SEL)) labelIcons(r.target)
+      // 圖示補完才切詞（iconize 要看按鈕的第一個文字）；切詞自己包的 <w-b> 不再跑第二輪
+      if (n.nodeName !== 'W-B') wbr(n)
     }
 }).observe(document.documentElement, { childList: true, subtree: true })
+// 2.31 中文換行（老師 11/7）：手機預設任兩個中文字中間都能斷（「重／點」「母／音」）。用 Google BudouX（vendor/budoux-zh-hant.js，Apache-2.0）切詞，
+// 只在詞和詞中間放 <wbr>，包進 <w-b>（keep-all；不用 span，styles.css 很多「.x span」規則會套到）；詞中間不會斷開（只有一個詞的也包，「最喜愛的」才不會斷成「愛／的」）
+const WB_KEEP = ['以上', '以下', '涵蓋', '同音字', '指示詞', '不太確定', '有聲', '無聲', '圖表', '題組', '形容詞', '代名詞', '克漏字', '題目', '上課', '動物園', '博物館', '詞性', '詞序', '口說', '七上', '第一次段考', '第二次段考', '第三次段考', '段考', '先看', '正確率', '會考', '配對', '未來式', '過去式', '答對', '答錯', '的話', '最喜愛', '大寫', '小寫', '字母', '天花板', '現在進行式', '進行式', '祈使句', '主格', '受格', '所有格', '單數', '複數', '第三人稱', '介系詞', '疑問句', '否定句', '肯定句', '縮寫', '母音', '子音', '序數', '錯題本', '重點總整理', '模擬段考', '閃電挑戰', '口說練習', '觀念卡', '學習進度', '即時作答', '課堂檢視', '聽力練習卷', '家長', '老師']
+const WB_SKIP = 'script, style, textarea, input, select, option, svg, code, pre, w-b, [contenteditable]'
+const WB_HAN = /\p{Script=Han}/u
+function wbPieces(s) {
+  const nb = new Set()
+  for (const w of WB_KEEP) for (let k = s.indexOf(w); k >= 0; k = s.indexOf(w, k + 1)) for (let x = k + 1; x < k + w.length; x++) nb.add(x)
+  const out = []
+  let cur = '', pos = 0
+  for (const seg of window.BudouXzhHant.parse(s)) {
+    // 不在詞表裡面斷、開括號後面不斷、標點和「了的嗎」不放行首、只在中文旁邊斷（英文照空白斷）
+    if (cur && !nb.has(pos) && !/[（「【《『“‘(]$/.test(cur) && !/^[，。、；：！？）」】》』”’),.!?%／…]/.test(seg) && !/^[了的嗎呢吧啊喔囉著過][，。、；：！？）」]*$/.test(seg) &&
+      (WB_HAN.test(seg[0]) || /^[（「【《『“(]/.test(seg)) && (WB_HAN.test(cur.slice(-1)) || /[，。、；：！？）」】》』”’)…]$/.test(cur))) {
+      out.push(cur)
+      cur = ''
+    }
+    cur += seg
+    pos += seg.length
+  }
+  out.push(cur)
+  return out
+}
+function wbr(root) {
+  if (!window.BudouXzhHant || !root) return
+  const nodes = []
+  if (root.nodeType === 3) nodes.push(root)
+  else if (root.nodeType === 1) for (let w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), n; (n = w.nextNode()); ) nodes.push(n)
+  for (const n of nodes) {
+    const s = n.nodeValue, p = n.parentElement
+    if (s.length < 2 || !WB_HAN.test(s) || !p || p.closest(WB_SKIP)) continue
+    // 刻意不換行的地方（.nowrap、.link、表頭）：<wbr> 在 nowrap 裡照樣會斷，所以不切
+    const ws = getComputedStyle(p).whiteSpace
+    if (ws === 'nowrap' || ws.startsWith('pre')) continue
+    const parts = wbPieces(s)
+    const box = document.createElement('w-b')
+    parts.forEach((t, i) => box.append(...(i ? [document.createElement('wbr'), t] : [t])))
+    n.replaceWith(box)
+  }
+}
 const KEY = 'g7review:v1'
 const FORMAT_TAGS = ['cap', 'punct', 'space']
 const TYPE_LABEL = { mcq: '選擇', multi: '複選', fill: '填空', write: '句型', order: '重組', spot: '抓錯', sort: '分類', place: '放位置', learn: '觀念', spell: '拼字' }
