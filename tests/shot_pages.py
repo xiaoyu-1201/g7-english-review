@@ -14,7 +14,16 @@ def shot(pg, name, full=True):
     time.sleep(0.6)
     pg.screenshot(path=str(SHOTS / f"{TAG + '-' if TAG else ''}{name}.png"), full_page=full)
     ow = pg.evaluate("document.documentElement.scrollWidth - window.innerWidth")
-    print(name, "overflow", ow, flush=True)
+    # 字凸出框框：沒有設捲動的元素，內容比自己寬
+    stick = pg.evaluate(SCAN)
+    print(name, "overflow", ow, "stick-out", stick, flush=True)
+
+
+SCAN = """() => { const out = []; for (const el of document.querySelectorAll('body *')) {
+  const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden' || /(auto|scroll|hidden|clip)/.test(cs.overflowX)) continue
+  if (/^(svg|path|g|circle|rect|line|text|img|wbr|input|textarea|select|canvas)$/i.test(el.tagName)) continue
+  if (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 2) out.push((el.className || el.tagName) + ' ' + el.scrollWidth + '>' + el.clientWidth + ' ' + (el.textContent || '').trim().slice(0, 24)) }
+  return out.slice(0, 8) }"""
 
 
 with sync_playwright() as p:

@@ -9877,6 +9877,13 @@ img.xiaoya {
   line-height: 1.4;
   font-family: var(--hand, inherit);
 }
+/* 手機上泡泡只剩約 9 個字寬，整段不換行會凸出泡泡、鑽到小芽後面（2.32）：改成在詞和詞之間換行，每行長度平均 */
+.gd-say {
+  text-wrap: balance;
+}
+.gd-say .nowrap {
+  white-space: normal;
+}
 /* 窗台上的盆栽：每一課一盆，越大越接近開花；點了看那一課。課多就左右滑 */
 .gd-sill {
   position: absolute;
