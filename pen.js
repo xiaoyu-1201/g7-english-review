@@ -31,6 +31,8 @@ const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2
 const undo = []
 let cur = null // 正在畫的這一筆
 let erasing = null
+// 2.33 畫筆一次只會在一個階段：ready（可以下筆）／drawing（cur 有東西）／erasing（erasing 有東西）；兩個不會同時有
+const phase = () => (cur ? 'drawing' : erasing ? 'erasing' : 'ready')
 const st = { on: false, tool: 'black', lastPen: 'black', finger: false, size: 1, ready: false }
 let bar = null
 let fab = null
@@ -262,7 +264,7 @@ function onDown(e) {
     if (cur && cur.s.pr === 0) dropCur()
     if (st.finger) setFinger(false)
   }
-  if (!canDraw(e) || e.button > 0 || cur || erasing) return
+  if (!canDraw(e) || e.button > 0 || phase() !== 'ready') return
   const block = e.target.closest('.pen-target[data-ink]')
   if (!block) return
   if (e.target.closest(FIELD)) return // 輸入框：讓它拿到焦點（打字、手寫輸入）
@@ -447,7 +449,8 @@ export function initPen({ key = 'g7review:ink', onChange: cb } = {}) {
   document.addEventListener('pointercancel', end)
   document.addEventListener('lostpointercapture', end)
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && cur) end({ type: 'pointerup', pointerId: cur.id, pointerType: '' })
+    // 切出 App：正在畫或正在擦都要收尾（以前擦到一半切出去，回來會卡在擦的狀態）
+    if (document.hidden && phase() !== 'ready') end({ type: 'pointerup', pointerId: (cur || erasing).id, pointerType: '' })
   })
   document.addEventListener('click', onClick, true)
   document.addEventListener('keydown', (e) => {

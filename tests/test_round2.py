@@ -54,7 +54,7 @@ with sync_playwright() as p:
     # 做完 s1 全部答對 → 起步徽章
     pg.goto(URL + "#/settings")
     pg.click('[data-seg="oral"] button[data-v="off"]')
-    pg.click('[data-seg="size"] button[data-v="lg"]')
+    pg.fill("#f-zoom", "115")  # 2.27 字體大小改成滑桿（舊的「大」＝115%）
     mods = pg.evaluate("() => window.__app.MODULES.s1.items")
     pg.goto(URL + "#/")
     pg.click('[data-mod="s1"]')

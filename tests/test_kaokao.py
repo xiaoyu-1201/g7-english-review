@@ -21,6 +21,7 @@ with sync_playwright() as p:
     right = A.evaluate("window.__app.ITEM[document.querySelector('.qcard').dataset.id].a")
     A.click(f'.opt[data-i="{(right + 2) % 4}"]')
     A.click("[data-act=check]")
+    A.click(".fb-more > summary")  # 2.33 答錯：完整解析收在「看完整解析」
     A.wait_for_selector(".fb-kp")
     check("考點" in txt(A, ".fb-kp"), "feedback shows 考點")
     check(A.locator(".fb-why li").count() == 4, "option analysis lists all 4 options")

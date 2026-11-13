@@ -11814,3 +11814,299 @@ li,
 .opt-text {
   text-wrap: pretty;
 }
+
+/* ═══════════ 2.33 B 清爽學習工作台（老師 11/13 選 B）＋狀態看得懂 ═══════════
+   背景插畫再淡、卡片幾乎不透明、字更深；小芽只在答完題（答對點頭、答錯拿提示、做完開花、沒收到聲音靠耳朵）出現 */
+:root[data-skin='garden'] {
+  --card: rgba(255, 255, 255, 0.95);
+  --card2: rgba(255, 255, 255, 0.86);
+  --label2: rgba(42, 37, 32, 0.8);
+  --label3: rgba(42, 37, 32, 0.56);
+  --veil: linear-gradient(180deg, rgba(247, 249, 244, 0.8), rgba(247, 249, 244, 0.72) 45%, rgba(247, 249, 244, 0.84));
+  --hint-bg: #f3eefe;
+  --hint-ring: #d9ccfb;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='garden']:not([data-theme='light']) {
+    --card: rgba(30, 38, 33, 0.95);
+    --card2: rgba(30, 38, 33, 0.86);
+    --label2: rgba(241, 239, 232, 0.8);
+    --label3: rgba(241, 239, 232, 0.56);
+    --veil: linear-gradient(180deg, rgba(10, 16, 12, 0.82), rgba(10, 16, 12, 0.76));
+    --hint-bg: rgba(155, 127, 240, 0.16);
+    --hint-ring: rgba(185, 162, 255, 0.35);
+  }
+}
+:root[data-theme='dark'][data-skin='garden'] {
+  --hint-bg: rgba(155, 127, 240, 0.16);
+  --hint-ring: rgba(185, 162, 255, 0.35);
+}
+:root {
+  --hint-bg: #f3eefe;
+  --hint-ring: #d9ccfb;
+}
+/* 每種外觀的深色模式都要有深色的提示卡（講義外觀深色時淺紫底配淺色字會看不到） */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --hint-bg: rgba(155, 127, 240, 0.16);
+    --hint-ring: rgba(185, 162, 255, 0.35);
+  }
+}
+:root[data-theme='dark'] {
+  --hint-bg: rgba(155, 127, 240, 0.16);
+  --hint-ring: rgba(185, 162, 255, 0.35);
+}
+/* 回顧上一題是存起來的畫面：小芽不要再跳一次 */
+.snap .xiaoya.pop {
+  animation: none;
+}
+/* 首頁不放小芽（泡泡的話留著） */
+[data-skin='garden'] .gd-ya > .xiaoya {
+  display: none;
+}
+
+/* 小芽：小尺寸、換狀態時跳出來一次（只動一次，減少動態效果時不動） */
+img.xiaoya.xy-sm {
+  height: 52px;
+}
+.xiaoya.pop {
+  animation: xy-pop 0.22s cubic-bezier(0.23, 1, 0.32, 1) both;
+  transform-origin: 50% 90%;
+}
+@keyframes xy-pop {
+  from {
+    transform: scale(0.92) translateY(4px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xiaoya.pop {
+    animation: none;
+  }
+}
+
+/* 答錯：不整張變紅，只有圖示是紅的；先看正確答案，一句關鍵（紫色小卡＋小芽），完整解析收起來 */
+.fb.bad,
+.fb.care {
+  background: var(--card);
+  border: 1px solid var(--sep);
+}
+.fb.ok {
+  border: 1px solid color-mix(in srgb, var(--green) 25%, transparent);
+}
+.fb-head .fb-ya {
+  margin-left: auto;
+}
+.fb > .fb-ans {
+  margin-top: 12px;
+}
+.fb-key {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--hint-bg);
+  border: 1px solid var(--hint-ring);
+}
+.fb-key p {
+  margin: 2px 0 0;
+  font-weight: 600;
+  color: var(--label);
+}
+.fb-more {
+  margin-top: 10px;
+}
+.fb-more > summary {
+  cursor: pointer;
+  color: var(--blue);
+  font-weight: 600;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  list-style: none;
+}
+.fb-more > summary::-webkit-details-marker {
+  display: none;
+}
+.fb-more > summary::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-left: 8px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.2s ease;
+}
+.fb-more[open] > summary::after {
+  transform: rotate(-135deg) translateY(-2px);
+}
+.learn-verdict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 麥克風（app.js MIC）：錄音中＝綠色、秒數＋「完成錄音」；辨識中＝麥克風變灰、寫「已關閉」；沒收到聲音＝小芽靠耳朵 */
+.sp-mic-box[data-ph='requesting'] > .sp-mic,
+.sp-mic-box[data-ph='processing'] > .sp-mic {
+  background: var(--fill);
+  color: var(--label3);
+  box-shadow: none;
+  animation: none;
+}
+.sp-mic-box[data-ph='recording'] > .sp-mic {
+  background: var(--green-v);
+}
+.sp-mic-box[data-ph='recording'] > .sp-mic.on {
+  animation-name: sp-pulse-g;
+}
+.sp-mic-box[data-ph='recording'].lv > .sp-mic.on {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-v) 35%, transparent);
+}
+.sp-mic-box[data-ph='recording'] .sp-lv {
+  background: color-mix(in srgb, var(--green-v) 26%, transparent);
+}
+.sp-mic-box[data-ph='recording'] .sp-rip {
+  border-color: color-mix(in srgb, var(--green-v) 60%, transparent);
+}
+@keyframes sp-pulse-g {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--green-v) 50%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 22px transparent;
+  }
+}
+.sp-mic-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+.sp-rec {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-rec > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red-v);
+  animation: sp-blink 1s steps(2, start) infinite;
+}
+@keyframes sp-blink {
+  to {
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sp-rec > i {
+    animation: none;
+  }
+}
+.sp-off {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--label3);
+}
+.sp-off svg {
+  width: 16px;
+  height: 16px;
+}
+.sp-done {
+  min-width: 180px;
+  min-height: 48px;
+}
+.sp-done[hidden] {
+  display: none;
+}
+/* 做完一回：小芽開花，坐在分數圓環右下角 */
+.sum-ring {
+  position: relative;
+}
+.sum-ring > .sum-ya {
+  position: absolute;
+  right: -34px;
+  bottom: -6px;
+}
+.sp-sum-head {
+  position: relative;
+}
+.sp-sum-head > .sum-ya {
+  position: absolute;
+  right: 12px;
+  top: -26px;
+}
+.sync-lock {
+  font-size: 13px;
+  margin-right: 4px;
+}
+/* 同步膠囊：手機上三段放不下時在「・」那裡換行，不撐破頁首 */
+.sync-pill {
+  flex-wrap: wrap;
+  row-gap: 0;
+  white-space: normal;
+  max-width: 100%;
+  min-width: 0;
+}
+.sync-pill .sp-part {
+  white-space: nowrap;
+}
+.sync-pill .sync-dot + .sp-part,
+.sync-pill .sync-lock + .sp-part {
+  margin-left: -2px;
+}
+
+/* 2.33 QA 修正 */
+/* 同步膠囊：分隔號跟著後一段；手機只留最後一段（例：● 14:30 已儲存），不擠成好幾行 */
+.sync-pill .sp-part + .sp-part::before {
+  content: '・';
+}
+@media (max-width: 480px) {
+  .sync-pill .sp-part:not(:last-child) {
+    display: none;
+  }
+  .sync-pill .sp-part + .sp-part::before {
+    content: none;
+  }
+}
+.lg-head > .sync-pill {
+  margin-top: 6px;
+}
+/* 首頁花園沒有小芽了：原本的對話泡泡改成標題下面一行提示 */
+[data-skin='garden'] .gd-ya {
+  top: 46px;
+  left: 20px;
+  right: 20px;
+  display: block;
+  max-width: none;
+}
+[data-skin='garden'] .gd-say {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--label2);
+  font-weight: 600;
+  font-size: 15px;
+  font-family: inherit;
+  text-wrap: pretty;
+}
+/* 紫色提示卡跟著內容寬（電腦版不撐滿一大片） */
+.fb-key {
+  width: fit-content;
+  max-width: 100%;
+}

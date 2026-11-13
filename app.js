@@ -7,7 +7,7 @@ import { SPOTS, KP, ADD_LINES } from './focus.js'
 import { VOCAB, unitKey, wordSlug } from './vocab.js'
 import { initPen, penAttach, penRemote, penStrokes } from './pen.js'
 
-const VERSION = '2.32（11/7）'
+const VERSION = '2.33（11/13）'
 const INK_MAX = 60 // 2.30 筆跡同步：一張卡每一邊最多傳 60 筆
 
 // ───────────────────────── 圖示（2.19，老師 10/9：排版醜、不專業 → 設計手冊：不要用 emoji 當介面圖示） ─────────────────────────
@@ -979,6 +979,31 @@ if (Voice.ok) {
   speechSynthesis.onvoiceschanged = () => Voice.load()
 }
 
+// 2.33 明確的狀態（以前用好幾個 true/false 開關拼出「現在在哪個階段」，組合一多就會卡住）
+// 每個功能只有一個 state，只准照 table 走：table[現在][事件] = 下一個；沒寫的轉換不會發生（留一行警告方便查）
+function machine(initial, table, onChange) {
+  const m = {
+    state: initial,
+    is: (...s) => s.includes(m.state),
+    send(ev, data) {
+      const next = table[m.state]?.[ev]
+      if (!next) {
+        if (!table[m.state]?.['*' + ev]) console.warn('[狀態]', m.state, '不能', ev)
+        return false
+      }
+      const prev = m.state
+      m.state = next
+      try {
+        onChange?.(next, prev, data)
+      } catch (e) {
+        console.error('[狀態]', e)
+      }
+      return true
+    },
+  }
+  return m
+}
+
 // ───────────────────────── 小元件 ─────────────────────────
 let toastTimer
 // act：提示訊息上的按鈕（例如「復原」）；有按鈕的話多停一下
@@ -1016,30 +1041,30 @@ function buzz(ms = 12) {
 let sheetClose = null
 // 手機的「上一頁」（Safari 左下角、邊緣滑動、Android 返回鍵）：視窗開著時先關視窗，不要離開這一頁
 // 做法：開視窗時多放一筆同網址的瀏覽紀錄（state.sheet）；按上一頁＝退掉那一筆＝關視窗
-let POP_PENDING = false // 自己按關閉時退掉那一筆，等瀏覽器回報（期間要換頁先排隊）
-let PENDING_GO = ''
-function popSheetEntry() {
-  if (!history.state?.sheet || POP_PENDING) return
-  POP_PENDING = true
-  history.back()
-  setTimeout(() => POP_PENDING && popDone(), 700) // 保險：瀏覽器沒回報也不要卡住
-}
-function popDone() {
-  POP_PENDING = false
+// 2.33 瀏覽紀錄的狀態（以前是 POP_PENDING＋PENDING_GO 兩個變數）：idle ↔ popping（自己按關閉、正在退掉多放的那一筆）
+// popping 期間要換頁先記在 NAV.go，退完再換；瀏覽器 0.7 秒都沒回報也一定回到 idle（不會卡住）
+const NAV = machine('idle', { idle: { POP: 'popping', '*POPPED': 1 }, popping: { POPPED: 'idle', '*POP': 1 } }, (st) => {
+  if (st !== 'idle') return
   if (sheetClose && !history.state?.sheet) history.pushState({ ...(history.state || {}), sheet: 1 }, '') // 退的期間又開了新視窗
-  if (PENDING_GO) {
-    const h = PENDING_GO
-    PENDING_GO = ''
+  if (NAV.go) {
+    const h = NAV.go
+    NAV.go = ''
     go(h)
   }
+})
+NAV.go = ''
+function popSheetEntry() {
+  if (!history.state?.sheet || !NAV.send('POP')) return
+  history.back()
+  setTimeout(() => NAV.send('POPPED'), 700) // 保險：瀏覽器沒回報也不要卡住
 }
 window.addEventListener('popstate', (e) => {
-  if (POP_PENDING) return popDone()
+  if (NAV.is('popping')) return NAV.send('POPPED')
   if (sheetClose && !e.state?.sheet) closeSheet('nav') // 使用者按上一頁：關掉視窗
 })
 function sheet(html, { onClose, wide } = {}) {
   closeSheet('swap') // 換成另一個視窗：沿用同一筆瀏覽紀錄
-  if (!history.state?.sheet && !POP_PENDING) history.pushState({ ...(history.state || {}), sheet: 1 }, '')
+  if (!history.state?.sheet && !NAV.is('popping')) history.pushState({ ...(history.state || {}), sheet: 1 }, '')
   const wrap = document.createElement('div')
   wrap.className = 'sheet-wrap'
   wrap.innerHTML = `<div class="sheet-bg" data-close></div><section class="sheet${wide ? ' wide' : ''}" role="dialog" aria-modal="true"><div class="grabber" aria-hidden="true"></div><button class="sheet-x" data-close aria-label="關閉">${ICON.x}</button><div class="sheet-body">${html}</div></section>`
@@ -1265,7 +1290,7 @@ const CTRL = {
           })
           const r = $('.learn-rule', el)
           r.hidden = false
-          r.insertAdjacentHTML('afterbegin', `<div class="learn-verdict ${sel === it.a ? 'ok' : 'bad'}">${sel === it.a ? '想得對！' : `答案是 ${'ABCD'[it.a]}。沒關係，看下面的重點。`}</div>`)
+          r.insertAdjacentHTML('afterbegin', `<div class="learn-verdict ${sel === it.a ? 'ok' : 'bad'}">${xiaoya(sel === it.a ? 'nod' : 'hint', 'xy-sm pop')}<span>${sel === it.a ? '想得對！' : `答案是 ${'ABCD'[it.a]}。沒關係，看下面的重點。`}</span></div>`)
           buzz()
           C.onAnswer?.()
           requestAnimationFrame(() => r.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' }))
@@ -1835,8 +1860,29 @@ function feedbackHTML(it, res, ctx = {}) {
   const ex = (it.ex ? `<div class="fb-ex">${ICON.bulb}<div>${rich(it.ex)}</div></div>` : '') + why
   const follow = it.follow ? `<details class="follow"><summary>延伸想一想：${esc(it.follow[0])}</summary><p>${esc(it.follow[1])}</p></details>` : ''
   const tr = it.passage && PASSAGES[it.passage] ? `<button type="button" class="link" data-zh>看文章中文翻譯</button>` : ''
-  return `<div class="fb ${head[0]}"><div class="fb-head"><span class="fb-icon">${res.r === 'ok' ? ICON.check : res.r === 'care' ? '!' : ICON.x}</span><div><div class="fb-title">${head[1]}</div>${head[2] ? `<div class="fb-sub">${head[2]}</div>` : ''}</div></div>
-    ${kpH}${msgs ? `<ul class="fb-msgs">${msgs}</ul>` : ''}${yours}${right}${ex}${follow}${tr}</div>`
+  const headH = `<div class="fb-head"><span class="fb-icon">${res.r === 'ok' ? ICON.check : res.r === 'care' ? '!' : ICON.x}</span><div><div class="fb-title">${head[1]}</div>${head[2] ? `<div class="fb-sub">${head[2]}</div>` : ''}</div>${res.r === 'ok' ? xiaoya('nod', 'xy-sm pop fb-ya') : ''}</div>`
+  const more = `${kpH}${msgs ? `<ul class="fb-msgs">${msgs}</ul>` : ''}${yours}${ex}${follow}${tr}`
+  if (res.r === 'ok') return `<div class="fb ok">${headH}${more}</div>`
+  const pop = ctx.exam ? '' : ' pop' // 段考檢討一次列很多題：小芽不要一起跳
+  // 2.33 答錯：先看對錯（正確答案）→ 一句最關鍵的原因（小芽拿提示）→ 想看再打開完整解析（老師選 B：不要一次一大段）
+  const key = fbKey(it, res, kp0(it))
+  const flat = (x) => plain(x).replace(/[\s：:]/g, '')
+  const moreOn = flat(more) && flat(more) !== flat(`考點${kp0(it)}`) && flat(more) !== flat(key) // 只有一行考點、跟紫色卡一樣：不放
+  return `<div class="fb ${head[0]}">${headH}${right}${key ? `<div class="fb-key">${xiaoya('hint', 'xy-sm' + pop)}<div><div class="fb-k">先記住這句</div><p>${esc(key)}</p></div></div>` : ''}
+    ${moreOn ? `<details class="fb-more"><summary>看完整解析</summary>${more}</details>` : ''}</div>`
+}
+const kp0 = (it) => it.kp || uniq((it.tags || []).filter((t) => t !== 'listen' && t !== 'read').map((t) => TAGS[t])).join('、')
+// 答錯時最關鍵的一句：選錯的那個選項為什麼錯 ＞ 解析第一句 ＞ 檢查出來的第一個問題 ＞ 考點
+function fbKey(it, res, kp) {
+  if (it.t === 'mcq' && it.why) {
+    const i = it.opts?.indexOf(res.given)
+    if (i >= 0 && i !== it.a && it.why[i]) return plain(it.why[i])
+  }
+  // 解析第一句比「漏選：…」這種檢查訊息有用（後者跟上面的正確答案重複）
+  const ex = plain(it.ex || '').match(/^[^。！？]*[。！？]?/)[0]
+  if (ex) return ex
+  if (res.msgs?.length) return plain(res.msgs[0])
+  return kp ? `考點：${kp}` : ''
 }
 const pick = (a) => a[Math.floor(Math.random() * a.length)]
 function revealExtras(C) {
@@ -1855,7 +1901,8 @@ function revealExtras(C) {
 }
 
 // ───────────────────────── 練習（一題一題） ─────────────────────────
-let RUN = null // { key, at, C, hints, guess, checked, streak, reviewing }
+// 2.33 RUN.phase＝這一題在哪個階段：answering（作答中）→ checked（檢查過、看回饋）；回顧上一題＝reviewing（以前用 checked、reviewing 兩個開關拼）
+let RUN = null // { key, at, C, it, hints, guess（不太確定）, phase, streak }
 // 回上一題用：作答完的畫面（SNAPS）、還沒作答就離開時寫到一半的答案（DRAFTS）
 const SNAPS = {}
 const DRAFTS = {}
@@ -1922,7 +1969,7 @@ let draftT
 function tellDraft(C) {
   clearTimeout(draftT)
   draftT = setTimeout(() => {
-    if (!Sync.last || Sync.last.view !== 'run' || Sync.last.q !== C.it.id || C.locked || (RUN?.C === C && RUN.checked)) return
+    if (!Sync.last || Sync.last.view !== 'run' || Sync.last.q !== C.it.id || C.locked || (RUN?.C === C && RUN.phase === 'checked')) return
     const dr = draftOf(C)
     if ((Sync.last.dr || '') === dr) return
     Sync.presence({ ...Sync.last, dr })
@@ -1963,7 +2010,7 @@ function viewRun(key, at) {
   const C = makeItem(it, 'practice')
   sendOrd(it)
   $('.run-card').append(C.el)
-  RUN = { key, at, C, it, hints: 0, guess: false, checked: false, streak }
+  RUN = { key, at, C, it, hints: 0, guess: false, phase: 'answering', streak }
   const btn = $('[data-act=check]')
   C.onAnswer = () => {
     btn.disabled = !C.answered()
@@ -1987,7 +2034,7 @@ function viewRun(key, at) {
       a.setAttribute('aria-pressed', RUN.guess)
       return
     }
-    if (act === 'check') return RUN.checked || it.t === 'learn' ? nextItem() : checkItem()
+    if (act === 'check') return RUN.phase === 'checked' || it.t === 'learn' ? nextItem() : checkItem()
   })
 }
 
@@ -2033,7 +2080,7 @@ function viewRunReview(key, at, it, streak) {
     el = reviewCard(it, last, '你的答案')
   }
   $('.run-card').append(el)
-  RUN = { key, at, it, reviewing: true, streak }
+  RUN = { key, at, it, phase: 'reviewing', streak }
   // 回顧到答錯的題目：可以馬上再試一次（在視窗裡作答，不改這次的分數）
   const mine = [...S.attempts].reverse().find((a) => a.q === it.id && a.ts >= (pr.t0 || 0))
   if (mine && mine.r !== 'ok') $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="retry">🔄<span>再試一次</span></button>`)
@@ -2053,9 +2100,9 @@ function viewRunReview(key, at, it, streak) {
 
 // 作答完的題目存一份畫面（輸入框的值也要寫進 HTML）
 function snapCurrent() {
-  if (!RUN || RUN.reviewing || !RUN.C?.el) return false
+  if (!RUN || RUN.phase === 'reviewing' || !RUN.C?.el) return false
   const { C, it, key } = RUN
-  const done = RUN.checked || (it.t === 'learn' && C.answered())
+  const done = RUN.phase === 'checked' || (it.t === 'learn' && C.answered())
   if (!done) return false
   $$('input', C.el).forEach((i) => i.setAttribute('value', i.value))
   $$('textarea', C.el).forEach((t) => (t.textContent = t.value))
@@ -2067,7 +2114,7 @@ function snapCurrent() {
 }
 // 還沒作答就往回：把寫到一半的答案先留著
 function saveDraft() {
-  if (!RUN || RUN.reviewing || RUN.checked || !RUN.C?.el) return
+  if (!RUN || RUN.phase !== 'answering' || !RUN.C?.el) return // 只有作答中才存草稿（檢查過、回顧都不用）
   const el = RUN.C.el
   const vals = $$('input.blank, textarea.write-in', el).map((i) => i.value)
   const sel = $$('.opts .opt.sel', el).map((o) => o.dataset.i)
@@ -2090,7 +2137,7 @@ function goBack() {
   const { key, at } = RUN
   if (at <= 0) return
   const pr = S.progress[key]
-  if (!RUN.reviewing) {
+  if (RUN.phase !== 'reviewing') {
     // 這一題已經作答完：算完成，看完前面再往前就接著下一題
     if (snapCurrent()) {
       pr.i = Math.max(pr.i, at + 1)
@@ -2124,10 +2171,10 @@ function showHint() {
 }
 function checkItem() {
   const { C, it } = RUN
-  if (!C.answered()) return
+  if (RUN.phase !== 'answering' || !C.answered()) return // 連按兩下「檢查」不會記兩次
   clearTimeout(draftT) // 2.30 還沒送出的草稿不要在檢查之後才送（會蓋過作答的時間，老師看不到結果）
   const res = C.grade()
-  RUN.checked = true
+  RUN.phase = 'checked'
   const pr = S.progress[RUN.key]
   // 再試一次：分數照第一次算，紀錄標成 x:'r'（剛看過解析，答對不算錯題本畢業）
   if (!RUN.retry) {
@@ -2175,7 +2222,7 @@ function retryItem() {
   const box = $('.hint-box')
   box.hidden = true
   box.innerHTML = ''
-  Object.assign(RUN, { C, hints: 0, guess: false, checked: false, retry: true, sels: [] })
+  Object.assign(RUN, { C, hints: 0, guess: false, phase: 'answering', retry: true, sels: [] })
   $('.ra-left [data-act=retry]')?.remove()
   $('.ra-left').insertAdjacentHTML('beforeend', `<button class="pill" data-act="hint" aria-label="提示">${ICON.bulb}<span>提示</span></button><button class="pill toggle" data-act="guess" aria-pressed="false" aria-label="不太確定">🤔<span>不太確定</span></button>`)
   const btn = $('[data-act=check]')
@@ -2232,7 +2279,7 @@ function viewSummary(key) {
   setView(
     `<div class="page narrow summary">
       <div class="sum-hero">
-        <div class="sum-ring">${ring(pct, 148, 14, 'big')}<div class="sum-pct"><b>${Math.round(pct * 100)}</b><span>%</span></div></div>
+        <div class="sum-ring">${ring(pct, 148, 14, 'big')}<div class="sum-pct"><b>${Math.round(pct * 100)}</b><span>%</span></div>${xiaoya(pct >= 0.6 ? 'bloom' : 'hint', 'xy-sm pop sum-ya')}</div>
         <h1>${pct >= 0.9 ? '太強了！' : pct >= 0.7 ? '很不錯！' : '完成了！'}</h1>
         <p class="muted">${esc(pr.title)} · ${fmtDur((pr.t1 || Date.now()) - pr.t0)}</p>
         ${stars(st)}
@@ -2866,6 +2913,7 @@ function viewHome() {
       <header class="lg-head"><div class="eyebrow">${new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</div>
         <div class="lg-row"><h1>${hello}</h1>${sd && !gardenReady() ? `<span class="streak">${ICON.flame}<b>${sd}</b> 天</span>` : ''}</div>
         <p class="lg-sub">國中英語七上｜${esc(examLabel())}${cd ? '　·　' + cd : ''}</p>
+        ${Sync.paired() && !teacherMode() ? syncPill(true) : ''}
       </header>
       ${a2hsCardHTML()}
       ${pushCardHTML('student')}
@@ -3025,6 +3073,21 @@ function warmIds() {
 // 不跳：做題中（只在首頁類的畫面）、第一次用 App 的人（先看歡迎畫面）、只修 bug 的版本（NEWS 只列有新功能的版本）
 // 設定 →「更新紀錄」可以再看；自動測試（webdriver）不跳，測試要看就設 g7review:forcenews
 const NEWS = [
+  {
+    v: '2.33',
+    date: '11/13',
+    student: [
+      ['✨', '畫面更清爽、字更清楚', '背景變淡、卡片變白，題目更好讀。'],
+      ['🎤', '看得出麥克風有沒有在錄', '錄音中是綠色，會顯示秒數和「完成錄音」；放開後寫「麥克風已關閉・辨識中」。沒收到聲音時，小芽會提醒你再錄一次。'],
+      ['🌱', '答錯時先看一句重點', '答錯會先告訴你正確答案和一句最重要的原因；想看完整解析再點開。'],
+    ],
+    parent: [['✨', '畫面更清爽', '背景變淡、字更清楚；孩子答錯時會先看到一句重點，再決定要不要看完整解析。']],
+    teacher: [
+      ['☁️', '同步狀態分三段', '頁首寫「班級有效・已連線・幾點已儲存」；裝置被移出、連結失效時只顯示鎖頭，不會再顯示已連線。'],
+      ['🎤', '麥克風狀態更清楚', '學生錄音中、辨識中、沒收到聲音分得清楚；離開念單字頁也會馬上關麥克風。'],
+      ['✨', '清爽外觀＋答錯先看一句重點', '你選的 B：背景變淡、卡片幾乎不透明；小芽只在答完題時出現（答對點頭、答錯拿提示、做完開花）。'],
+    ],
+  },
   {
     v: '2.30',
     date: '10/17',
@@ -3706,7 +3769,7 @@ function stickyStatsHTML(t = todayStats(), sd = streakDays()) {
 }
 // 2.24 小芽（小宇英文的吉祥物，老師 10/12 選的）：圓圓的米色身體、頭上兩片葉子；mood：happy（打招呼）／cheer（練過了，舉手歡呼）／sleepy（晚上）
 // 2.24.2 正式圖（老師 10/12 用 ChatGPT 畫的，切開、去背：img/xiaoya-<mood>.webp）；下面的 SVG 留著當備用
-const XIAOYA_MOODS = ['happy', 'cheer', 'sleepy']
+const XIAOYA_MOODS = ['happy', 'cheer', 'sleepy', 'nod', 'hint', 'bloom', 'ear'] // 2.33 加：nod 答對、hint 答錯、bloom 做完一回、ear 沒收到聲音（ChatGPT 照舊圖畫的）
 function xiaoya(mood = 'happy', cls = '') {
   if (XIAOYA_MOODS.includes(mood)) return `<img class="xiaoya ${cls}" src="img/xiaoya-${mood}.webp" alt="" aria-hidden="true" draggable="false">`
   return xiaoyaSVG(mood, cls)
@@ -4945,6 +5008,9 @@ const SPEAK_ERR = {
 let NO_REC = null
 async function listen(onInterim, target, onLevel) {
   if (NO_REC === null) NO_REC = lsGet('g7review:norec') === '1'
+  if (!MIC.is('idle')) micCancel()
+  MIC.send('START')
+  const me = ++MIC.n
   let rec = null
   let chunks = []
   // 錄音的音量（有些裝置麥克風被錄音搶走，辨識收不到聲音卻不報錯：錄到聲音但辨識不到＝搶麥克風）
@@ -5039,9 +5105,21 @@ async function listen(onInterim, target, onLevel) {
           } catch {}
         }
       }
+      if (me === MIC.n) {
+        MIC.finish = null
+        MIC.send('STOP')
+        MIC.send('DONE')
+      }
       res({ alts: alts.length ? alts : interim ? [interim] : [], err, blob, clash })
     }
   })
+  if (me === MIC.n) {
+    MIC.send('GOT')
+    MIC.finish = () => {
+      manual = true
+      r.stop()
+    }
+  }
   const timer = setTimeout(() => r.stop(), 12000)
   done.then(() => clearTimeout(timer))
   try {
@@ -5145,7 +5223,51 @@ function micMeter() {
 // 同一條麥克風也錄音（念完可以聽自己的聲音），不會互搶
 // 拿 PCM 的方式：有 ScriptProcessor 就直接收；沒有（或壞掉）就用 AnalyserNode 量音量，PCM 事後從錄音檔解出來
 // 不管哪裡出錯，麥克風一定要放掉（放不掉的話 iPhone 之後播音檔會沒聲音或變小聲）
-let ACTIVE_MIC = null // 正在錄音的那一次（離開畫面時用來放掉麥克風）
+// 2.33 麥克風只有一個狀態：idle → requesting（等麥克風）→ recording（錄音中）→ processing（麥克風已關、辨識中）→ idle
+// 等麥克風的時候離開（換頁、切出 App）＝CANCEL：之後才拿到的麥克風馬上關掉（以前會開著等到 7 秒）
+const MIC = machine(
+  'idle',
+  {
+    idle: { START: 'requesting', '*CANCEL': 1, '*DONE': 1 },
+    requesting: { START: 'requesting', GOT: 'recording', FAIL: 'idle', CANCEL: 'idle' },
+    recording: { START: 'requesting', STOP: 'processing', '*CANCEL': 1 },
+    processing: { START: 'requesting', DONE: 'idle', '*CANCEL': 1 },
+  },
+  micPaint,
+)
+MIC.n = 0 // 第幾次錄音（舊的那次晚回來就不理）
+MIC.finish = null // 錄音中：叫它就停止錄音
+function micCancel() {
+  if (MIC.is('requesting')) MIC.send('CANCEL')
+  else MIC.finish?.()
+}
+// 畫面：.sp-mic-box 的 data-ph 決定樣子（styles.css「2.33 麥克風」）；文字寫在 .sp-mic-label；錄音中才有「完成錄音」
+function micPaint(st) {
+  clearInterval(MIC.tick)
+  const box = $('.sp-mic-box')
+  if (!box) return
+  box.dataset.ph = st
+  const lab = $('.sp-mic-label')
+  const done = $('.sp-done')
+  if (done) done.hidden = st !== 'recording'
+  $('.sp-mic')?.setAttribute('aria-label', st === 'recording' ? '完成錄音' : st === 'idle' ? '開始錄音' : '請稍候')
+  if (!lab) return
+  if (st === 'requesting') lab.textContent = '正在開啟麥克風…'
+  if (st === 'recording') {
+    const t0 = Date.now()
+    const f = () => (lab.innerHTML = `<b class="sp-rec"><i aria-hidden="true"></i>錄音中 <span class="num">${Math.min(15, Math.floor((Date.now() - t0) / 1000))}</span> 秒</b>`)
+    f()
+    MIC.tick = setInterval(f, 250)
+  }
+  if (st === 'processing') lab.innerHTML = `<span class="sp-off">${ICON.mic}麥克風已關閉</span>・辨識中…`
+}
+// 沒收到聲音：在麥克風下面請學生再試一次（小芽靠著耳朵），不跳提示訊息
+function micNoSound() {
+  const box = $('.sp-mic-box')
+  if (box) box.dataset.ph = 'none'
+  const lab = $('.sp-mic-label')
+  if (lab) lab.innerHTML = `${xiaoya('ear', 'xy-sm pop')}<span>沒有收到清楚的聲音，再按一次麥克風</span>`
+}
 const MIC_STREAMS = new Set() // 還開著的麥克風串流（保險：出錯或離開時全部關掉）
 function releaseMics() {
   for (const s of MIC_STREAMS) {
@@ -5179,14 +5301,26 @@ async function listenLocal(onInterim, _target, onLevel) {
     return A
   })
   asr.catch(() => {})
+  if (!MIC.is('idle')) micCancel() // 上一次還沒收乾淨（照理不會）：先收掉
+  MIC.send('START')
+  const me = ++MIC.n
   let stream
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
   } catch (e) {
     ctx.close?.().catch(() => {})
+    if (me === MIC.n) MIC.send('FAIL')
     const err = e?.name === 'NotAllowedError' || e?.name === 'SecurityError' ? 'mic-denied' : 'audio-capture'
     return { stop() {}, done: Promise.resolve({ alts: [], err, blob: null }) }
   }
+  // 等麥克風的期間已經離開了（或換成新的一次）：拿到的麥克風馬上關掉
+  if (me !== MIC.n || !MIC.is('requesting') || document.visibilityState === 'hidden') {
+    stream.getTracks().forEach((t) => t.stop())
+    ctx.close?.().catch(() => {})
+    if (me === MIC.n) MIC.send('CANCEL')
+    return { stop() {}, done: Promise.resolve({ alts: [], err: 'cancel', blob: null }) }
+  }
+  MIC.send('GOT')
   MIC_STREAMS.add(stream)
   let rec = null
   const chunks = []
@@ -5265,12 +5399,13 @@ async function listenLocal(onInterim, _target, onLevel) {
   const hardStop = setTimeout(() => finish(), 15000)
   const onHide = () => document.visibilityState === 'hidden' && finish()
   document.addEventListener('visibilitychange', onHide)
-  ACTIVE_MIC = () => finish()
+  stream.getAudioTracks().forEach((t) => (t.onended = () => finish())) // 系統把麥克風拿走（電話、Siri）
+  MIC.finish = () => finish()
   const done = ended.then(async () => {
     clearTimeout(hardStop)
     clearInterval(meter)
     document.removeEventListener('visibilitychange', onHide)
-    ACTIVE_MIC = null
+    MIC.finish = null
     if (proc) proc.onaudioprocess = null
     try {
       src?.disconnect()
@@ -5291,6 +5426,7 @@ async function listenLocal(onInterim, _target, onLevel) {
     }
     stream.getTracks().forEach((t) => t.stop()) // 放掉麥克風
     MIC_STREAMS.delete(stream)
+    if (me === MIC.n) MIC.send('STOP') // 畫面：麥克風已關閉・辨識中
     await ctx.close?.().catch(() => {})
     // 要辨識的那一段（前後各多留一點）：有 PCM 就直接切；沒有就從錄音檔解碼
     let seg = null
@@ -5331,13 +5467,13 @@ async function listenLocal(onInterim, _target, onLevel) {
           A.listeners.delete(f)
         }
       }
-      onInterim?.('辨識中…')
+      onInterim?.('')
       text = await A.transcribe(to16k(seg, segSr))
     } catch {
       return { alts: [], err: 'asr-load', blob }
     }
     return { alts: text ? [text] : [], err: text ? '' : 'no-speech', blob }
-  })
+  }).finally(() => me === MIC.n && MIC.send('DONE'))
   return { stop: () => finish(), done }
 }
 
@@ -5558,6 +5694,7 @@ function speakRun() {
         <div class="sp-mic-wrap">
           <div class="sp-mic-box"><span class="sp-lv" aria-hidden="true"></span><button class="sp-mic" data-act="mic" aria-label="${r ? '再念一次' : '開始錄音'}" ${s.pair && pick == null ? 'disabled' : ''}>${ICON.mic}</button></div>
           <div class="sp-mic-label">${r ? '再念一次' : s.pair ? (pick == null ? '請先選出聽到的句子' : '按下麥克風，念出該句') : s.qa ? '按下麥克風，以英文回答' : hide ? '聽完示範後，按下麥克風複誦' : '按下麥克風，複誦句子'}</div>
+          <button type="button" class="btn primary sp-done" data-act="mic" hidden>完成錄音</button>
           <div class="sp-live" aria-live="polite"></div>
         </div>
         <section class="sp-result card" ${r ? '' : 'hidden'}>${r ? speakResultHTML(r) : ''}</section>
@@ -5611,7 +5748,6 @@ function speakRun() {
       if (L) return L.stop() // 再按一次＝說完了
       Voice.stop()
       mic.classList.add('on')
-      $('.sp-mic-label').textContent = '錄音中，說完會自動停止'
       tell({ said: '', listening: 1 })
       const idx = SP.i
       const live = $('.sp-live')
@@ -5647,7 +5783,10 @@ function speakRun() {
       if (!alts.length) {
         $('.sp-mic-label').textContent = SP.res[SP.i] ? '再念一次' : '按下麥克風開始'
         $('.sp-live').textContent = ''
+        $('.sp-mic-box')?.removeAttribute('data-ph')
         if (clash) return toast('已經調整好，請再按一次麥克風說一次', '🎤')
+        if (err === 'cancel') return
+        if (err === 'no-speech') return micNoSound()
         return toast(SPEAK_ERR[err] || '沒有辨識到內容，請再念一次', '🎤')
       }
       const res = s.qa ? speakScoreAny(s.ans, alts) : speakScore(tg.en, alts)
@@ -5792,7 +5931,7 @@ function speakSummary() {
   setView(
     `<div class="page narrow speak-sum">
       ${header(spTitle(SP), done.length ? `念了 ${done.length} ${SP.mode === 'pair' ? '組' : SP.mode === 'qa' ? '題' : '句'}${picks.length ? `・聽對 ${pickOk}／${picks.length} 組` : ''}` : '這一回沒有念任何一句', '', false)}
-      <section class="card sp-sum-head"><div class="sp-score ${avg >= 85 ? 'ok' : avg >= 65 ? 'care' : 'bad'}"><b>${avg}</b><span>分</span></div><div class="sp-res-t"><div class="sp-msg">${avg >= 85 ? '發音很清楚！' : avg >= 65 ? '很不錯，再練幾個字就更好' : easier ? '有點難，先改「基礎」練短句，再回來挑戰' : '多聽幾次，跟著節奏念'}</div>${weak.length ? `<div class="sp-heard">要再練的字（點一下聽）</div><div class="chips">${weak.map((w) => `<button class="chip say" data-say="${esc(w)}">${esc(w)} ${ICON.speaker}</button>`).join('')}</div>` : ''}</div></section>
+      <section class="card sp-sum-head">${xiaoya(avg >= 65 ? 'bloom' : 'hint', 'xy-sm pop sum-ya')}<div class="sp-score ${avg >= 85 ? 'ok' : avg >= 65 ? 'care' : 'bad'}"><b>${avg}</b><span>分</span></div><div class="sp-res-t"><div class="sp-msg">${avg >= 85 ? '發音很清楚！' : avg >= 65 ? '很不錯，再練幾個字就更好' : easier ? '有點難，先改「基礎」練短句，再回來挑戰' : '多聽幾次，跟著節奏念'}</div>${weak.length ? `<div class="sp-heard">要再練的字（點一下聽）</div><div class="chips">${weak.map((w) => `<button class="chip say" data-say="${esc(w)}">${esc(w)} ${ICON.speaker}</button>`).join('')}</div>` : ''}</div></section>
       <div class="list sp-sum-list">${done.map((x) => `<div class="row static"><span class="row-t" lang="en">${x.s.qa ? `<small>${esc(x.s.q)}</small><br>` : ''}${speakWordsHTML(x.r.words)}</span><span class="row-r">${x.r.best} 分</span></div>`).join('')}</div>
       <div class="sheet-actions">${easier ? '<button class="btn ghost" data-act="easy">改成基礎再練</button>' : ''}${low.length ? `<button class="btn ghost" data-act="low">再練分數低的 ${low.length} ${SP.mode === 'pair' ? '組' : SP.mode === 'qa' ? '題' : '句'}</button>` : ''}<button class="btn ghost" data-act="again">再練一回</button><button class="btn primary" data-act="home">回首頁</button></div>
     </div>`,
@@ -6049,17 +6188,25 @@ const Sync = {
     return `${dbBase()}/${top ? path : `classes/${this.code()}${path ? '/' + path : ''}`}.json${t ? '?auth=' + encodeURIComponent(t) : ''}`
   },
   async req(method, path, body, top = false) {
-    const r = await fetch(await this.url(path, top), { method, body: body === undefined ? undefined : JSON.stringify(body) })
+    const r = await fetch(await this.url(path, top), { method, body: body === undefined ? undefined : JSON.stringify(body) }).catch((e) => {
+      if (this.status === 'on') this.setStatus('error')
+      throw e
+    })
     if (!r.ok) {
       const e = new Error('HTTP ' + r.status)
       e.status = r.status
       throw e
+    }
+    if (method !== 'GET') {
+      this.savedAt = Date.now() // 雲端回覆了才算「已儲存」
+      paintSyncPills()
     }
     return r.json()
   },
   setStatus(s) {
     this.status = s
     $$('.sync-dot').forEach((d) => (d.dataset.s = s))
+    paintSyncPills()
   },
   setState(s) {
     if (this.state === s) return
@@ -7547,7 +7694,28 @@ function feedClick(e, list, sid = '', redraw = null) {
       }, true)
 }
 // 剛打開 App 跟雲端連線的那一兩秒：寫「更新中」，不要寫「連線中」（老師 10/9：每次都以為是網路不好、連線失敗）
-const syncPill = (quietWhenOn = false) => (quietWhenOn && Sync.status === 'on' ? '' : `<span class="sync-pill"><i class="sync-dot" data-s="${Sync.status}"></i>${{ on: '已連線', connecting: '更新中', error: '重新連線中', off: '未連線' }[Sync.status] || ''}</span>`)
+// 2.33 同步顯示：權限優先於連線（被移出、連結失效時，就算網路是通的也不顯示「已連線」）；
+// 老師分三段「班級有效・已連線・14:30 已儲存」；學生、家長不寫「班級」。「已儲存」＝雲端回覆過的最後一次寫入
+function syncView() {
+  const admin = Sync.state === 'owner' || Sync.isAdmin()
+  const lock = { removed: admin ? '已離開班級' : '已停止同步', invalid: '連結已失效', closed: '暫停加入', login: '請先登入', upgrade: '請設定老師帳號' }[Sync.state]
+  if (lock) return { k: 'lock', parts: [lock] }
+  if (Sync.state === 'wait') return { k: 'connecting', parts: ['等老師那邊更新'] }
+  if (!Sync.paired()) return { k: 'off', parts: ['未連線'] }
+  // 剛打開、身分還在確認（state 還是 off）：照連線狀態寫「更新中」，不要寫「未連線」嚇人
+  const parts = [{ on: '已連線', connecting: '更新中', error: '重新連線中', off: '未連線' }[Sync.status] || '']
+  if (admin && Sync.ready()) parts.unshift('班級有效')
+  const q = S.syncQ?.length
+  if (q) parts.push(`還有 ${q} 筆待上傳`)
+  else if (Sync.savedAt) parts.push(`${new Date(Sync.savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })} 已儲存`)
+  return { k: Sync.status, parts }
+}
+const syncPillInner = (v = syncView()) => `${v.k === 'lock' ? `<span class="sync-lock" aria-hidden="true">🔒</span>` : `<i class="sync-dot" data-s="${v.k}"></i>`}${v.parts.map((p) => `<span class="sp-part">${esc(p)}</span>`).join('')}`
+const syncPill = (quietWhenOn = false) => {
+  const v = syncView()
+  return quietWhenOn && v.k === 'on' && !S.syncQ?.length ? '' : `<span class="sync-pill" data-sync>${syncPillInner(v)}</span>`
+}
+const paintSyncPills = () => $$('[data-sync]').forEach((e) => (e.innerHTML = syncPillInner()))
 // 真的有問題（暫停加入、被移出、連結失效、等老師那邊更新）才用整張卡片說明；只是還在連線就先顯示這個裝置上的資料
 const syncTrouble = () => ['closed', 'removed', 'invalid', 'wait'].includes(Sync.state)
 
@@ -8334,8 +8502,12 @@ const STU_FOLD = {} // `${sid}/${堂課}` → 收起（只記這次打開 App �
 // 最近一次練習：作答和練習紀錄（口說只會留練習紀錄）都算；植物的紀錄不算
 const lastActive = (list, sess) => Math.max(0, list[list.length - 1]?.ts || 0, ...sess.filter((s) => !['plant', 'grow'].includes(s.k)).map((s) => s.ts || 0))
 const daysAgo = (ts) => Math.round((dayStart() - dayStart(ts)) / DAY) // 日曆天（10/5 到 10/10＝5 天）
-const PREP_OPENED = {} // 備課頁剛開放的課：{ sid: { u, ts } }（顯示「已開放・復原」，不要馬上換成下一課，避免連按開兩課）
-const PREP_BUSY = new Set() // 開放／復原還在等雲端回應的學生
+// 2.33 備課頁「開放下一課」每個學生一個狀態（以前是 PREP_OPENED＋PREP_BUSY）：
+//   沒有（idle）→ opening（等雲端）→ opened（顯示「已開放・復原」10 分鐘，不馬上換成下一課，避免連按開兩課）→ undoing → 沒有
+//   等雲端的時候（opening、undoing）再按都不理；失敗就回到原本的狀態
+const PREP_ST = {} // sid → { ph, u, ts }
+const prepBusy = (sid) => ['opening', 'undoing'].includes(PREP_ST[sid]?.ph)
+const prepOpened = (sid) => (PREP_ST[sid]?.ph === 'opened' && Date.now() - PREP_ST[sid].ts < 10 * 60000 ? PREP_ST[sid].u : '')
 // 「幾天沒練」「家長幾天沒看」：學生卡、要處理的事、備課頁共用（日曆天；作答、練習都算，花園紀錄不算）
 // 一週一堂課：3 天就標太敏感（警報疲勞）→ 5 天以上，或作業沒做完而且 3 天以上
 const PARENT_IDLE = 7
@@ -8416,7 +8588,7 @@ function viewStudentPrep(sid, keepScroll = false) {
       : d.list.length
         ? '錯題本是空的，可以直接上新的一課'
         : `${esc(name)} 還沒開始練習；可以先從第一課開始，或用課堂檢視一起做`
-  const opened = PREP_OPENED[sid] && Date.now() - PREP_OPENED[sid].ts < 10 * 60000 ? PREP_OPENED[sid].u : ''
+  const opened = prepOpened(sid)
   const parentP = !d.hasParent ? '家長還沒加入' : d.parentTs ? `家長最近一次打開 App：${agoText(d.parentTs)}` : '家長加入後還沒打開過 App'
   const parentTip = !d.hasParent ? '傳家長連結給家長，家長就看得到孩子學到什麼。' : !d.parentTs ? '家長加入後還沒看過：傳一則本週摘要提醒家長打開。' : daysAgo(d.parentTs) >= PARENT_IDLE ? '家長超過一週沒看：傳一則本週摘要，讓家長知道孩子學到什麼。' : ''
   setView(
@@ -8458,36 +8630,44 @@ function viewStudentPrep(sid, keepScroll = false) {
     // 開放下一課／復原：成功後不自己重畫，交給 setUnits 觸發的 onSyncChange（上面有視窗、已經換頁都不會被打斷）
     const on = e.target.closest('[data-opennext]')
     if (on) {
-      if (PREP_BUSY.has(sid)) return // 連按（或等待中畫面重畫過）：只開一課
-      PREP_BUSY.add(sid)
+      if (prepBusy(sid)) return // 連按（或等待中畫面重畫過）：只開一課
+      const was = PREP_ST[sid]
+      PREP_ST[sid] = { ph: 'opening', u: d.next }
       on.disabled = true
       try {
-        if (await Sync.openUnit(sid, d.next)) PREP_OPENED[sid] = { u: d.next, ts: Date.now() }
-        toast(`已開放 ${d.next} 給 ${name}`, '🔓')
+        if (await Sync.openUnit(sid, d.next)) {
+          PREP_ST[sid] = { ph: 'opened', u: d.next, ts: Date.now() }
+          toast(`已開放 ${d.next} 給 ${name}`, '🔓')
+        } else {
+          PREP_ST[sid] = was
+          on.disabled = false
+          toast('沒有成功，請檢查網路再試一次', '⚠️')
+        }
       } catch {
+        PREP_ST[sid] = was
         on.disabled = false
         toast('沒有成功，請檢查網路再試一次', '⚠️')
       }
-      PREP_BUSY.delete(sid)
       return
     }
     const un = e.target.closest('[data-undoopen]')
     if (un) {
-      if (PREP_BUSY.has(sid)) return
-      PREP_BUSY.add(sid)
+      if (prepBusy(sid)) return
+      const was = PREP_ST[sid]
+      PREP_ST[sid] = { ...was, ph: 'undoing' }
       un.disabled = true
       const u = un.dataset.undoopen
       const set = unitsOfStu(Sync.students[sid])
       set.delete(u)
       try {
         await Sync.setUnits(sid, set)
-        delete PREP_OPENED[sid] // 重畫在 onSyncChange 的計時器裡，會在這行之後
+        delete PREP_ST[sid] // 重畫在 onSyncChange 的計時器裡，會在這行之後
         toast(`已收回 ${u}`, '🔒')
       } catch {
+        PREP_ST[sid] = was
         un.disabled = false
         toast('沒有成功，請檢查網路再試一次', '⚠️')
       }
-      PREP_BUSY.delete(sid)
       return
     }
     if (e.target.closest('[data-assign]')) return assignSheet(sid)
@@ -10020,7 +10200,7 @@ function initTabbar(nav, key) {
   )
 }
 function go(h) {
-  if (POP_PENDING) return void (PENDING_GO = h) // 剛關掉視窗、瀏覽紀錄還在退：退完再換頁
+  if (NAV.is('popping')) return void (NAV.go = h) // 剛關掉視窗、瀏覽紀錄還在退：退完再換頁
   if (location.hash === h) route()
   else location.hash = h
 }
@@ -10349,6 +10529,7 @@ function vocabSpeak(g) {
           <div class="sp-mic-box"><span class="sp-lv" aria-hidden="true"></span><button class="sp-mic" data-act="mic" aria-label="${r ? '再念一次' : '開始錄音'}">${ICON.mic}</button></div>
           <div class="sp-mic-label">${r ? '再念一次' : '按下麥克風，念出這個字'}</div>
           ${!r && speakEngine() === 'local' && !asrReady() && !asrAllowed() ? `<p class="vsp-note">第一次要先下載辨識模型（約 ${asrSizeMB()}MB，建議用 Wi‑Fi），按麥克風時會問你。</p>` : ''}
+          <button type="button" class="btn primary sp-done" data-act="mic" hidden>完成錄音</button>
           <div class="sp-live" aria-live="polite"></div>
         </div>
         <section class="sp-result card" ${r ? '' : 'hidden'}>${r ? speakResultHTML(r) : ''}</section>
@@ -10386,7 +10567,6 @@ function vocabSpeak(g) {
       if (L) return L.stop()
       Voice.stop()
       mic.classList.add('on')
-      $('.sp-mic-label').textContent = '錄音中，說完會自動停止'
       const idx = VS.i
       const live = $('.sp-live')
       L = { stop() {} }
@@ -10420,7 +10600,10 @@ function vocabSpeak(g) {
       if (!alts.length) {
         $('.sp-mic-label').textContent = VS.res[VS.i] ? '再念一次' : '按下麥克風開始'
         $('.sp-live').textContent = ''
+        $('.sp-mic-box')?.removeAttribute('data-ph')
         if (clash) return toast('已經調整好，請再按一次麥克風說一次', '🎤')
+        if (err === 'cancel') return
+        if (err === 'no-speech') return micNoSound()
         return toast(SPEAK_ERR[err] || '沒有辨識到內容，請再念一次', '🎤')
       }
       const res = speakScore(w.en, alts)
@@ -10460,10 +10643,9 @@ function route() {
   const h = location.hash || '#/'
   const [, a, b] = h.split('/')
   if (UPDATE_PENDING && idleView()) return applyUpdate() // 新版等在這裡：換到不忙的畫面才重新整理
-  if (a !== 'speak') {
-    ACTIVE_MIC?.() // 離開口說（例如按瀏覽器的返回）：錄音結束、放掉麥克風
-    releaseMics()
-  }
+  // 換頁（例如按瀏覽器的返回）：錄音結束、放掉麥克風（口說、念單字都是；2.33 以前念單字頁沒收）
+  micCancel()
+  releaseMics()
   if (a !== 'exam' && EXAM && !EXAM.graded) clearInterval(EXAM.timer)
   if (a !== 'vocab' && VM?.timer) clearInterval(VM.timer)
   if (a !== 'watch' && WAKE) WAKE.release().catch(() => {})
@@ -10529,7 +10711,7 @@ document.addEventListener('keydown', (e) => {
       opts[idx].click()
       e.preventDefault()
     }
-  } else if (e.key === 'Enter' && (!e.target.closest?.('button, a, [role=button]') || e.target.closest('.why-me'))) {
+  } else if (e.key === 'Enter' && (!e.target.closest?.('button, a, summary, [role=button]') || e.target.closest('.why-me'))) {
     const b = $('[data-act=check]')
     if (b && !b.disabled) {
       b.click()
@@ -10584,6 +10766,7 @@ history.replaceState({ ...(history.state || {}), root: true, sheet: 0 }, '')
 route()
 // 同步：有網路就把排隊的紀錄送出；離開 App 時告訴老師「離開」，回來時再更新
 window.addEventListener('online', () => (Sync.ready() ? Sync.flushSoon(100) : Sync.paired() && Sync.start()))
+window.addEventListener('offline', () => Sync.paired() && Sync.status === 'on' && Sync.setStatus('error'))
 document.addEventListener('visibilitychange', () => {
   if (!Sync.paired()) return
   if (document.visibilityState === 'hidden') return Sync.presence({ view: 'away' })
